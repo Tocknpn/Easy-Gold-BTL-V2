@@ -1,0 +1,198 @@
+import { supabase } from './supabase';
+
+// ── Types ────────────────────────────────────────────────────────────────
+export interface MerchItem {
+  name: string;
+  qty: number;
+  cpu: number;
+}
+
+export interface Submission {
+  id: string;
+  date: string;
+  team: string;
+  branch: string;
+  new_register: number;
+  new_reg_purchased: number;
+  buy_value_new: number;
+  existing_users: number;
+  buy_value_existing: number;
+  team_cost: number;
+  merch_cost: number;
+  merch_items: MerchItem[];
+  staff_in_charge: string[];
+  footfall: number;
+  step_in: number;
+  status: string;
+}
+
+export interface ModalState {
+  open: boolean;
+  submission: Submission | null;
+  isEditing: boolean;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+export const fmtLAK = (n: number) => `₭${n.toLocaleString('en-US')}`;
+export const fmtLAKShort = (n: number) => {
+  if (n >= 1_000_000) return `₭${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `₭${(n / 1_000).toFixed(0)}K`;
+  return `₭${n}`;
+};
+
+export const labelDate = (s: string) => {
+  const d = new Date(s + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+};
+
+export const parseMerch = (v: any): MerchItem[] => {
+  try {
+    const a = typeof v === 'string' ? JSON.parse(v) : v;
+    return Array.isArray(a) ? a.map((i: any) => ({ name: i.name || '', qty: Number(i.qty || 0), cpu: Number(i.cpu || 0) })) : [];
+  } catch {
+    return [];
+  }
+};
+export const parseStaff = (v: any): string[] => {
+  try {
+    const a = typeof v === 'string' ? JSON.parse(v) : v;
+    return Array.isArray(a) ? a.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+// ── Mock data generator (March 2025 sample set) ──────────────────────────
+const rand = (seed: number) => {
+  const x = Math.sin(seed * 999 + 7) * 10000;
+  return x - Math.floor(x);
+};
+
+const BRANCHES: { branch: string; team: string }[] = [
+  { branch: 'That Luang', team: 'KPV' },
+  { branch: 'NUOL Campus', team: 'Agency' },
+  { branch: 'Talat Sao', team: 'KPV' },
+  { branch: 'Sikhottabong', team: 'KPV' },
+  { branch: 'Wattay Airport', team: 'Agency' },
+  { branch: 'Parkson Mall', team: 'KPV' },
+  { branch: 'Patuxay', team: 'KPV' },
+  { branch: 'Evening Market', team: 'Agency' },
+];
+
+export const MERCH_CATALOG: MerchItem[] = [
+  { name: 'Sport Wristbands', qty: 0, cpu: 16500 },
+  { name: 'Phone stand', qty: 0, cpu: 52000 },
+  { name: 'Charger', qty: 0, cpu: 105000 },
+  { name: 'Gym bag', qty: 0, cpu: 95000 },
+  { name: 'Gold Flyer', qty: 0, cpu: 3500 },
+  { name: 'Tote Bag', qty: 0, cpu: 28000 },
+];
+export const STAFF_NAMES = [
+  'ສົມສະໜຸກ ພົມມະຈັນ',
+  'ບຸນມີທິບ ວົງພັດທະນະ',
+  'ກັນຍາ ສີວົງໄຊ',
+  'ທິດາ ພົນສະຫວັນ',
+  'ນະພາ ແກ້ວມະນີ',
+];
+
+export function genMockSubmissions(): Submission[] {
+  const out: Submission[] = [];
+  let id = 1;
+  for (let d = 3; d <= 30; d++) {
+    if (d % 7 === 0) continue; // rest day → ~25 active days
+    const { branch, team } = BRANCHES[d % BRANCHES.length];
+    const nc = 38 + Math.round(rand(d) * 30);
+    const ec = 12 + Math.round(rand(d + 50) * 20);
+    const nrp = Math.round(nc * (0.55 + rand(d + 1) * 0.25));
+    // Merchandise items (deterministic per date)
+    const merchItems: MerchItem[] = [];
+    for (let m = 0; m < 4; m++) {
+      if (rand(d + 20 + m) > 0.3) {
+        const def = MERCH_CATALOG[m % MERCH_CATALOG.length];
+        merchItems.push({ name: def.name, qty: 3 + Math.round(rand(d + 30 + m) * 12), cpu: def.cpu });
+      }
+    }
+    const merchCost = merchItems.reduce((a, i) => a + i.qty * i.cpu, 0);
+    const staff: string[] = [];
+    for (let sp = 0; sp < 2 + Math.round(rand(d + 40) * 2); sp++) {
+      staff.push(STAFF_NAMES[(d + sp) % STAFF_NAMES.length]);
+    }
+    out.push({
+      id: `mock-${id++}`,
+      date: `2025-03-${String(d).padStart(2, '0')}`,
+      team,
+      branch,
+      new_register: nc,
+      new_reg_purchased: nrp,
+      buy_value_new: Math.round(nc * 65000),
+      existing_users: ec,
+      buy_value_existing: Math.round(ec * 52000),
+            team_cost: d >= 29 ? 0 : 700000 + Math.round(rand(d + 2) * 400000),
+      merch_cost: merchCost,
+      merch_items: merchItems,
+      staff_in_charge: staff,
+      footfall: nc * 6 + Math.round(rand(d + 4) * 300),
+      step_in: nc + ec + Math.round(rand(d + 5) * 40),
+      status: 'active',
+    });
+  }
+  return out;
+}
+
+// ── Locally submitted records (appear instantly even without a DB) ───────
+const LOCAL_SUBS_KEY = 'easygold_submissions';
+
+export function getLocalSubmissions(): Submission[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LOCAL_SUBS_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalSubmission(s: Submission): void {
+  const all = getLocalSubmissions();
+  all.unshift(s);
+  localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(all));
+}
+
+// ── Supabase fetch with graceful fallback to mock data ───────────────────
+export async function fetchSubmissions(): Promise<{ data: Submission[]; error: any }> {
+  try {
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (error) return { data: [], error };
+
+    const mapped: Submission[] = (data || []).map((r: any, i: number) => ({
+      id: String(r.id ?? `sb-${i}`),
+      date: r.date || '',
+      team: r.team || 'KPV',
+      branch: r.branch || '—',
+      new_register: Number(r.new_register) || 0,
+      new_reg_purchased: Number(r.new_reg_purchased) || 0,
+      buy_value_new: Number(r.buy_value_new) || 0,
+      existing_users: Number(r.existing_users) || 0,
+      buy_value_existing: Number(r.buy_value_existing) || 0,
+      team_cost: Number(r.team_cost) || 0,
+      merch_cost: Number(r.merch_cost) || 0,
+      merch_items: parseMerch(r.merch_items),
+      staff_in_charge: parseStaff(r.staff_in_charge),
+      footfall: Number(r.footfall) || 0,
+      step_in: Number(r.step_in) || 0,
+      status: r.status || 'active',
+    }));
+
+    // Merge locally submitted records so they show up instantly everywhere
+    const seen = new Set(mapped.map(m => m.id));
+    const local = getLocalSubmissions().filter(l => !seen.has(l.id));
+    const merged = [...local, ...mapped].sort((a, b) => b.date.localeCompare(a.date));
+
+    return { data: merged, error: null };
+  } catch (err) {
+    return { data: [], error: err };
+  }
+}

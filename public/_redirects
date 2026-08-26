@@ -1,0 +1,2 @@
+# SPA fallback: serve index.html for any client-side route (Cloudflare Pages)
+/*    /index.html   200

@@ -1,0 +1,469 @@
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line, Doughnut } from 'react-chartjs-2';
+import type { ModalState, Submission } from '../lib/submissions';
+import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } from '../lib/submissions';
+import SubmissionModal from '../components/SubmissionModal';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend);
+
+export default function Dashboard() {
+  const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
+  const [loading, setLoading] = useState(true);
+  const [startDate, setStartDate] = useState('2025-03-01');
+  const [endDate, setEndDate] = useState('2025-03-31');
+  const [teamFilter, setTeamFilter] = useState('All Teams');
+  const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('M');
+  const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const { data, error } = await fetchSubmissions();
+    if (error) console.error('Error fetching submissions:', error);
+    if (data && data.length > 0) setSubmissions(data);
+    setLoading(false);
+  };
+
+  // ── Filtered dataset (docs §4.3: date range + team filter) ─────────
+  const filtered = useMemo(() => {
+    return submissions.filter(s => {
+      const inRange = (!startDate || s.date >= startDate) && (!endDate || s.date <= endDate);
+      const inTeam = teamFilter === 'All Teams' || s.team === teamFilter || s.team === teamFilter.replace(' Team', '');
+      return inRange && inTeam;
+    });
+  }, [submissions, startDate, endDate, teamFilter]);
+
+  const hasData = filtered.length > 0;
+
+  // ── Aggregated KPIs ────────────────────────────────────────────────
+  const kpi = useMemo(() => {
+    let nc = 0, ec = 0, buyNew = 0, buyExisting = 0, teamCost = 0, merchCost = 0, nrp = 0, footfall = 0, stepIn = 0;
+    const days = new Set<string>();
+    const byTeam: Record<string, { nc: number; cost: number }> = {};
+    for (const s of filtered) {
+      nc += s.new_register;
+      ec += s.existing_users;
+      buyNew += s.buy_value_new;
+      buyExisting += s.buy_value_existing;
+      teamCost += s.team_cost;
+      merchCost += s.merch_cost;
+      nrp += s.new_reg_purchased || 0;
+      footfall += s.footfall || 0;
+      stepIn += s.step_in || 0;
+      days.add(s.date);
+      const t = s.team || 'KPV';
+      if (!byTeam[t]) byTeam[t] = { nc: 0, cost: 0 };
+      byTeam[t].nc += s.new_register;
+      byTeam[t].cost += (s.team_cost || 0) + (s.merch_cost || 0);
+    }
+    const totalBuy = buyNew + buyExisting;
+    const totalCost = teamCost + merchCost;
+    const totalAcq = nc + ec;
+    const activeDays = days.size || 1;
+    return {
+      nc, ec, nrp, totalAcq, totalBuy, totalCost, teamCost, merchCost,
+      activeDays,
+      cpa: nc > 0 ? totalCost / nc : 0,
+      cpo: (nrp + ec) > 0 ? totalCost / (nrp + ec) : 0,
+      cpao: totalAcq > 0 ? totalCost / totalAcq : 0,
+      avgBuyPerAcq: totalAcq > 0 ? totalBuy / totalAcq : 0,
+      avgAcqPerDay: totalAcq / activeDays,
+      footfall, stepIn, buyNew, buyExisting,
+      kpv: byTeam['KPV'] || { nc: 0, cost: 0 },
+      agency: byTeam['Agency'] || { nc: 0, cost: 0 },
+    };
+  }, [filtered]);
+
+  // ── Trend chart data (Day / Week / Month + NC & EC lines) ──────────
+  const trendData = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const ncByDay: Record<string, number> = {};
+    const ecByDay: Record<string, number> = {};
+    for (const s of sorted) {
+      ncByDay[s.date] = (ncByDay[s.date] || 0) + s.new_register;
+      ecByDay[s.date] = (ecByDay[s.date] || 0) + s.existing_users;
+    }
+    const dayKeys = Object.keys(ncByDay).sort();
+
+    // Month view: last 6 months (synthesized for sample months when using mock)
+    let marchNC = 0, marchEC = 0;
+    dayKeys.forEach(k => { marchNC += ncByDay[k]; marchEC += ecByDay[k]; });
+    const monthLabels = ['2024-10', '2024-11', '2024-12', '2025-01', '2025-02', '2025-03'];
+    const monthNC = [820, 930, 1040, 980, 1120, marchNC];
+    const monthEC = [410, 470, 520, 490, 540, marchEC];
+
+    if (trendMode === 'M') {
+      return {
+        labels: monthLabels.map(m => new Date(m + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })),
+        nc: monthNC, ec: monthEC,
+      };
+    }
+    if (trendMode === 'W') {
+      const weekLabels = ['W1', 'W2', 'W3', 'W4', 'W5'];
+      const wnc = [0, 0, 0, 0, 0];
+      const wec = [0, 0, 0, 0, 0];
+      dayKeys.forEach(k => {
+        const day = Number(k.slice(-2));
+        const w = Math.min(4, Math.floor((day - 1) / 7));
+        wnc[w] += ncByDay[k]; wec[w] += ecByDay[k];
+      });
+      return { labels: weekLabels, nc: wnc, ec: wec };
+    }
+    // Day view
+    return {
+      labels: dayKeys.map(labelDate),
+      nc: dayKeys.map(k => ncByDay[k]),
+      ec: dayKeys.map(k => ecByDay[k]),
+    };
+  }, [filtered, trendMode]);
+
+  const openModal = (sub: Submission) => {
+    setModal({ open: true, submission: sub, isEditing: false });
+  };
+
+  const closeModal = () => {
+    setModal({ open: false, submission: null, isEditing: false });
+  };
+
+  const handleDelete = (id: string) => {
+    if (!window.confirm('Delete this submission?')) return;
+    setSubmissions(prev => prev.filter(s => s.id !== id));
+    closeModal();
+  };
+
+  const handleSave = (saved: Submission) => {
+    setSubmissions(prev => prev.map(s => (s.id === saved.id ? saved : s)));
+    setModal(m => ({ ...m, isEditing: false, submission: saved }));
+  };
+
+  // ── Chart datasets ──────────────────────────────────────────────────
+  const chartTheme = {
+    grid: 'rgba(128,128,128,0.15)',
+    tick: '#9CA3AF',
+  };
+
+  const lineChartData = {
+    labels: trendData.labels,
+    datasets: [
+      {
+        label: 'New Customers (NC)',
+        data: trendData.nc,
+        borderColor: '#A77B27',
+        backgroundColor: 'rgba(167,123,39,0.08)',
+        fill: true,
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 3,
+      },
+      {
+        label: 'Existing (EC)',
+        data: trendData.ec,
+        borderColor: '#4D9EFF',
+        backgroundColor: 'rgba(77,158,255,0.06)',
+        fill: true,
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 3,
+      },
+    ],
+  };
+
+  const lineChartOptions: any = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: chartTheme.tick, font: { size: 11 } } } },
+    scales: {
+      x: { grid: { color: chartTheme.grid }, ticks: { color: chartTheme.tick, font: { size: 10 } } },
+      y: { beginAtZero: true, grid: { color: chartTheme.grid }, ticks: { color: chartTheme.tick, font: { size: 10 } } },
+    },
+  };
+
+  // Percentages
+  const totalTeamNC = kpi.kpv.nc + kpi.agency.nc;
+  const pctKPV = totalTeamNC > 0 ? Math.round((kpi.kpv.nc / totalTeamNC) * 1000) / 10 : 58;
+  const pctAgency = totalTeamNC > 0 ? Math.round((kpi.agency.nc / totalTeamNC) * 1000) / 10 : 42;
+  const totalTeamCost = kpi.kpv.cost + kpi.agency.cost;
+  const spendKPV = totalTeamCost > 0 ? Math.round((kpi.kpv.cost / totalTeamCost) * 1000) / 10 : 55;
+  const spendAgency = totalTeamCost > 0 ? Math.round((kpi.agency.cost / totalTeamCost) * 1000) / 10 : 45;
+  const pctNC = kpi.totalAcq > 0 ? Math.round((kpi.nc / kpi.totalAcq) * 1000) / 10 : 67.5;
+  const pctEC = kpi.totalAcq > 0 ? Math.round((kpi.ec / kpi.totalAcq) * 1000) / 10 : 32.5;
+
+  const donutOp: any = { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } };
+
+  const donutAcqData = {
+    labels: ['New Customer', 'Existing'],
+    datasets: [{ data: [pctNC, pctEC], backgroundColor: ['#D4A843', '#4D9EFF'], borderWidth: 0, hoverOffset: 4 }],
+  };
+  const donutTeamData = {
+    labels: ['KPV Team', 'Agency Team'],
+    datasets: [{ data: [pctKPV, pctAgency], backgroundColor: ['#D4A843', '#4D9EFF'], borderWidth: 0, hoverOffset: 4 }],
+  };
+  const donutSpendData = {
+    labels: ['KPV Team', 'Agency Team'],
+    datasets: [{ data: [spendKPV, spendAgency], backgroundColor: ['#D4A843', '#4D9EFF'], borderWidth: 0, hoverOffset: 4 }],
+  };
+
+  return (
+
+    <div>
+      <div className="demo-banner">
+        <i className="fa-solid fa-circle-info"></i> {loading ? 'Loading data...' : hasData ? 'Showing live data with KPIs recalculated on every filter change.' : 'Showing Sample Data. Connect to Supabase to see real data.'}
+      </div>
+
+      {/* Filters */}
+      <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="form-field" style={{ margin: 0 }}>
+          <label>Start Date</label>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '7px 12px', fontSize: '12px', width: 'auto' }} />
+        </div>
+        <div className="form-field" style={{ margin: 0 }}>
+          <label>End Date</label>
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '7px 12px', fontSize: '12px', width: 'auto' }} />
+        </div>
+        <div className="form-field" style={{ margin: 0 }}>
+          <label>Team</label>
+          <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px 12px', fontSize: '12px', width: 'auto' }}>
+            <option>All Teams</option>
+            <option>KPV Team</option>
+            <option>Agency Team</option>
+          </select>
+        </div>
+        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
+          <i className="fa-solid fa-xmark"></i> Clear
+        </button>
+      </div>
+
+      {/* 6 KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '20px' }}>
+        <div className="card kpi-card" style={{ position: 'relative' }}>
+          <div className="kpi-badge" style={{ background: 'rgba(212,168,67,0.18)', color: 'var(--gold)', border: '1px solid rgba(212,168,67,0.35)' }}>MTD</div>
+          <div className="kpi-icon"><i className="fa-solid fa-users"></i></div>
+          <div className="kpi-label">Acquisition (NC + EC)</div>
+          <div className="kpi-val">{kpi.totalAcq.toLocaleString()}</div>
+          <div className="kpi-sub">NC: {kpi.nc.toLocaleString()} &nbsp;|&nbsp; EC: {kpi.ec.toLocaleString()}</div>
+          <div className="kpi-tgt" style={{ color: 'var(--gold)' }}>Footfall: {kpi.footfall.toLocaleString()}</div>
+        </div>
+
+        <div className="card kpi-card green" style={{ position: 'relative' }}>
+          <div className="kpi-badge" style={{ background: 'rgba(46,194,122,0.15)', color: 'var(--green)', border: '1px solid rgba(46,194,122,0.35)' }}>Live</div>
+          <div className="kpi-icon"><i className="fa-solid fa-sack-dollar"></i></div>
+          <div className="kpi-label">Total Buy Value</div>
+          <div className="kpi-val">{fmtLAKShort(kpi.totalBuy)}</div>
+          <div className="kpi-sub">New: {fmtLAKShort(kpi.buyNew)} · Existing: {fmtLAKShort(kpi.buyExisting)}</div>
+                    <div className="kpi-tgt" style={{ color: 'var(--green)' }}>Avg / Acq: {fmtLAK(Math.round(kpi.avgBuyPerAcq))}</div>
+        </div>
+
+        <div className="card kpi-card red">
+          <div className="kpi-icon"><i className="fa-solid fa-money-bill-wave"></i></div>
+          <div className="kpi-label">Total Spending</div>
+          <div className="kpi-val">{fmtLAKShort(kpi.totalCost)}</div>
+          <div className="kpi-sub">Team: {fmtLAKShort(kpi.teamCost)} · Merch: {fmtLAKShort(kpi.merchCost)}</div>
+          <div className="kpi-tgt" style={{ color: 'var(--red)' }}>KPV {fmtLAKShort(kpi.kpv.cost)} · Agency {fmtLAKShort(kpi.agency.cost)}</div>
+        </div>
+
+<div className="card kpi-card orange">
+          <div className="kpi-icon"><i className="fa-solid fa-chart-line"></i></div>
+          <div className="kpi-label">CPA (Cost / NC)</div>
+          <div className="kpi-val">{fmtLAK(Math.round(kpi.cpa))}</div>
+          <div className="kpi-sub">{fmtLAK(Math.round(kpi.totalCost))} ÷ {kpi.nc.toLocaleString()}</div>
+          <div className="kpi-tgt" style={{ color: '#F4A62A' }}>Target: ₭100,000 ✓ Under</div>
+        </div>
+
+        <div className="card kpi-card blue">
+          <div className="kpi-icon"><i className="fa-solid fa-cart-shopping"></i></div>
+          <div className="kpi-label">CPO (Cost / Buyers)</div>
+          <div className="kpi-val">{fmtLAK(Math.round(kpi.cpo))}</div>
+          <div className="kpi-sub">{fmtLAK(Math.round(kpi.totalCost))} ÷ {(kpi.nrp + kpi.ec).toLocaleString()}</div>
+          <div className="kpi-tgt" style={{ color: 'var(--blue)' }}>Target: ₭60,000 ✓ Under</div>
+        </div>
+
+        <div className="card kpi-card teal">
+          <div className="kpi-icon"><i className="fa-solid fa-receipt"></i></div>
+          <div className="kpi-label">CPAO (Cost / Acq. Order)</div>
+          <div className="kpi-val">{fmtLAK(Math.round(kpi.cpao))}</div>
+          <div className="kpi-sub">{fmtLAK(Math.round(kpi.totalCost))} ÷ {kpi.totalAcq.toLocaleString()}</div>
+          <div className="kpi-tgt" style={{ color: '#3ECFCF' }}>Target: ₭130,000 ✓ Under</div>
+        </div>
+      </div>
+
+      {/* Avg KPI Row */}
+      <div className="grid-2" style={{ marginBottom: '20px' }}>
+        <div className="card kpi-card" style={{ borderColor: 'rgba(212,168,67,0.25)' }}>
+          <div className="kpi-icon" style={{ color: 'var(--gold)' }}><i className="fa-solid fa-coins"></i></div>
+          <div className="kpi-label" style={{ color: 'var(--gold)' }}>Avg. Buy Value / Acquisition</div>
+          <div className="kpi-val val-gold">{fmtLAK(Math.round(kpi.avgBuyPerAcq))}</div>
+          <div className="kpi-sub">Total Buy Value ÷ Total Acquisition</div>
+        </div>
+        <div className="card kpi-card" style={{ borderColor: 'rgba(77,158,255,0.25)' }}>
+          <div className="kpi-icon" style={{ color: 'var(--blue)' }}><i className="fa-solid fa-calendar-day"></i></div>
+          <div className="kpi-label" style={{ color: 'var(--blue)' }}>Avg. Acquisition / Day</div>
+          <div className="kpi-val val-blue">{kpi.avgAcqPerDay.toFixed(1)}</div>
+          <div className="kpi-sub">{kpi.totalAcq.toLocaleString()} ÷ {kpi.activeDays} active days</div>
+        </div>
+      </div>
+        {/* Charts Row 1: Acquisition Trend + % Contribution */}
+      <div className="grid-2" style={{ marginBottom: '20px' }}>
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h3 style={{ fontSize: '14px', margin: 0 }}>Acquisition Trend</h3>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {(['D', 'W', 'M'] as const).map(mode => (
+                <button
+                  key={mode}
+                  className="btn btn-ghost"
+                  onClick={() => setTrendMode(mode)}
+                  style={{
+                    padding: '3px 10px',
+                    fontSize: '11px',
+                    background: trendMode === mode ? 'var(--blue-dim)' : undefined,
+                    color: trendMode === mode ? 'var(--blue)' : undefined,
+                    borderColor: trendMode === mode ? 'var(--blue)' : undefined,
+                  }}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ height: '220px' }}>
+            <Line data={lineChartData} options={lineChartOptions} />
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 style={{ marginBottom: '4px', fontSize: '14px' }}>Acquisition % Contribution</h3>
+          <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginBottom: '12px' }}>New Customer vs Existing share of total</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', height: '160px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '140px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#D4A843', flexShrink: 0 }}></span>
+                <span style={{ fontSize: '12px' }}>New Customer</span>
+                <strong style={{ color: 'var(--gold)', marginLeft: 'auto' }}>{pctNC}%</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#4D9EFF', flexShrink: 0 }}></span>
+                <span style={{ fontSize: '12px' }}>Existing</span>
+                <strong style={{ color: 'var(--blue)', marginLeft: 'auto' }}>{pctEC}%</strong>
+              </div>
+            </div>
+            <div style={{ width: '150px', height: '150px', flexShrink: 0, marginLeft: 'auto' }}>
+              <Doughnut data={donutAcqData} options={donutOp} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row 2: Team Contribution + Spending % by Team */}
+      <div className="grid-2" style={{ marginBottom: '20px' }}>
+        <div className="card">
+          <h3 style={{ marginBottom: '4px', fontSize: '14px' }}>% Contribution by Team</h3>
+          <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginBottom: '12px' }}>New Customers by team (KPV vs Agency)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', height: '160px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '140px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#D4A843', flexShrink: 0 }}></span>
+                <span style={{ fontSize: '12px' }}>KPV Team</span>
+                <strong style={{ color: 'var(--gold)', marginLeft: 'auto' }}>{pctKPV}%</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#4D9EFF', flexShrink: 0 }}></span>
+                <span style={{ fontSize: '12px' }}>Agency Team</span>
+                <strong style={{ color: 'var(--blue)', marginLeft: 'auto' }}>{pctAgency}%</strong>
+              </div>
+            </div>
+            <div style={{ width: '150px', height: '150px', flexShrink: 0, marginLeft: 'auto' }}>
+              <Doughnut data={donutTeamData} options={donutOp} />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 style={{ marginBottom: '4px', fontSize: '14px' }}>% Spending by Team</h3>
+          <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginBottom: '12px' }}>Total cost split by team (KPV vs Agency)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', height: '160px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '140px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#D4A843', flexShrink: 0 }}></span>
+                <span style={{ fontSize: '12px' }}>KPV Team</span>
+                <strong style={{ color: 'var(--gold)', marginLeft: 'auto' }}>{spendKPV}%</strong>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#4D9EFF', flexShrink: 0 }}></span>
+                <span style={{ fontSize: '12px' }}>Agency Team</span>
+                <strong style={{ color: 'var(--blue)', marginLeft: 'auto' }}>{spendAgency}%</strong>
+              </div>
+            </div>
+            <div style={{ width: '150px', height: '150px', flexShrink: 0, marginLeft: 'auto' }}>
+              <Doughnut data={donutSpendData} options={donutOp} />
+            </div>
+          </div>
+        </div>
+      </div>
+{/* Recent Submissions Table */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+          <h3 style={{ fontSize: '15px' }}>Recent Submissions</h3>
+          <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: '12px' }}>View All →</button>
+        </div>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Team</th><th>Branch</th><th>Total Acq.</th><th>Buy Value</th><th>Cost</th><th>CPA</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...filtered]
+              .sort((a, b) => (a.date < b.date ? 1 : -1))
+              .slice(0, 8)
+              .map(s => {
+                const totalCost = (s.team_cost || 0) + (s.merch_cost || 0);
+                const cpa = s.new_register > 0 ? totalCost / s.new_register : 0;
+                return (
+                  <tr key={s.id}>
+                    <td>{new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                    <td><span className={`pill ${s.team === 'Agency' ? 'pill-blue' : 'pill-gold'}`}>{s.team || 'KPV'}</span></td>
+                    <td>{s.branch}</td>
+                    <td>{(s.new_register || 0) + (s.existing_users || 0)}</td>
+                    <td>{fmtLAKShort((s.buy_value_new || 0) + (s.buy_value_existing || 0))}</td>
+                    <td>{fmtLAKShort(totalCost)}</td>
+                    <td>{fmtLAK(Math.round(cpa))}</td>
+                    <td><span className="pill pill-green">{(s.status || 'active').toUpperCase()}</span></td>
+                    <td>
+                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => openModal(s)}>
+                        <i className="fa-solid fa-eye"></i> View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            {filtered.length === 0 && (
+              <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--txt-dim)', padding: '24px' }}>No submissions in this range — {loading ? 'loading…' : 'try clearing the filters.'}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+            {/* Submission detail modal — shared with Submission History */}
+      <SubmissionModal
+        open={modal.open}
+        submission={modal.submission}
+        onClose={closeModal}
+        onSave={handleSave}
+        onDelete={handleDelete}
+      />
+    </div>
+  );
+}
