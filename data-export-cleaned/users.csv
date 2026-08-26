@@ -1,4 +1,5 @@
-
-
-
-
+id,username,password,name,role,team,token
+b1b2c3d4-e5f6-7890-abcd-ef1234567890,admin@easygold.la,admin123,Admin,admin,,VERCEL_PROXY_TOKEN
+b1b2c3d4-e5f6-7890-abcd-ef1234567891,d-day@easygold.la,dday123,Agency,team_member,Agency,3eaf2cce-3944-4c82-854d-93fc3efc9c69
+b1b2c3d4-e5f6-7890-abcd-ef1234567892,kpv@easygold.la,kpv9999,KPV,team_member,KPV,e53e9d47-c644-416f-aa6a-e0edc6a1e948
+b1b2c3d4-e5f6-7890-abcd-ef1234567893,souphanithvst@gmail.com,123456,Souphaith,admin,,6d19d838-2209-4255-a59c-f4b3ce9f9ea3
