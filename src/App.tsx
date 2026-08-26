@@ -14,6 +14,7 @@ import RouteMap from './pages/RouteMap';
 import CostManager from './pages/CostManager';
 import PlanSetting from './pages/PlanSetting';
 import Settings from './pages/Settings';
+import Diagnostic from './pages/Diagnostic';
 import './index.css';
 
 function Layout({ children }: { children: React.ReactNode }) {
@@ -111,7 +112,8 @@ function App() {
         <Route path="/route-map" element={<Layout><RouteMap /></Layout>} />
                 <Route path="/cost-manager" element={<Layout><CostManager /></Layout>} />
         <Route path="/plan-setting" element={<Layout><PlanSetting /></Layout>} />
-        <Route path="/settings" element={<Layout><Settings /></Layout>} />
+                <Route path="/settings" element={<Layout><Settings /></Layout>} />
+        <Route path="/diagnostic" element={<Diagnostic />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
