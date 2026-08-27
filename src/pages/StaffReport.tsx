@@ -148,17 +148,18 @@ export default function StaffReport() {
   .range { text-align: center; font-size: 9.5px; color: #444; margin-bottom: 10px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 9.5px; }
   th, td { border: 1px solid #333; padding: 3px 5px; vertical-align: top; }
-  th { background: #f0e8d0; font-weight: 700; text-align: center; }
-  tfoot td { background: #f4f2ec; font-weight: 700; }
-  .sign-area { display: flex; gap: 0; border: 1px solid #333; margin-top: 10px; page-break-inside: avoid; }
+  th { background: #e8e8e8; font-weight: 700; text-align: center; }
+  tfoot td { background: #f2f2f2; font-weight: 700; }
+  .sign-wrapper { border: 1px solid #333; margin-top: 10px; page-break-inside: avoid; }
+  .sign-header { display: flex; border-bottom: 1px solid #333; background: #e8e8e8; }
+  .sign-header div { flex: 1; padding: 4px 8px; font-weight: 700; font-size: 9.5px; border-right: 1px solid #333; text-align: center; }
+  .sign-header div:last-child { border-right: none; }
+  .sign-area { display: flex; gap: 0; }
   .sign-cell { flex: 1; border-right: 1px solid #333; padding: 8px 10px; font-size: 9.5px; }
   .sign-cell:last-child { border-right: none; }
   .sign-label { font-weight: 700; margin-bottom: 28px; }
   .sign-line { border-top: 1px solid #333; margin-bottom: 4px; }
   .sign-date { color: #555; font-size: 8.5px; }
-  .sign-header { display: flex; border: 1px solid #333; border-bottom: none; background: #f0e8d0; }
-  .sign-header div { flex: 1; padding: 4px 8px; font-weight: 700; font-size: 9.5px; border-right: 1px solid #333; text-align: center; }
-  .sign-header div:last-child { border-right: none; }
   @page { size: A4 portrait; margin: 14mm 16mm; }
   @media print { body { padding: 0; } }
 </style></head>
@@ -193,26 +194,28 @@ export default function StaffReport() {
     <tbody>${summaryRowsHtml}</tbody>
   </table>
 
-  <div class="sign-header">
-    <div>ຜູ້ສະເໝີ</div>
-    <div>ຫົວໜ້າສາຍງານ</div>
-    <div>ຜູ້ອຳນວຍການການຕະຫລາດ ແລະ ບໍລິການລູກຄ້າ</div>
-  </div>
-  <div class="sign-area">
-    <div class="sign-cell">
-      <div class="sign-label">&nbsp;</div>
-      <div class="sign-line"></div>
-      <div class="sign-date">ວັນທີ: ...........................</div>
+  <div class="sign-wrapper">
+    <div class="sign-header">
+      <div>ຜູ້ສະເໝີ</div>
+      <div>ຫົວໜ້າສາຍງານ</div>
+      <div>ຜູ້ອຳນວຍການການຕະຫລາດ ແລະ ບໍລິການລູກຄ້າ</div>
     </div>
-    <div class="sign-cell">
-      <div class="sign-label">&nbsp;</div>
-      <div class="sign-line"></div>
-      <div class="sign-date">ວັນທີ: ...........................</div>
-    </div>
-    <div class="sign-cell">
-      <div class="sign-label">&nbsp;</div>
-      <div class="sign-line"></div>
-      <div class="sign-date">ວັນທີ: ...........................</div>
+    <div class="sign-area">
+      <div class="sign-cell">
+        <div class="sign-label">&nbsp;</div>
+        <div class="sign-line"></div>
+        <div class="sign-date">ວັນທີ: ...........................</div>
+      </div>
+      <div class="sign-cell">
+        <div class="sign-label">&nbsp;</div>
+        <div class="sign-line"></div>
+        <div class="sign-date">ວັນທີ: ...........................</div>
+      </div>
+      <div class="sign-cell">
+        <div class="sign-label">&nbsp;</div>
+        <div class="sign-line"></div>
+        <div class="sign-date">ວັນທີ: ...........................</div>
+      </div>
     </div>
   </div>
 
