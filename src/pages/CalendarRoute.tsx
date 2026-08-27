@@ -35,7 +35,9 @@ export default function CalendarRoute() {
   const [currentMonth, setCurrentMonth] = useState(monthIndex); // 0-based
         const [modalSub, setModalSub] = useState<Submission | null>(null);
   // Day summary modal — big picture of all submissions on one date
-    const [dayModal, setDayModal] = useState<{ date: string; subs: Submission[] } | null>(null);
+  // Day summary modal — big picture of all submissions on one date
+  const [dayModal, setDayModal] = useState<{ date: string; subs: Submission[] } | null>(null);
+  const [teamFilter, setTeamFilter] = useState<'All' | 'KPV' | 'Agency'>('All');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [routePlans, setRoutePlans] = useState<RoutePlanEntry[]>([]);
   const [checkins, setCheckins] = useState<CheckInRecord[]>([]);
@@ -75,12 +77,22 @@ export default function CalendarRoute() {
 
   const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
 
-  const subsForMonth = submissions.filter(s => s.date.startsWith(currentMonthStr));
-  const checkinsForMonth = checkins.filter(c => c.date.startsWith(currentMonthStr));
-      const routesForMonth = routePlans.filter(r =>
+  const subsForMonth = submissions.filter(s => 
+    s.date.startsWith(currentMonthStr) &&
+    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || s.team === user.team) &&
+    (teamFilter === 'All' || s.team === teamFilter)
+  );
+  
+  const checkinsForMonth = checkins.filter(c => 
+    c.date.startsWith(currentMonthStr) &&
+    (teamFilter === 'All' || c.team === teamFilter)
+  );
+  
+  const routesForMonth = routePlans.filter(r =>
     r.date.startsWith(currentMonthStr) &&
     // Staff only see the plans assigned to their own team
-    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || r.team === user.team)
+    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || r.team === user.team) &&
+    (teamFilter === 'All' || r.team === teamFilter)
   );
 
     const openModal = (sub: Submission) => setModalSub(sub);
@@ -118,7 +130,15 @@ export default function CalendarRoute() {
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
+
         <div style={{ display: 'flex', gap: '12px', fontSize: '12px', alignItems: 'center' }}>
+          {(!user || user.role === 'admin' || user.role === 'manager') && (
+            <select value={teamFilter} onChange={e => setTeamFilter(e.target.value as any)} style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--txt-main)' }}>
+              <option value="All">All Teams</option>
+              <option value="KPV">KPV</option>
+              <option value="Agency">Agency</option>
+            </select>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'rgba(77,158,255,0.7)', display: 'inline-block' }}></span> Plan to go
           </div>
@@ -154,12 +174,14 @@ export default function CalendarRoute() {
               <div
                 key={idx}
                 className={`cal-cell${isToday ? ' today' : ''}${isValid ? '' : ' cal-empty'}`}
+                style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
               >
                 {isValid && (
                   <>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: isToday ? 'var(--blue)' : 'var(--txt-sub)', marginBottom: '4px' }}>{dayNum}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: isToday ? 'var(--blue)' : 'var(--txt-sub)', marginBottom: '4px', flexShrink: 0 }}>{dayNum}</div>
 
-                    {/* ① PLAN TO GO — green ✓ when checked in; click jumps to Check-In */}
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '2px' }}>
+                      {/* ① PLAN TO GO — green ✓ when checked in; click jumps to Check-In */}
                     {dayRoutes.map((r, i) =>
                       (r.location_name || '')
                         .split(',')
@@ -171,9 +193,18 @@ export default function CalendarRoute() {
                             <div
                               key={`p${i}-${j}`}
                               className="cal-ticket plan"
-                              onClick={() => navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`)}
-                              title={checkedIn ? `Checked in at ${loc} — click to re-open Check-In` : `Click to Check-In at ${loc} on ${r.date}`}
-                              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => {
+                                if (checkedIn) {
+                                  const subs = daySubs.filter(s => s.branch.includes(loc) && s.team === r.team);
+                                  if (subs.length === 1) openModal(subs[0]);
+                                  else if (subs.length > 1) setDayModal({ date: r.date, subs });
+                                  else alert('No submission recorded yet for this location.');
+                                } else {
+                                  navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`);
+                                }
+                              }}
+                              title={checkedIn ? `Checked in at ${loc} — click to view submission` : `Click to Check-In at ${loc} on ${r.date}`}
+                              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
                             >
                               <i className="fa-solid fa-route" style={{ fontSize: 8 }}></i>
                               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc}</span>
@@ -211,6 +242,7 @@ export default function CalendarRoute() {
                         </div>
                       );
                     })()}
+                    </div>
                   </>
                 )}
               </div>
