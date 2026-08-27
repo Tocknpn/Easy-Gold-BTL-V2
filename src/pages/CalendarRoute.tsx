@@ -161,7 +161,7 @@ export default function CalendarRoute() {
 
                     {/* ① PLAN TO GO — green ✓ when checked in; click jumps to Check-In */}
                     {dayRoutes.map((r, i) =>
-                      r.location_name
+                      (r.location_name || '')
                         .split(',')
                         .map(loc => loc.trim())
                         .filter(Boolean)

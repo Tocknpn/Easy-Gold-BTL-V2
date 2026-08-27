@@ -1,0 +1,320 @@
+﻿date,team,location_name,lat,lng
+2026-01-19,Agency,Dongdok Market,18.04578373,102.6366376
+2026-01-20,Agency,Xokthavy Dankham,17.97804207,102.525771
+2026-01-21,Agency,Suanmone Market,17.91863675,102.6205948
+2026-01-22,Agency,APB Bank,18.02655507,102.6523636
+2026-01-23,Agency,Nonsaengchanh Market,17.99366656,102.7030774
+2026-01-24,Agency,Xokthavy Thongkhankham,17.97419696,102.6078843
+2026-01-26,Agency,Xokthavy Donenoun,18.0455591,102.6590512
+2026-01-27,Agency,Insee Nongbone,18.02361738,102.5484366
+2026-01-28,Agency,Lao Telecom Office,17.9642688,102.6096547
+2026-01-29,Agency,Xokthavy Chommany,18.00176004,102.6274143
+2026-02-06,Agency,Phonsavang Market,18.00002238,102.6259012
+2026-02-07,Agency,Nnghai Market,17.91441786,102.6492325
+2026-02-09,Agency,Nonkhor Market,17.96754999,102.6607659
+2026-02-10,Agency,Lao Market,18.03045571,102.6599783
+2026-02-11,Agency,Khaopoon Jeiw King,17.97960595,102.627652
+2026-02-12,Agency,Thatluang lake,17.96059616,102.6502594
+2026-02-14,Agency,EDL / ITECC,17.96201179,102.6465288
+2026-02-16,Agency,BCEL Office,17.96340478,102.6068256
+2026-02-17,Agency,Seen dard Farsai,17.9808241,102.6084531
+2026-02-18,Agency,ETL Office,17.97010972,102.6134634
+2026-02-19,Agency,Xokthavy TKK / BECL,17.97419696,102.6078843
+2026-02-20,Agency,Xokthavy Donenoun / Friendship,18.0455591,102.6590512
+2026-02-21,Agency,Thatluang Lake Night Market,17.96059616,102.6502594
+2026-02-23,Agency,Xokthavy Nongviengkham,18.04865035,102.6394389
+2026-02-24,Agency,JDB Bank,17.96706598,102.6139934
+2026-02-25,Agency,Xokthavy Vientiane Center,17.96284494,102.6176559
+2026-02-26,Agency,Lao Telecom,17.9642688,102.6096547
+2026-02-27,Agency,Lao-Top College,17.94508561,102.6390749
+2026-02-28,Agency,Xokthavy Vientiane Center,17.96284494,102.6176559
+2026-03-02,Agency,LDB,17.96738422,102.5992855
+2026-03-03,Agency,Vietin,17.96898097,102.6161777
+2026-03-04,Agency,UYD,17.96632497,102.6068484
+2026-03-05,Agency,UYD,17.96632497,102.6068484
+2026-03-06,Agency,UYD,17.96632497,102.6068484
+2026-03-07,Agency,UYD,17.96632497,102.6068484
+2026-03-08,Agency,UYD,17.96632497,102.6068484
+2026-03-10,Agency,D-Book,18.0397357,102.6358019
+2026-03-11,Agency,D-Book,18.0397357,102.6358019
+2026-03-12,Agency,D-Book,18.0397357,102.6358019
+2026-03-13,Agency,D-Book,18.0397357,102.6358019
+2026-03-14,Agency,D-Book,18.0397357,102.6358019
+2026-03-15,Agency,D-Book,18.0397357,102.6358019
+2026-03-17,Agency,EDL Office,17.94228981,102.6276732
+2026-03-18,Agency,Phongsavanh bank,18.02098522,102.6515583
+2026-03-19,Agency,Seendard Kutuina,17.98378434,102.6265423
+2026-03-20,Agency,Seendard Tomu,17.95980188,102.6110282
+2026-03-22,Agency,Fresh Mart,17.97375289,102.616384
+2026-03-23,Agency,CKL Factory,17.97314766,102.6500129
+2026-03-25,Agency,Sihome,17.96759019,102.6041667
+2026-01-08,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-01-09,KPV,ວັັງທອງ,17.96965509,102.6078945
+2026-01-14,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-01-15,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-01-16,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-01-19,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-01-21,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-01-22,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-01-23,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-01-26,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-01-28,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-01-29,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-01-30,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-02-02,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-02-04,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-02-05,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-02-06,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-02-09,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-02-11,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-02-12,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-02-13,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-02-16,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-02-18,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-02-19,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-02-20,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-02-23,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-02-25,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-02-26,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-03-02,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-03-04,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-03-05,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-03-06,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-03-11,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-03-12,KPV,ໄອເຕັກ,17.96090911,102.6438592
+2026-03-13,KPV,ງານ ພາຈ່າຍ,17.98892757,102.6311928
+2026-03-16,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-03-18,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-03-19,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-03-20,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-03-23,KPV,ຕະຫຼາດເຊົ້າ,17.96531725,102.6144869
+2026-03-23,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-03-25,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-03-26,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-03-27,KPV,ວຽງຈັນເຊັນເຕີ້,17.96270613,102.6180393
+2026-03-30,KPV,ວັງທອງ,17.96965509,102.6078945
+2026-04-01,Agency,AGL Building,,
+2026-04-02,Agency,Honda NCX,,
+2026-04-03,Agency,Folk Market (Parkson),,
+2026-04-04,Agency,Folk Market (Parkson),,
+2026-04-05,Agency,Folk Market (Parkson),,
+2026-04-06,Agency,BCEL Sibounhuenag,,
+2026-04-07,Agency,Thao kae noy buffet,,
+2026-04-08,Agency,TCR Home center,,
+2026-04-09,Agency,Khao Poun Jeo Khing Phonsa-Art,,
+2026-04-10,Agency,Thatluang night market,,
+2026-04-11,Agency,Itecc 5th floor ,,
+2026-04-12,Agency,Xokthavy Chommany,,
+2026-04-13,Agency,Xokthavy Donenoun,,
+2026-04-18,Agency,South bus station,,
+2026-04-20,Agency,Toyota Lao Thani,,
+2026-04-23,Agency,The National Startup Fest,,
+2026-04-24,Agency,The National Startup Fest,,
+2026-04-25,Agency,Taladsao Bus station,,
+2026-04-29,Agency,IB bank,,
+2026-04-30,Agency,ITECC,,
+2026-05-04,Agency,That Luang Area,,
+2026-05-05,Agency,APB Bank Head Office,,
+2026-05-06,Agency,That Luang Lake,,
+2026-05-07,Agency,BCEL Dongdok ແຖວພິດຊ່າ,,
+2026-05-08,Agency,BCEL NOUL ຂ້າງມ່ວນໃຈ,,
+2026-05-09,Agency,Laylai Temple,,
+2026-05-10,Agency,Siamphone temple,,
+2026-05-11,Agency,Phongsupthavy,,
+2026-05-12,Agency,lao airline,,
+2026-05-14,Agency,Beer Lao,,
+2026-05-15,Agency,Sacom Bank,,
+2026-05-16,Agency,SPEAK LIKE TED,,
+2026-05-17,Agency,Nongkhamsean temple,,
+2026-05-18,Agency,Pho J lar - Sidumduan,,
+2026-05-21,Agency,Lao-Viet bank,,
+2026-05-23,Agency,thongthad Temple,,
+2026-05-25,Agency,foodpanda office,,
+2026-05-26,Agency,Rising Star ITECC,,
+2026-05-29,Agency,NUOL - 3D Printing Product,,
+2026-05-30,Agency,KID Expo,,
+2026-05-31,Agency,KID Expo,,
+2026-06-01,Agency,KID Expo,,
+2026-06-03,Agency,Xaythany Economic Group,,
+2026-06-04,Agency,Hadsayfong District Office,,
+2026-06-05,Agency,Nongniew market,,
+2026-06-06,Agency,Khao Poun Jeo Khing Ban Horm,,
+2026-06-08,Agency,Chanthabouly District Office,,
+2026-06-09,Agency,ອຄ Moic,,
+2026-06-10,Agency,Xangtey market,,
+2026-06-11,Agency,Thatluang park,,
+2026-06-12,Agency,Saysettha District,,
+2026-06-14,Agency,D-mart dongpalan,,
+2026-06-15,Agency,Khao poun jeo khing Phaivanh,,
+2026-06-16,Agency,Ministry Of Industry and Commerce,,
+2026-06-17,Agency,ST Bank,,
+2026-06-18,Agency,Khao poun jeo khing J Oud,,
+2026-06-19,Agency,Dansavanh Resort,,
+2026-06-20,Agency,tham pha temple,,
+2026-06-24,Agency,HAL office,,
+2026-06-25,Agency,Maruhan bank,,
+2026-04-01,KPV,Taladsao,,
+2026-04-02,KPV,Taladsao,,
+2026-04-03,KPV,Taladsao,,
+2026-04-06,KPV,ITECC,,
+2026-04-08,KPV,ITECC,,
+2026-04-09,KPV,ITECC,,
+2026-04-10,KPV,ITECC,,
+2026-04-13,KPV,VTC,,
+2026-04-17,KPV,VTC,,
+2026-04-20,KPV,Wangthong,,
+2026-04-22,KPV,Wangthong,,
+2026-04-23,KPV,Wangthong,,
+2026-04-24,KPV,Wangthong,,
+2026-04-27,KPV,Taladsao,,
+2026-04-29,KPV,Taladsao,,
+2026-04-30,KPV,Taladsao,,
+2026-05-04,KPV,Taladsao ,,
+2026-05-06,KPV,Taladsao,,
+2026-05-07,KPV,Taladsao,,
+2026-05-08,KPV,Taladsao,,
+2026-05-11,KPV,ITECC,,
+2026-05-13,KPV,ITECC,,
+2026-05-14,KPV,ITECC,,
+2026-05-15,KPV,ITECC,,
+2026-05-18,KPV,Wangthong,,
+2026-05-20,KPV,Wangthong,,
+2026-05-21,KPV,Wangthong,,
+2026-05-22,KPV,Wangthong,,
+2026-05-25,KPV,Taladsao,,
+2026-05-27,KPV,Taladsao,,
+2026-05-28,KPV,Taladsao,,
+2026-05-29,KPV,Taladsao,,
+2026-06-01,KPV,ITECC,,
+2026-06-03,KPV,ITECC,,
+2026-06-04,KPV,ITECC,,
+2026-06-05,KPV,ITECC,,
+2026-06-08,KPV,Wangthong,,
+2026-06-10,KPV,Wangthong,,
+2026-06-11,KPV,Wangthong,,
+2026-06-12,KPV,Wangthong,,
+2026-06-15,KPV,Taladsao,,
+2026-06-17,KPV,Taladsao,,
+2026-06-18,KPV,Taladsao,,
+2026-06-19,KPV,Taladsao,,
+2026-06-22,KPV,ITECC,,
+2026-06-24,KPV,ITECC,,
+2026-06-25,KPV,ITECC,,
+2026-06-26,KPV,ITECC,,
+2026-06-29,KPV,Wangthong,,
+2026-07-02,Agency,Big C ITECC,,
+2026-07-03,Agency,Easy Gold ທ່າງອນ,,
+2026-07-06,Agency,MG Laos,,
+2026-07-07,Agency,BCEL Head Office,,
+2026-07-08,Agency,BCEL Nonghai,,
+2026-07-09,Agency,D-Mart Thatlaung,,
+2026-07-10,Agency,EDL GEN - Nongbuek,,
+2026-07-13,Agency,Khuadin Market,,
+2026-07-14,Agency,Nongseng temple,,
+2026-07-15,Agency,APB Bank Head Office (Phakhao),,
+2026-07-16,Agency,Xokthavy Nongtaeng,,
+2026-07-20,Agency,Xokthavy Dongsavath,,
+2026-07-22,Agency,PTT Lao,,
+2026-07-23,Agency,Xokthavy Kaoliew / EDL Sokpaluang,,
+2026-07-24,Agency,Lao tai group (Laofe),,
+2026-07-26,Agency,Xokthavy Donenoun,,
+2026-07-27,Agency,ສະຫະພັນ ແມ່ຍິງ,,
+2026-07-28,Agency,Hoya,,
+2026-07-30,Agency,Itecc Excibiltion Hall,,
+2026-07-31,Agency,Itecc Excibiltion Hall,,
+2026-08-01,Agency,Itecc Excibiltion Hall,,
+2026-08-03,Agency,BCEL Dongdok (Foodcourt),,
+2026-08-04,Agency,AGL Building,,
+2026-08-05,Agency,Sisombath Leasing,,
+2026-08-06,Agency,Exim Logistic,,
+2026-08-07,Agency,Vietin Building,,
+2026-08-09,Agency,Luk 52km & Songpueay,,
+2026-08-10,Agency,Insee Building,,
+2026-08-11,Agency,KPV Thangon,,
+2026-08-12,Agency,Lao Airline,,
+2026-08-13,Agency,Viengthong Office,,
+2026-08-14,Agency,LDB/Back to school,,
+2026-08-15,Agency,Back to school,,
+2026-08-19,Agency,Phayanak Lottery Head Office,,
+2026-08-20,Agency,Lao Telecom,,
+2026-08-21,Agency,CSC,,
+2026-08-24,Agency,LDC Office/Sokxay Office,,
+2026-08-25,Agency,Health Goverment,,
+2026-08-26,Agency,Lao Skyway,,
+2026-08-27,Agency,Phongsupthavy Office,,
+2026-08-28,Agency,LTH Dongpalan,,
+2026-08-29,Agency,Hero Campaign,,
+2026-08-30,Agency,Hero Campaign,,
+2026-09-01,Agency,J-Mart Phontong,,
+2026-09-02,Agency,Easy Gold,,
+2026-09-03,Agency,Easy Gold,,
+2026-09-04,Agency,Easy Gold,,
+2026-09-05,Agency,Beung Thatlaung,,
+2026-09-07,Agency,Souksavanh College,,
+2026-09-08,Agency,Rattana College,,
+2026-09-09,Agency,Post Office Saylom,,
+2026-09-12,Agency,Thatlaung Park,,
+2026-09-13,Agency,Temple,,
+2026-09-14,Agency,Wattay Int Airport,,
+2026-09-15,Agency,Lao Market,,
+2026-09-17,Agency,TCR Home center,,
+2026-09-18,Agency,Sihom Center,,
+2026-09-19,Agency,Temple,,
+2026-09-21,Agency,Saysettha District,,
+2026-09-22,Agency,APB Bank Head Office,,
+2026-09-24,Agency,Phongsavanh bank,,
+2026-09-25,Agency,Beer Lao Office,,
+2026-09-28,Agency,ITECC Mall,,
+2026-07-01,KPV,Wangthong,,
+2026-07-02,KPV,Wangthong,,
+2026-07-03,KPV,Wangthong,,
+2026-07-06,KPV,Taladsao,,
+2026-07-08,KPV,Taladsao,,
+2026-07-09,KPV,Taladsao,,
+2026-07-10,KPV,Taladsao,,
+2026-07-13,KPV,ITECC,,
+2026-07-15,KPV,ITECC,,
+2026-07-16,KPV,ITECC,,
+2026-07-17,KPV,ITECC,,
+2026-07-20,KPV,Wangthong,,
+2026-07-22,KPV,Wangthong,,
+2026-07-23,KPV,Wangthong,,
+2026-07-24,KPV,Wangthong,,
+2026-07-27,KPV,Taladsao,,
+2026-07-29,KPV,Taladsao,,
+2026-07-30,KPV,Taladsao,,
+2026-07-31,KPV,Taladsao,,
+2026-08-03,KPV,ITECC,,
+2026-08-05,KPV,ITECC,,
+2026-08-06,KPV,ITECC,,
+2026-08-07,KPV,ITECC,,
+2026-08-10,KPV,Wangthong,,
+2026-08-12,KPV,Wangthong,,
+2026-08-13,KPV,Wangthong,,
+2026-08-14,KPV,Wangthong,,
+2026-08-17,KPV,Taladsao,,
+2026-08-19,KPV,Taladsao,,
+2026-08-20,KPV,Taladsao,,
+2026-08-21,KPV,Taladsao,,
+2026-08-24,KPV,ITECC,,
+2026-08-26,KPV,ITECC,,
+2026-08-27,KPV,ITECC,,
+2026-08-28,KPV,ITECC,,
+2026-08-31,KPV,Wangthong,,
+2026-09-02,KPV,Wangthong,,
+2026-09-03,KPV,Wangthong,,
+2026-09-04,KPV,Wangthong,,
+2026-09-07,KPV,Taladsao,,
+2026-09-09,KPV,Taladsao,,
+2026-09-10,KPV,Taladsao,,
+2026-09-11,KPV,Taladsao,,
+2026-09-14,KPV,ITECC,,
+2026-09-16,KPV,ITECC,,
+2026-09-17,KPV,ITECC,,
+2026-09-18,KPV,ITECC,,
+2026-09-21,KPV,Wangthong,,
+2026-09-23,KPV,Wangthong,,
+2026-09-24,KPV,Wangthong,,
+2026-09-25,KPV,Wangthong,,
+2026-09-28,KPV,Taladsao,,
+2026-09-30,KPV,Taladsao,,
