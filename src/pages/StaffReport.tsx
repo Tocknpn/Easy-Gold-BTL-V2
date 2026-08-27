@@ -90,115 +90,134 @@ export default function StaffReport() {
 
     const totalWorkingDays = new Set(detailRows.map(r => r.date)).size;
 
-  // ── Export: document-style printable report (matches Excel/PDF template) ──
+  // ── Export: document-style printable report (matches pic2 template) ──
   const buildDocHtml = (): string => {
     const range = `${from || '…'} — ${to || '…'}`;
     const monthLabel = from
       ? new Date(from + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
       : 'All time';
-    const genDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-    const headRow = `
-      <tr>
-        <th style="width:60px">ວັນ<br/><span class="en">Day</span></th>
-        <th style="width:110px">ວັນທີ<br/><span class="en">Date</span></th>
-        <th>ສາຂາ / ສະຖານທີ່<br/><span class="en">Branch / Place</span></th>
-        <th>ຜູ້ຮັບຜິດຊອບຫຼັກ<br/><span class="en">In Charge (Main / Assistant)</span></th>
-        <th style="width:70px">ຈຳນວນ<br/><span class="en">People</span></th>
-        <th style="width:150px">Remark</th>
-      </tr>`;
 
-        const rowHtml = (s: Submission) => `
-      <tr>
-        <td>${laoDay(s.date)}</td>
-        <td>${labelDate(s.date)} ${new Date(s.date + 'T00:00:00').getFullYear()}</td>
-        <td>${s.branch}</td>
-        <td>${formatInCharge(s.staff_in_charge || [])}</td>
-        <td>${(s.staff_in_charge || []).length}</td>
-        <td>${(s.buy_value_new || 0) + (s.buy_value_existing || 0) > 0 ? `Buy ${fmtLAKShort((s.buy_value_new || 0) + (s.buy_value_existing || 0))}` : ''}</td>
-      </tr>`;
+    // Collect all rows in date order for the chosen filter
+    const allRows = kpvSubs
+      .filter(s => inDateRange(s) && (!staffName || (s.staff_in_charge || []).map(n => n.trim()).includes(staffName.trim())))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
-    let body = '';
-    if (!staffName) {
-      for (const st of staffSummary.filter(s => s.days > 0)) {
-        const rows = kpvSubs
-          .filter(s => inDateRange(s) && (s.staff_in_charge || []).includes(st.name))
-          .sort((a, b) => a.date.localeCompare(b.date));
-        if (!rows.length) continue;
-        body += `
-          <div class="staff-block">
-            <h2>${st.name} — KPV</h2>
-            <table class="doc-table"><thead>${headRow}</thead><tbody>${rows.map(rowHtml).join('')}</tbody>
-            <tfoot><tr><td colspan="6" class="total-row">Total working days: <strong>${st.days}</strong></td></tr></tfoot></table>
-          </div>`;
+    // Build staff day-count summary from the displayed rows
+    const staffDayMap: Record<string, Set<string>> = {};
+    for (const s of allRows) {
+      for (const name of (s.staff_in_charge || [])) {
+        const n = name.trim();
+        if (!n) continue;
+        if (!staffDayMap[n]) staffDayMap[n] = new Set();
+        staffDayMap[n].add(s.date);
       }
-            if (!body) body = `<p class="empty" style="text-align:center;padding:20px">No KPV activity records in this period.</p>`;
-    } else {
-      body = `
-        <div class="staff-block">
-          <h2>${staffName} — KPV</h2>
-          <table class="doc-table"><thead>${headRow}</thead><tbody>
-            ${detailRows.length ? detailRows.map(rowHtml).join('') : `<tr><td colspan="6" class="empty" style="text-align:center">No records in this period.</td></tr>`}
-          </tbody><tfoot>
-            <tr><td colspan="6" class="total-row">Total working days: <strong>${totalWorkingDays}</strong></td></tr>
-          </tfoot></table>
-        </div>`;
     }
+    const staffDaySummary = Object.entries(staffDayMap)
+      .map(([name, dates]) => ({ name, days: dates.size }))
+      .sort((a, b) => b.days - a.days);
 
-    const signBlock = (roleLao: string, roleEn: string) => `
-      <div class="sign">
-        <div class="sign-role">${roleLao}<br/><span>${roleEn}</span></div>
-        <div class="sign-line"></div>
-        <div class="sign-cap">( ${roleEn} )</div>
-        <div class="sign-date">Date: ..............................</div>
-      </div>`;
+    const totalUniqueDays = new Set(allRows.map(r => r.date)).size;
+
+    // Main attendance rows
+    const rowsHtml = allRows.length
+      ? allRows.map((s, i) => `
+        <tr>
+          <td style="text-align:center">${i + 1}</td>
+          <td style="text-align:center">${laoDay(s.date)}</td>
+          <td style="white-space:nowrap">${labelDate(s.date)} ${new Date(s.date + 'T00:00:00').getFullYear()}</td>
+          <td>${s.branch}</td>
+          <td>${formatInCharge(s.staff_in_charge || [])}</td>
+          <td></td>
+        </tr>`).join('')
+      : `<tr><td colspan="6" style="text-align:center;color:#888;padding:12px">ບໍ່ມີຂໍ້ມູນໃນໄລຍະດັ່ງກ່າວ</td></tr>`;
+
+    // Staff summary rows
+    const summaryRowsHtml = staffDaySummary.map(st => `
+      <tr>
+        <td>${st.name}</td>
+        <td style="text-align:center">${st.days} ມື້</td>
+        <td></td>
+      </tr>`).join('');
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><title>Staff Report ${range}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans Lao', 'Phetsarath OT', 'Saysettha OT', Tahoma, sans-serif; color: #111; padding: 32px 40px; }
-  .letterhead { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #A77B27; padding-bottom: 10px; margin-bottom: 18px; }
-  .logo { width: 44px; height: 44px; border-radius: 10px; background: linear-gradient(135deg, #C9A227, #8f6b1d); font-size: 22px; display: flex; align-items: center; justify-content: center; }
-  .lh-name { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
-  .lh-sub { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
-  h1.title { font-size: 16px; text-align: center; margin-bottom: 4px; }
-  .range { text-align: center; font-size: 12px; color: #444; margin-bottom: 14px; }
-  h2 { font-size: 13px; margin: 18px 0 8px; border-left: 4px solid #A77B27; padding-left: 8px; }
-  table.doc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-  .doc-table th, .doc-table td { border: 1px solid #333; padding: 6px 8px; vertical-align: top; }
-  .doc-table th { background: #efe9da; font-weight: 700; }
-  .doc-table th .en { font-weight: 500; font-size: 9px; color: #666; }
-  .doc-table tfoot td.total-row { background: #f4f2ec; font-weight: 700; text-align: right; }
-  .empty { color: #888; }
-  .sign-area { display: flex; gap: 30px; margin-top: 42px; page-break-inside: avoid; }
-  .sign { flex: 1; text-align: center; font-size: 12px; }
-  .sign-role { font-weight: 700; margin-bottom: 34px; }
-  .sign-role span { font-weight: 400; color: #777; font-size: 10px; }
-  .sign-line { border-top: 1.5px solid #333; margin-bottom: 4px; }
-  .sign-cap { color: #555; margin-bottom: 3px; }
-  .sign-date { color: #555; }
-  .foot { margin-top: 26px; font-size: 10px; color: #999; text-align: right; border-top: 1px solid #ddd; padding-top: 8px; }
-  @page { size: A4 portrait; margin: 14mm; }
+  body { font-family: 'Noto Sans Lao', 'Phetsarath OT', 'Saysettha OT', Tahoma, sans-serif; color: #111; padding: 20px 28px; font-size: 11px; }
+  .title { font-size: 13px; font-weight: 700; text-align: center; margin-bottom: 3px; }
+  .range { text-align: center; font-size: 10px; color: #444; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 10.5px; }
+  th, td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
+  th { background: #f0e8d0; font-weight: 700; text-align: center; }
+  tfoot td { background: #f4f2ec; font-weight: 700; }
+  .summary-wrap { display: flex; gap: 16px; margin-bottom: 14px; }
+  .summary-table { flex: 1; }
+  .sign-area { display: flex; gap: 0; border: 1px solid #333; margin-top: 8px; page-break-inside: avoid; }
+  .sign-cell { flex: 1; border-right: 1px solid #333; padding: 8px 10px; font-size: 10px; }
+  .sign-cell:last-child { border-right: none; }
+  .sign-label { font-weight: 700; margin-bottom: 24px; }
+  .sign-line { border-top: 1px solid #333; margin-bottom: 4px; }
+  .sign-date { color: #555; font-size: 9px; }
+  .sign-header { display: flex; border: 1px solid #333; border-bottom: none; background: #f0e8d0; }
+  .sign-header div { flex: 1; padding: 4px 10px; font-weight: 700; font-size: 10px; border-right: 1px solid #333; text-align: center; }
+  .sign-header div:last-child { border-right: none; }
+  @page { size: A4 portrait; margin: 10mm; }
+  @media print { body { padding: 0; } }
 </style></head>
 <body>
-  <div class="letterhead">
-    <div class="logo">🏅</div>
-    <div><div class="lh-name">EASY GOLD BTL</div><div class="lh-sub">Phouvang Gold Shop · Field Team Operations</div></div>
+  <div class="title">ສະຫລຸບ ລາຍຊື່ອອກບຸກຄະລາກອນໄດ້ຮ່ານຄຳພູວົງ ປະຈຳເດືອນ ${monthLabel} ( ${range} )</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:28px">ລ/ດ</th>
+        <th style="width:42px">ວັນ</th>
+        <th style="width:90px">ວັນທີ</th>
+        <th style="width:110px">ສາຂາ</th>
+        <th>ຜູ້ຮັບຜິດຊອບຊຸກ</th>
+        <th style="width:80px">Remark</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr><td colspan="6" style="text-align:right">ລວມທັງໝົດ ${totalUniqueDays} ມື້</td></tr>
+    </tfoot>
+  </table>
+
+  <table style="width:55%">
+    <thead>
+      <tr>
+        <th>ລວມໜ້າວຽກ ${staffDaySummary.length} ຄົນ</th>
+        <th style="width:80px">ຈຳນວນມື້</th>
+        <th style="width:80px">ລາຍຮັບ</th>
+      </tr>
+    </thead>
+    <tbody>${summaryRowsHtml}</tbody>
+  </table>
+
+  <div class="sign-header">
+    <div>ຜູ້ສະເໝີ</div>
+    <div>ຊື່ອທ່ານຂາຍການ</div>
+    <div>ຜູ້ອຳນວຍການໂຄງການ ແລະ ບໍລິການລູກຄ້າ</div>
   </div>
-
-  <h1 class="title">ສະຫລຸບ ລາຍຊື່ອອກປະຈຳໜ້າຮ້ານຄຳພູວົງ ປະຈຳເດືອນ ${monthLabel}</h1>
-  <div class="range">( ${range} ) — Staff Expense Claim Summary · Team KPV</div>
-
-  ${body}
-
   <div class="sign-area">
-    ${signBlock('ຜູ້ປະຕິບັດງານ', 'Staff Signature')}
-    ${signBlock('ຜູ້ຈັດການ', 'Manager')}
-    ${signBlock('ຝ່າຍບຸກຄະລາກອນ', 'HR / Finance')}
+    <div class="sign-cell">
+      <div class="sign-label">&nbsp;</div>
+      <div class="sign-line"></div>
+      <div class="sign-date">ວັນທີ: ...........................</div>
+    </div>
+    <div class="sign-cell">
+      <div class="sign-label">&nbsp;</div>
+      <div class="sign-line"></div>
+      <div class="sign-date">ວັນທີ: ...........................</div>
+    </div>
+    <div class="sign-cell">
+      <div class="sign-label">&nbsp;</div>
+      <div class="sign-line"></div>
+      <div class="sign-date">ວັນທີ: ...........................</div>
+    </div>
   </div>
-
-  <div class="foot">Easy Gold BTL Tracker · generated ${genDate} · This document supports monthly expense claims with HR.</div>
 
   <script>window.onload = function () { setTimeout(function () { window.print(); }, 300); };</script>
 </body></html>`;
