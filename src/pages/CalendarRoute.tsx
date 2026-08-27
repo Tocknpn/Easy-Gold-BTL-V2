@@ -1,29 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentUser, getRoutePlans } from '../lib/workflow';
+import { getCurrentUser, fetchRoutePlans, fetchCheckIns } from '../lib/workflow';
+import type { RoutePlanEntry, CheckInRecord } from '../lib/workflow';
 import type { Submission } from '../lib/submissions';
 import { fetchSubmissions, getCurrentDateHelpers } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // Sample mock data for submissions and check-ins (March 2025 demo set)
-interface CheckIn {
-  date: string;
-  team: string;
-  branch: string;
-  time: string;
-}
 
-
-const mockCheckins: CheckIn[] = [
-  { date: '2025-03-03', team: 'KPV', branch: 'That Luang', time: '08:32' },
-  { date: '2025-03-04', team: 'Agency', branch: 'NUOL Campus', time: '08:41' },
-  { date: '2025-03-10', team: 'KPV', branch: 'Talat Sao', time: '08:47' },
-  { date: '2025-03-11', team: 'KPV', branch: 'Sikhottabong', time: '08:55' },
-  { date: '2025-03-17', team: 'Agency', branch: 'Wattay Airport', time: '08:38' },
-  { date: '2025-03-18', team: 'KPV', branch: 'Parkson Mall', time: '09:02' },
-  { date: '2025-03-24', team: 'KPV', branch: 'Patuxay', time: '08:29' },
-  { date: '2025-03-25', team: 'Agency', branch: 'Evening Market', time: '17:18' },
-];
 
 function fmtLAK(n: number) {
   if (n >= 1_000_000) return `₭${(n / 1_000_000).toFixed(1)}M`;
@@ -53,11 +37,19 @@ export default function CalendarRoute() {
   // Day summary modal — big picture of all submissions on one date
     const [dayModal, setDayModal] = useState<{ date: string; subs: Submission[] } | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [routePlans, setRoutePlans] = useState<RoutePlanEntry[]>([]);
+  const [checkins, setCheckins] = useState<CheckInRecord[]>([]);
   
   useEffect(() => {
     const load = async () => {
-      const { data } = await fetchSubmissions();
+      const [{ data }, rPlans, cIns] = await Promise.all([
+        fetchSubmissions(),
+        fetchRoutePlans(),
+        fetchCheckIns()
+      ]);
       if (data) setSubmissions(data);
+      if (rPlans) setRoutePlans(rPlans);
+      if (cIns) setCheckins(cIns);
     };
     load();
   }, []);
@@ -84,8 +76,8 @@ export default function CalendarRoute() {
   const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
 
   const subsForMonth = submissions.filter(s => s.date.startsWith(currentMonthStr));
-  const checkinsForMonth = mockCheckins.filter(c => c.date.startsWith(currentMonthStr));
-      const routesForMonth = getRoutePlans().filter(r =>
+  const checkinsForMonth = checkins.filter(c => c.date.startsWith(currentMonthStr));
+      const routesForMonth = routePlans.filter(r =>
     r.date.startsWith(currentMonthStr) &&
     // Staff only see the plans assigned to their own team
     (!user || user.role === 'admin' || user.role === 'manager' || !user.team || r.team === user.team)

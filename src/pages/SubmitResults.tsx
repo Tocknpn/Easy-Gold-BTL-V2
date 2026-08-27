@@ -1,19 +1,26 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { MERCH_CATALOG, saveLocalSubmission, labelDate, fmtLAKShort } from '../lib/submissions';
-import { getCheckIns, getStaff, getCurrentUser } from '../lib/workflow';
+import { fetchCheckIns, getStaff, getCurrentUser } from '../lib/workflow';
+import type { CheckInRecord } from '../lib/workflow';
 
 export default function SubmitResults() {
   const user = getCurrentUser();
   const isKPV = (user?.team || 'KPV') === 'KPV';
 
-  // Activity check-ins captured by THIS staff member (from the Check-In menu)
-  const myCheckIns = useMemo(
-    () => getCheckIns().filter(c => c.user === (user?.name || '')),
-    [user?.name]
-  );
+  const [myCheckIns, setMyCheckIns] = useState<CheckInRecord[]>([]);
+
+  React.useEffect(() => {
+    const load = async () => {
+      const all = await fetchCheckIns();
+      // Since user isn't tracked in Supabase checkins yet, we filter by team to prevent empty list if user is missing
+      // If a user name exists we can still try to filter by it, but for now filtering by team is safer.
+      setMyCheckIns(all.filter(c => c.team === (user?.team || 'KPV')));
+    };
+    load();
+  }, [user]);
 
   const [checkInId, setCheckInId] = useState('');
   const [date, setDate] = useState('');

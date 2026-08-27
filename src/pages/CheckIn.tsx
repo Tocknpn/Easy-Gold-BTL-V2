@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { addCheckIn, getCheckIns, getCurrentUser } from '../lib/workflow';
+import { addCheckIn, fetchCheckIns, getCurrentUser } from '../lib/workflow';
 import type { CheckInRecord } from '../lib/workflow';
 import { labelDate } from '../lib/submissions';
 
@@ -20,9 +20,13 @@ export default function CheckIn() {
   const [capturing, setCapturing] = useState(false);
   const [lastCapture, setLastCapture] = useState<CheckInRecord | null>(null);
   const [notice, setNotice] = useState('');
-  const [history, setHistory] = useState<CheckInRecord[]>(getCheckIns());
+  const [history, setHistory] = useState<CheckInRecord[]>([]);
 
-    const finishCapture = (lat: number, lng: number, note = '') => {
+  React.useEffect(() => {
+    fetchCheckIns().then(setHistory);
+  }, []);
+
+  const finishCapture = async (lat: number, lng: number, note = '') => {
     const rec: CheckInRecord = {
       id: `ck-${Date.now()}`,
       date,
@@ -33,8 +37,9 @@ export default function CheckIn() {
       lat,
       lng,
     };
-    addCheckIn(rec);
-    setHistory(getCheckIns());
+    await addCheckIn(rec);
+    const newHistory = await fetchCheckIns();
+    setHistory(newHistory);
     setLastCapture(rec);
     setNotice(note);
   };

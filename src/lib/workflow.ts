@@ -1,4 +1,5 @@
-// ── Workflow state shared across menus (localStorage-backed demo store) ──
+// ── Workflow state shared across menus ──
+import { supabase } from './supabase';
 
 export interface AppUser {
   username: string;
@@ -28,20 +29,45 @@ export interface CheckInRecord {
   lng: number;
 }
 
-const CK_KEY = 'easygold_checkins';
-
-export function getCheckIns(): CheckInRecord[] {
+export async function fetchCheckIns(): Promise<CheckInRecord[]> {
   try {
-    return JSON.parse(localStorage.getItem(CK_KEY) || '[]');
-  } catch {
+    const { data, error } = await supabase
+      .from('checkins')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching checkins:', error);
+      return [];
+    }
+
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      date: r.date,
+      time: r.timestamp ? new Date(r.timestamp).toTimeString().slice(0, 5) : '',
+      location: r.note || '',
+      team: r.team,
+      user: '', // Supabase table doesn't have user_name currently
+      lat: Number(r.lat) || 0,
+      lng: Number(r.lng) || 0,
+    }));
+  } catch (err) {
+    console.error(err);
     return [];
   }
 }
 
-export function addCheckIn(rec: CheckInRecord): void {
-  const all = getCheckIns();
-  all.unshift(rec);
-  localStorage.setItem(CK_KEY, JSON.stringify(all));
+export async function addCheckIn(rec: CheckInRecord): Promise<void> {
+  const { error } = await supabase.from('checkins').insert([{
+    date: rec.date,
+    team: rec.team,
+    lat: rec.lat,
+    lng: rec.lng,
+    note: rec.location
+  }]);
+  if (error) {
+    console.error('Error adding checkin:', error);
+  }
 }
 
 // ── Staff directory (managed by Admin in Upload & Settings) ──────────────
@@ -99,42 +125,35 @@ export interface RoutePlanEntry {
   location_name: string; // one place, or several separated by commas
 }
 
-const RP_KEY = 'easygold_routeplans';
-
-export const DEFAULT_ROUTE_PLANS: RoutePlanEntry[] = [
-  { id: 'rp-1', date: '2025-03-03', team: 'KPV', location_name: 'That Luang' },
-  { id: 'rp-2', date: '2025-03-04', team: 'Agency', location_name: 'NUOL Campus' },
-  { id: 'rp-3', date: '2025-03-10', team: 'KPV', location_name: 'Talat Sao' },
-  { id: 'rp-4', date: '2025-03-11', team: 'KPV', location_name: 'Sikhottabong' },
-  { id: 'rp-5', date: '2025-03-17', team: 'Agency', location_name: 'Wattay Airport' },
-  { id: 'rp-6', date: '2025-03-18', team: 'KPV', location_name: 'Parkson Mall' },
-  { id: 'rp-7', date: '2025-03-24', team: 'KPV', location_name: 'Patuxay' },
-  { id: 'rp-8', date: '2025-03-25', team: 'Agency', location_name: 'Evening Market' },
-  { id: 'rp-9', date: '2025-03-31', team: 'KPV', location_name: 'That Luang' },
-  // Same-day multi-location demos so the calendar's box/scroll behavior is testable
-  { id: 'rp-10', date: '2025-03-29', team: 'KPV', location_name: 'Talat Sao, Parkson Mall, Changan Circle' },
-  { id: 'rp-11', date: '2025-04-03', team: 'KPV', location_name: 'Talat Sao, Parkson Mall' },
-];
-
-export function getRoutePlans(): RoutePlanEntry[] {
+export async function fetchRoutePlans(): Promise<RoutePlanEntry[]> {
   try {
-    const raw = localStorage.getItem(RP_KEY);
-    const stored = raw ? JSON.parse(raw) : [];
-    const base = Array.isArray(stored) ? stored : [];
-    // Merge seeded demo plans so multi-location test data always appears,
-    // while preserving any admin-created/edited plans from storage.
-    const byKey = new Set(base.map((p: RoutePlanEntry) => `${p.date}|${p.team}|${p.location_name}`));
-    const merged = [...base];
-    for (const d of DEFAULT_ROUTE_PLANS) {
-      const key = `${d.date}|${d.team}|${d.location_name}`;
-      if (!byKey.has(key)) { merged.push(d); byKey.add(key); }
+    const { data, error } = await supabase
+      .from('route_plan')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching route plans:', error);
+      return [];
     }
-    return merged;
-  } catch {
-    return DEFAULT_ROUTE_PLANS;
+
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      date: r.date,
+      team: r.team,
+      location_name: r.location_name,
+    }));
+  } catch (err) {
+    console.error(err);
+    return [];
   }
 }
 
-export function saveRoutePlans(list: RoutePlanEntry[]): void {
-  localStorage.setItem(RP_KEY, JSON.stringify(list));
+export async function updateRoutePlan(date: string, team: string, location_name: string): Promise<void> {
+  // Delete existing plan for this date and team
+  await supabase.from('route_plan').delete().match({ date, team });
+  // Insert new one if not empty
+  if (location_name) {
+    await supabase.from('route_plan').insert([{ date, team, location_name }]);
+  }
 }

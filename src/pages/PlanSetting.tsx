@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Submission } from '../lib/submissions';
 import { fetchSubmissions, genMockSubmissions } from '../lib/submissions';
-import { getCheckIns, getRoutePlans, saveRoutePlans } from '../lib/workflow';
+import { fetchCheckIns, fetchRoutePlans, updateRoutePlan } from '../lib/workflow';
+import type { RoutePlanEntry, CheckInRecord } from '../lib/workflow';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const YEARS = [2024, 2025, 2026, 2027];
@@ -19,14 +20,21 @@ export default function PlanSetting() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [blocked, setBlocked] = useState('');
   const [flash, setFlash] = useState('');
+  const [routePlans, setRoutePlans] = useState<RoutePlanEntry[]>([]);
+  const [checkins, setCheckins] = useState<CheckInRecord[]>([]);
 
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await fetchSubmissions();
-    if (error) console.error('Error fetching submissions:', error);
-    if (data && data.length > 0) setSubmissions(data);
+    const [{ data }, rPlans, cIns] = await Promise.all([
+      fetchSubmissions(),
+      fetchRoutePlans(),
+      fetchCheckIns()
+    ]);
+    if (data) setSubmissions(data);
+    if (rPlans) setRoutePlans(rPlans);
+    if (cIns) setCheckins(cIns);
     setLoading(false);
   };
 
@@ -48,27 +56,24 @@ export default function PlanSetting() {
 
   const checkedInDates = useMemo(() => {
     const set = new Set<string>();
-    for (const c of getCheckIns()) if (c.team === team) set.add(c.date);
+    for (const c of checkins) if (c.team === team) set.add(c.date);
     return set;
-  }, [team]);
+  }, [checkins, team]);
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   // ── One row per calendar day ───────────────────────────────────────────
   const rows = useMemo(() => {
-    const plans = getRoutePlans();
+    const plans = routePlans;
     const out: { date: string; dayNum: number; weekday: string; saved: string }[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const saved = plans
-        .filter(p => p.date === date && p.team === team)
-        .map(p => p.location_name)
-        .join(', ');
-      const weekday = new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' });
-      out.push({ date, dayNum: d, weekday, saved });
+      const plan = plans.find(p => p.date === date && p.team === team);
+      const weekday = new Date(year, month, d).toLocaleDateString('en-US', { weekday: 'short' });
+      out.push({ date, dayNum: d, weekday, saved: plan ? plan.location_name : '' });
     }
     return out;
-  }, [year, month, team, daysInMonth]);
+  }, [year, month, daysInMonth, team, routePlans]);
 
   const getValue = (row: { date: string; saved: string }) =>
     drafts[row.date] !== undefined ? drafts[row.date] : row.saved;
@@ -88,21 +93,24 @@ export default function PlanSetting() {
     setDrafts(d => ({ ...d, [row.date]: value }));
   };
 
-  const handleSaveAll = () => {
-    let plans = getRoutePlans();
+  const handleSaveAll = async () => {
+    setLoading(true);
     let changes = 0;
+    
+    // Save each modified row sequentially
     for (const row of rows) {
       if (!isModified(row)) continue;
       const next = normLoc(getValue(row));
-      const others = plans.filter(p => !(p.date === row.date && p.team === team));
-      plans = next
-        ? [...others, { id: `rp-${Date.now()}-${row.dayNum}`, date: row.date, team, location_name: next }]
-        : others; // empty box = remove the plan for that day
+      await updateRoutePlan(row.date, team, next);
       changes++;
     }
-    saveRoutePlans(plans);
-    setDrafts({});
-        setFlash(`✓ Saved ${changes} day${changes !== 1 ? 's' : ''} — ${team} · ${MONTHS[month]} ${year}`);
+    
+    if (changes > 0) {
+      setDrafts({});
+      setFlash(`✓ Saved ${changes} day${changes !== 1 ? 's' : ''} — ${team} · ${MONTHS[month]} ${year}`);
+      await fetchData(); // refresh list
+    }
+    setLoading(false);
   };
 
   return (
