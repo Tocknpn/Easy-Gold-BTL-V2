@@ -11,12 +11,11 @@ const laoDay = (dateStr: string) => {
   const d = new Date(dateStr + 'T00:00:00');
   return LAO_DAYS[d.getDay()] || '';
 };
-// "ເມ: lead / ກ້ອຍ: a, b" — main + assistants, per the Excel convention
+// Names already contain role labels in parentheses e.g. "ນ ສຸດສະດາ (ເມ)", "ນາງ ໃຈ (ກ້ອຍ)"
+// Just join them with commas — no extra prefix needed.
 const formatInCharge = (names: string[]): string => {
   if (!names.length) return '—';
-  const lead = names[0];
-  const rest = names.slice(1);
-  return `ເມ: ${lead}` + (rest.length ? ` / ກ້ອຍ: ${rest.join(', ')}` : '');
+  return names.join(', ');
 };
 
 export default function StaffReport() {
@@ -144,25 +143,23 @@ export default function StaffReport() {
 <html><head><meta charset="utf-8"/><title>Staff Report ${range}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans Lao', 'Phetsarath OT', 'Saysettha OT', Tahoma, sans-serif; color: #111; padding: 20px 28px; font-size: 11px; }
-  .title { font-size: 13px; font-weight: 700; text-align: center; margin-bottom: 3px; }
-  .range { text-align: center; font-size: 10px; color: #444; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 10.5px; }
-  th, td { border: 1px solid #333; padding: 4px 6px; vertical-align: top; }
+  body { font-family: 'Noto Sans Lao', 'Phetsarath OT', 'Saysettha OT', Tahoma, sans-serif; color: #111; padding: 0; font-size: 10.5px; }
+  .title { font-size: 12.5px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+  .range { text-align: center; font-size: 9.5px; color: #444; margin-bottom: 10px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 9.5px; }
+  th, td { border: 1px solid #333; padding: 3px 5px; vertical-align: top; }
   th { background: #f0e8d0; font-weight: 700; text-align: center; }
   tfoot td { background: #f4f2ec; font-weight: 700; }
-  .summary-wrap { display: flex; gap: 16px; margin-bottom: 14px; }
-  .summary-table { flex: 1; }
-  .sign-area { display: flex; gap: 0; border: 1px solid #333; margin-top: 8px; page-break-inside: avoid; }
-  .sign-cell { flex: 1; border-right: 1px solid #333; padding: 8px 10px; font-size: 10px; }
+  .sign-area { display: flex; gap: 0; border: 1px solid #333; margin-top: 10px; page-break-inside: avoid; }
+  .sign-cell { flex: 1; border-right: 1px solid #333; padding: 8px 10px; font-size: 9.5px; }
   .sign-cell:last-child { border-right: none; }
-  .sign-label { font-weight: 700; margin-bottom: 24px; }
+  .sign-label { font-weight: 700; margin-bottom: 28px; }
   .sign-line { border-top: 1px solid #333; margin-bottom: 4px; }
-  .sign-date { color: #555; font-size: 9px; }
+  .sign-date { color: #555; font-size: 8.5px; }
   .sign-header { display: flex; border: 1px solid #333; border-bottom: none; background: #f0e8d0; }
-  .sign-header div { flex: 1; padding: 4px 10px; font-weight: 700; font-size: 10px; border-right: 1px solid #333; text-align: center; }
+  .sign-header div { flex: 1; padding: 4px 8px; font-weight: 700; font-size: 9.5px; border-right: 1px solid #333; text-align: center; }
   .sign-header div:last-child { border-right: none; }
-  @page { size: A4 portrait; margin: 10mm; }
+  @page { size: A4 portrait; margin: 14mm 16mm; }
   @media print { body { padding: 0; } }
 </style></head>
 <body>
