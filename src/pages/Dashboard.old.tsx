@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { getCurrentDateHelpers } from '../lib/submissions';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -17,8 +18,9 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcEleme
 export default function Dashboard() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState('2025-03-01');
-  const [endDate, setEndDate] = useState('2025-03-31');
+  const { startOfMonth, endOfMonth } = getCurrentDateHelpers();
+  const [startDate, setStartDate] = useState(startOfMonth);
+  const [endDate, setEndDate] = useState(endOfMonth);
   const [teamFilter, setTeamFilter] = useState('All Teams');
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getCurrentDateHelpers } from '../lib/submissions';
 import { getStaff, saveStaff, suggestStaffId } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
@@ -255,16 +256,17 @@ const emptyTargetForm = (): TargetForm => ({
   cpao_target: '130000',
 });
 export default function Settings() {
+  const { currentMonthStr } = getCurrentDateHelpers();
   const [routes, setRoutes] = useState<RouteRow[]>(loadRoutes);
   const [routeTeam, setRouteTeam] = useState('KPV Team');
-  const [routeMonth, setRouteMonth] = useState('2025-04');
+  const [routeMonth, setRouteMonth] = useState(currentMonthStr);
   const [routeFile, setRouteFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [routeMsg, setRouteMsg] = useState<AlertMsg | null>(null);
 
   const [targets, setTargets] = useState<TargetRow[]>(loadTargets);
   const [targetTeam, setTargetTeam] = useState('KPV Team');
-  const [targetMonth, setTargetMonth] = useState('2025-04');
+  const [targetMonth, setTargetMonth] = useState(currentMonthStr);
   const [targetForm, setTargetForm] = useState<TargetForm>(emptyTargetForm);
   const [targetMsg, setTargetMsg] = useState<AlertMsg | null>(null);
 

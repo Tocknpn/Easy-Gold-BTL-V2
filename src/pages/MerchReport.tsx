@@ -1,12 +1,15 @@
+import { getCurrentDateHelpers } from '../lib/submissions';
+
 export default function MerchReport() {
+  const { startOfMonth, endOfMonth } = getCurrentDateHelpers();
   return (
     <div>
       <div className="demo-banner">
         <i className="fa-solid fa-circle-info"></i> Aggregated merchandise distribution report. Data comes from `merch_items` JSON in each submission.
       </div>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <input type="date" defaultValue="2025-03-01" style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-        <input type="date" defaultValue="2025-03-31" style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+        <input type="date" defaultValue={startOfMonth} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+        <input type="date" defaultValue={endOfMonth} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
         <select style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
           <option>All Teams</option>
           <option>KPV Team</option>

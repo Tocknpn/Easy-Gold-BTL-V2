@@ -1,7 +1,8 @@
-﻿import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getCurrentUser, getRoutePlans } from '../lib/workflow';
 import type { Submission } from '../lib/submissions';
+import { fetchSubmissions, getCurrentDateHelpers } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // Sample mock data for submissions and check-ins (March 2025 demo set)
@@ -12,24 +13,6 @@ interface CheckIn {
   time: string;
 }
 
-const mockSubmissions: Submission[] = [
-  { id: '1', date: '2025-03-03', team: 'KPV', branch: 'That Luang', new_register: 61, new_reg_purchased: 40, buy_value_new: 5200000, team_cost: 980000, merch_cost: 40000, existing_users: 15, buy_value_existing: 1800000, staff_in_charge: ['ສົມສະໜຸກ ພົມມະຈັນ', 'ບຸນມີທິບ ວົງພັດທະນະ'], footfall: 420, step_in: 95, status: 'active', merch_items: [] },
-  { id: '2', date: '2025-03-04', team: 'Agency', branch: 'NUOL Campus', new_register: 47, new_reg_purchased: 31, buy_value_new: 3900000, team_cost: 860000, merch_cost: 20000, existing_users: 10, buy_value_existing: 950000, staff_in_charge: ['Alita Souvannary'], footfall: 380, step_in: 70, status: 'active', merch_items: [] },
-  { id: '3', date: '2025-03-10', team: 'KPV', branch: 'Talat Sao', new_register: 56, new_reg_purchased: 36, buy_value_new: 4700000, team_cost: 910000, merch_cost: 0, existing_users: 13, buy_value_existing: 1200000, staff_in_charge: ['ກັນຍາ ສີວົງໄຊ', 'ທິດາ ພົນສະຫວັນ'], footfall: 405, step_in: 88, status: 'active', merch_items: [] },
-  { id: '4', date: '2025-03-11', team: 'KPV', branch: 'Sikhottabong', new_register: 52, new_reg_purchased: 34, buy_value_new: 4400000, team_cost: 890000, merch_cost: 35000, existing_users: 12, buy_value_existing: 1100000, staff_in_charge: ['ນະພາ ແກ້ວມະນີ'], footfall: 390, step_in: 76, status: 'active', merch_items: [] },
-  { id: '5', date: '2025-03-17', team: 'Agency', branch: 'Wattay Airport', new_register: 49, new_reg_purchased: 32, buy_value_new: 4100000, team_cost: 840000, merch_cost: 0, existing_users: 9, buy_value_existing: 900000, staff_in_charge: ['Bounmy Keophilavanh'], footfall: 350, step_in: 64, status: 'active', merch_items: [] },
-  { id: '6', date: '2025-03-18', team: 'KPV', branch: 'Parkson Mall', new_register: 63, new_reg_purchased: 41, buy_value_new: 5500000, team_cost: 1020000, merch_cost: 50000, existing_users: 17, buy_value_existing: 2100000, staff_in_charge: ['ສົມສະໜຸກ ພົມມະຈັນ', 'ກັນຍາ ສີວົງໄຊ', 'ທິດາ ພົນສະຫວັນ'], footfall: 460, step_in: 105, status: 'active', merch_items: [] },
-  // Same-day multi-record example: admin assigned 2 locations → 2 submissions
-  { id: '9', date: '2025-03-18', team: 'KPV', branch: 'Talat Sao', new_register: 34, new_reg_purchased: 22, buy_value_new: 2800000, team_cost: 480000, merch_cost: 20000, existing_users: 8, buy_value_existing: 900000, staff_in_charge: ['ບຸນມີທິບ ວົງພັດທະນະ', 'ນະພາ ແກ້ວມະນີ'], footfall: 300, step_in: 55, status: 'active', merch_items: [] },
-  { id: '7', date: '2025-03-24', team: 'KPV', branch: 'Patuxay', new_register: 58, new_reg_purchased: 38, buy_value_new: 4900000, team_cost: 930000, merch_cost: 15000, existing_users: 14, buy_value_existing: 1300000, staff_in_charge: ['ທິດາ ພົນສະຫວັນ'], footfall: 430, step_in: 92, status: 'active', merch_items: [] },
-  { id: '8', date: '2025-03-25', team: 'Agency', branch: 'Evening Market', new_register: 66, new_reg_purchased: 43, buy_value_new: 5800000, team_cost: 1050000, merch_cost: 25000, existing_users: 19, buy_value_existing: 2400000, staff_in_charge: ['Alita Souvannary', 'Bounmy Keophilavanh'], footfall: 510, step_in: 120, status: 'active', merch_items: [] },
-  // ── Same-day multi-location demos (29 Mar = 3 places, 03 Apr = 2 places) ──
-  { id: '10', date: '2025-03-29', team: 'KPV', branch: 'Talat Sao', new_register: 58, new_reg_purchased: 38, buy_value_new: 4800000, team_cost: 0, merch_cost: 20000, existing_users: 14, buy_value_existing: 1500000, staff_in_charge: ['ສົມສະໜຸກ ພົມມະຈັນ', 'ກັນຍາ ສີວົງໄຊ'], footfall: 440, step_in: 96, status: 'active', merch_items: [] },
-  { id: '11', date: '2025-03-29', team: 'KPV', branch: 'Parkson Mall', new_register: 52, new_reg_purchased: 35, buy_value_new: 4300000, team_cost: 0, merch_cost: 18000, existing_users: 11, buy_value_existing: 1000000, staff_in_charge: ['ບຸນມີທິບ ວົງພັດທະນະ', 'ນະພາ ແກ້ວມະນີ'], footfall: 390, step_in: 82, status: 'active', merch_items: [] },
-  { id: '12', date: '2025-03-29', team: 'KPV', branch: 'Changan Circle', new_register: 44, new_reg_purchased: 30, buy_value_new: 3600000, team_cost: 0, merch_cost: 12000, existing_users: 9, buy_value_existing: 700000, staff_in_charge: ['ທິດາ ພົນສະຫວັນ'], footfall: 320, step_in: 70, status: 'active', merch_items: [] },
-  { id: '13', date: '2025-04-03', team: 'KPV', branch: 'Talat Sao', new_register: 46, new_reg_purchased: 31, buy_value_new: 3900000, team_cost: 0, merch_cost: 15000, existing_users: 9, buy_value_existing: 800000, staff_in_charge: ['ສົມສະໜຸກ ພົມມະຈັນ'], footfall: 350, step_in: 74, status: 'active', merch_items: [] },
-  { id: '14', date: '2025-04-03', team: 'KPV', branch: 'Parkson Mall', new_register: 51, new_reg_purchased: 33, buy_value_new: 3900000, team_cost: 0, merch_cost: 22000, existing_users: 9, buy_value_existing: 980000, staff_in_charge: ['ບຸນມີທິບ ວົງພັດທະນະ', 'ກັນຍາ ສີວົງໄຊ'], footfall: 380, step_in: 80, status: 'active', merch_items: [] },
-];
 
 const mockCheckins: CheckIn[] = [
   { date: '2025-03-03', team: 'KPV', branch: 'That Luang', time: '08:32' },
@@ -62,14 +45,22 @@ const staffOf = (subs: Submission[]): string[] => {
 export default function CalendarRoute() {
   const navigate = useNavigate();
   const user = getCurrentUser();
-  // Demo reference "today" — matches the target screenshot (day 26 of March 2025)
-  const highlightDate = '2025-03-26';
-  const [currentYear, setCurrentYear] = useState(2025);
-  const [currentMonth, setCurrentMonth] = useState(2); // 0-based: 2 = March
+  const { y, monthIndex, today } = getCurrentDateHelpers();
+  const highlightDate = today;
+  const [currentYear, setCurrentYear] = useState(y);
+  const [currentMonth, setCurrentMonth] = useState(monthIndex); // 0-based
         const [modalSub, setModalSub] = useState<Submission | null>(null);
   // Day summary modal — big picture of all submissions on one date
     const [dayModal, setDayModal] = useState<{ date: string; subs: Submission[] } | null>(null);
-  const [submissions, setSubmissions] = useState<Submission[]>(mockSubmissions);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await fetchSubmissions();
+      if (data) setSubmissions(data);
+    };
+    load();
+  }, []);
 
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];

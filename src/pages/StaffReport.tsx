@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, labelDate, fmtLAKShort } from '../lib/submissions';
+import { fetchSubmissions, genMockSubmissions, labelDate, fmtLAKShort, getCurrentDateHelpers } from '../lib/submissions';
 import { getStaff } from '../lib/workflow';
 import BackButton from '../components/BackButton';
 
@@ -21,8 +21,9 @@ const formatInCharge = (names: string[]): string => {
 export default function StaffReport() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
-  const [from, setFrom] = useState('2025-03-01');
-  const [to, setTo] = useState('2025-03-31');
+  const { startOfMonth, endOfMonth } = getCurrentDateHelpers();
+  const [from, setFrom] = useState(startOfMonth);
+  const [to, setTo] = useState(endOfMonth);
   const [staffName, setStaffName] = useState(''); // '' = All staff
 
   useEffect(() => { fetchData(); }, []);

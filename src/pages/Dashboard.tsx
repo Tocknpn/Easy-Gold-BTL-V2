@@ -11,7 +11,7 @@ import {
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import type { ModalState, Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } from '../lib/submissions';
+import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend);
@@ -19,8 +19,9 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcEleme
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState('2025-03-01');
-  const [endDate, setEndDate] = useState('2025-03-31');
+  const { startOfMonth, endOfMonth } = getCurrentDateHelpers();
+  const [startDate, setStartDate] = useState(startOfMonth);
+  const [endDate, setEndDate] = useState(endOfMonth);
   const [teamFilter, setTeamFilter] = useState('All Teams');
   const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('M');
   const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });

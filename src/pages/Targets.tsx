@@ -1,4 +1,7 @@
+import { getCurrentDateHelpers } from '../lib/submissions';
+
 export default function Targets() {
+  const { currentMonthStr } = getCurrentDateHelpers();
   return (
     <div>
       <div className="demo-banner"><i className="fa-solid fa-circle-info"></i> Shows MTD performance vs monthly targets. Visible to all roles.</div>
@@ -9,7 +12,7 @@ export default function Targets() {
             <span style={{ fontWeight: 700, fontSize: '14px' }}>Target Period</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input type="month" defaultValue="2025-03" style={{ padding: '6px 10px', fontSize: '12px', width: 'auto' }} />
+            <input type="month" defaultValue={currentMonthStr} style={{ padding: '6px 10px', fontSize: '12px', width: 'auto' }} />
             <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: '11px' }}><i className="fa-solid fa-rotate"></i> This Month</button>
           </div>
         </div>

@@ -40,6 +40,18 @@ export const fmtLAKShort = (n: number) => {
   return `₭${n}`;
 };
 
+export const getCurrentDateHelpers = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const startOfMonth = `${y}-${m}-01`;
+  const endOfMonth = `${y}-${m}-${new Date(y, d.getMonth() + 1, 0).getDate()}`;
+  const currentMonthStr = `${y}-${m}`;
+  const today = `${y}-${m}-${String(d.getDate()).padStart(2, '0')}`;
+  return { startOfMonth, endOfMonth, currentMonthStr, today, y, monthIndex: d.getMonth() };
+};
+
+
 export const labelDate = (s: string) => {
   const d = new Date(s + 'T00:00:00');
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
