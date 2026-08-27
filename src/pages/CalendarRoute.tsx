@@ -130,7 +130,7 @@ export default function CalendarRoute() {
           </select>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', fontSize: '12px', alignItems: 'center', flexWrap: 'nowrap' }}>
           {(!user || user.role === 'admin' || user.role === 'manager') && (
             <select value={teamFilter} onChange={e => setTeamFilter(e.target.value as any)} style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--txt-main)' }}>
               <option value="All">All Teams</option>
@@ -138,14 +138,14 @@ export default function CalendarRoute() {
               <option value="Agency">Agency</option>
             </select>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'rgba(77,158,255,0.7)', display: 'inline-block' }}></span> Plan to go
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'rgba(77,158,255,0.7)', display: 'inline-block', flexShrink: 0 }}></span> Plan to go
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'rgba(46,194,122,0.7)', display: 'inline-block' }}></span> Results
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'rgba(46,194,122,0.7)', display: 'inline-block', flexShrink: 0 }}></span> Results
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--gold)', display: 'inline-block' }}></span> Staff in charge
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--gold)', display: 'inline-block', flexShrink: 0 }}></span> Staff in charge
           </div>
         </div>
       </div>
