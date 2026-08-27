@@ -78,7 +78,6 @@ export interface StaffMember {
   team: 'KPV' | 'Agency';
 }
 
-const STAFF_KEY = 'easygold_staff';
 
 export const DEFAULT_STAFF: StaffMember[] = [
   { id: 'stf-1', staffId: 'KPV-10001', name: 'ສົມສະໜຸກ ພົມມະຈັນ', team: 'KPV' },
@@ -102,19 +101,45 @@ export function suggestStaffId(list: StaffMember[], team: 'KPV' | 'Agency'): str
   return `${prefix}${max + 1}`;
 }
 
-export function getStaff(): StaffMember[] {
+export async function fetchStaff(): Promise<StaffMember[]> {
   try {
-    const raw = localStorage.getItem(STAFF_KEY);
-    if (!raw) return DEFAULT_STAFF;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length >= 0 ? parsed : DEFAULT_STAFF;
-  } catch {
+    const { data, error } = await supabase.from('staff').select('*').order('name');
+    if (error) {
+      console.error('Error fetching staff:', error);
+      return DEFAULT_STAFF;
+    }
+    return (data || []).map((s: any) => ({
+      id: s.id,
+      staffId: s.id,
+      name: s.name,
+      team: s.team,
+    }));
+  } catch (err) {
+    console.error('Error in fetchStaff:', err);
     return DEFAULT_STAFF;
   }
 }
 
-export function saveStaff(list: StaffMember[]): void {
-  localStorage.setItem(STAFF_KEY, JSON.stringify(list));
+export async function addStaffRecord(staff: StaffMember): Promise<void> {
+  const { error } = await supabase.from('staff').insert({
+    id: staff.staffId || staff.id,
+    name: staff.name,
+    team: staff.team,
+  });
+  if (error) console.error('Error adding staff:', error);
+}
+
+export async function updateStaffRecord(staff: StaffMember): Promise<void> {
+  const { error } = await supabase.from('staff').update({
+    name: staff.name,
+    team: staff.team,
+  }).eq('id', staff.staffId || staff.id);
+  if (error) console.error('Error updating staff:', error);
+}
+
+export async function deleteStaffRecord(id: string): Promise<void> {
+  const { error } = await supabase.from('staff').delete().eq('id', id);
+  if (error) console.error('Error deleting staff:', error);
 }
 
 // ── Monthly route plans (managed by Admin in Monthly Plan Setting) ───────

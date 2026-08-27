@@ -1,41 +1,66 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCurrentDateHelpers } from '../lib/submissions';
-import { getStaff, saveStaff, suggestStaffId } from '../lib/workflow';
+import { fetchStaff, addStaffRecord, updateStaffRecord, deleteStaffRecord, suggestStaffId } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
 // ── Staff Directory (Admin-managed; feeds Submit Results "Staff In Charge" for KPV) ──
 function StaffDirectory() {
-  const [list, setList] = useState<StaffMember[]>(getStaff());
-  const [newId, setNewId] = useState(() => suggestStaffId(getStaff(), 'KPV'));
+  const [list, setList] = useState<StaffMember[]>([]);
+  const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
   const [newTeam, setNewTeam] = useState<'KPV' | 'Agency'>('KPV');
   const [editingId, setEditingId] = useState('');
   const [editCode, setEditCode] = useState('');
   const [editName, setEditName] = useState('');
 
-  const persist = (next: StaffMember[]) => { setList(next); saveStaff(next); };
-  const add = () => {
+  useEffect(() => {
+    loadStaff();
+  }, []);
+
+  const loadStaff = async () => {
+    const data = await fetchStaff();
+    setList(data);
+    setNewId(suggestStaffId(data, newTeam));
+  };
+
+  const add = async () => {
     const name = newName.trim();
     if (!name) return;
     const sid = newId.trim() || suggestStaffId(list, newTeam);
-    const next = [...list, { id: `stf-${Date.now()}`, staffId: sid, name, team: newTeam }];
-    persist(next);
+    const newStaff: StaffMember = { id: `stf-${Date.now()}`, staffId: sid, name, team: newTeam };
+    
+    // Optimistic UI update
+    setList([...list, newStaff]);
     setNewName('');
-    setNewId(suggestStaffId(next, newTeam));
+    setNewId(suggestStaffId([...list, newStaff], newTeam));
+
+    await addStaffRecord(newStaff);
+    await loadStaff();
   };
-  const remove = (id: string) => {
-    const next = list.filter(s => s.id !== id);
-    persist(next);
-    setNewId(suggestStaffId(next, newTeam));
+
+  const remove = async (id: string) => {
+    setList(list.filter(s => s.id !== id));
+    await deleteStaffRecord(id);
+    await loadStaff();
   };
+
   const startEdit = (s: StaffMember) => { setEditingId(s.id); setEditCode(s.staffId || ''); setEditName(s.name); };
-  const rename = (id: string) => {
+  
+  const rename = async (id: string) => {
     const name = editName.trim();
     if (!name) return;
-    persist(list.map(s => (s.id === id ? { ...s, staffId: editCode.trim(), name } : s)));
+    
+    const target = list.find(s => s.id === id);
+    if (!target) return;
+    const updated = { ...target, staffId: editCode.trim(), name };
+
+    setList(list.map(s => (s.id === id ? updated : s)));
     setEditingId('');
     setEditCode('');
     setEditName('');
+
+    await updateStaffRecord(updated);
+    await loadStaff();
   };
 
   return (

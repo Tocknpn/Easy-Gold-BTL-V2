@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { fmtLAK, fmtLAKShort, MERCH_CATALOG, STAFF_NAMES } from '../lib/submissions';
+import { fetchStaff } from '../lib/workflow';
+import type { StaffMember } from '../lib/workflow';
 
 interface Props {
   open: boolean;
@@ -34,6 +36,11 @@ const merchTotalCost = (items: MerchItem[] | undefined) =>
 export default function SubmissionModal({ open, submission, onClose, onSave, onDelete }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Submission | null>(null);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+
+  useEffect(() => {
+    fetchStaff().then(setStaffList);
+  }, []);
 
   // Sync local edit copy whenever the modal opens or the record changes
   useEffect(() => {
@@ -182,7 +189,8 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
               {(editData.staff_in_charge || []).map((name, idx) => (
                 <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 0.45fr', gap: '10px', alignItems: 'end', marginBottom: '8px' }}>
                   <select value={name} onChange={e => updateStaff(idx, e.target.value)} style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--txt-main)', padding: '9px 12px', borderRadius: '8px', fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 500 }}>
-                    {STAFF_NAMES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="">-- Select Staff --</option>
+                    {staffList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                   <button className="btn" onClick={() => removeStaff(idx)} style={{ padding: '4px', borderRadius: '6px', fontSize: '12px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} title="Remove">
                     <i className="fa-solid fa-xmark"></i>
@@ -227,6 +235,18 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
             <DetailSection label="FOOTFALL">
               <DetailRow label="Total Footfall" value={editData.footfall} />
               <DetailRow label="Step-in Booth" value={editData.step_in} />
+            </DetailSection>
+
+            <DetailSection label="STAFF IN CHARGE">
+              {(editData.staff_in_charge || []).length > 0 ? (
+                (editData.staff_in_charge || []).map((name, idx) => (
+                  <div key={`staff-${idx}`} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', fontSize: '13px', color: 'var(--txt-main)' }}>
+                    {name}
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '8px 14px', fontSize: '13px', color: 'var(--txt-sub)', fontStyle: 'italic' }}>No staff recorded</div>
+              )}
             </DetailSection>
 
             <DetailSection label="COST & EFFICIENCY">

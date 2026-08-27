@@ -1,23 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { MERCH_CATALOG, saveLocalSubmission, labelDate, fmtLAKShort } from '../lib/submissions';
-import { fetchCheckIns, getStaff, getCurrentUser } from '../lib/workflow';
-import type { CheckInRecord } from '../lib/workflow';
+import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
+import type { CheckInRecord, StaffMember } from '../lib/workflow';
 
 export default function SubmitResults() {
   const user = getCurrentUser();
   const isKPV = (user?.team || 'KPV') === 'KPV';
 
   const [myCheckIns, setMyCheckIns] = useState<CheckInRecord[]>([]);
+  const [kpvStaff, setKpvStaff] = useState<StaffMember[]>([]);
 
   React.useEffect(() => {
     const load = async () => {
-      const all = await fetchCheckIns();
-      // Since user isn't tracked in Supabase checkins yet, we filter by team to prevent empty list if user is missing
-      // If a user name exists we can still try to filter by it, but for now filtering by team is safer.
-      setMyCheckIns(all.filter(c => c.team === (user?.team || 'KPV')));
+      const [allCheckIns, allStaff] = await Promise.all([
+        fetchCheckIns(),
+        fetchStaff()
+      ]);
+      setMyCheckIns(allCheckIns.filter(c => c.team === (user?.team || 'KPV')));
+      setKpvStaff(allStaff.filter(s => s.team === 'KPV'));
     };
     load();
   }, [user]);
@@ -38,7 +41,7 @@ export default function SubmitResults() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState('');
 
-  const kpvStaff = useMemo(() => getStaff().filter(s => s.team === 'KPV'), []);
+
 
   const merchCost = merchRows.reduce((a, i) => {
     const cpu = MERCH_CATALOG.find(m => m.name === i.name)?.cpu || 0;
@@ -226,6 +229,7 @@ export default function SubmitResults() {
                 {staffRows.map((name, idx) => (
                   <div key={idx} style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '8px' }}>
                     <select value={name} onChange={e => setStaffRows(rows => rows.map((s, i) => (i === idx ? e.target.value : s)))} style={{ width: '260px', padding: '8px 12px', fontSize: '13px' }}>
+                      <option value="">-- Select Staff --</option>
                       {kpvStaff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                     </select>
                     <button type="button" className="btn" onClick={() => setStaffRows(rows => rows.filter((_, i) => i !== idx))} style={{ padding: '4px 8px', borderRadius: '6px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} title="Remove">

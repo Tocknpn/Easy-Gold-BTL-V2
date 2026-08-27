@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Submission } from '../lib/submissions';
 import { fetchSubmissions, genMockSubmissions, labelDate, fmtLAKShort, getCurrentDateHelpers } from '../lib/submissions';
-import { getStaff } from '../lib/workflow';
+import { fetchStaff } from '../lib/workflow';
+import type { StaffMember } from '../lib/workflow';
 import BackButton from '../components/BackButton';
 
 // Lao weekday names — matches the Excel template's ວັນ column
@@ -25,18 +26,23 @@ export default function StaffReport() {
   const [from, setFrom] = useState(startOfMonth);
   const [to, setTo] = useState(endOfMonth);
   const [staffName, setStaffName] = useState(''); // '' = All staff
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
 
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await fetchSubmissions();
+    const [{ data, error }, staffData] = await Promise.all([
+      fetchSubmissions(),
+      fetchStaff()
+    ]);
     if (error) console.error('Error fetching submissions:', error);
     if (data && data.length > 0) setSubmissions(data);
+    if (staffData) setStaffList(staffData);
     setLoading(false);
   };
 
-  const kpvStaff = useMemo(() => getStaff().filter(s => s.team === 'KPV'), []);
+  const kpvStaff = useMemo(() => staffList.filter(s => s.team === 'KPV'), [staffList]);
 
   // KPV records only
   const kpvSubs = useMemo(
