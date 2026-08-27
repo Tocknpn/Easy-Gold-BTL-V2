@@ -174,14 +174,12 @@ export default function CalendarRoute() {
               <div
                 key={idx}
                 className={`cal-cell${isToday ? ' today' : ''}${isValid ? '' : ' cal-empty'}`}
-                style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
               >
                 {isValid && (
                   <>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: isToday ? 'var(--blue)' : 'var(--txt-sub)', marginBottom: '4px', flexShrink: 0 }}>{dayNum}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: isToday ? 'var(--blue)' : 'var(--txt-sub)', marginBottom: '4px' }}>{dayNum}</div>
 
-                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', paddingRight: '2px' }}>
-                      {/* ① PLAN TO GO — green ✓ when checked in; click jumps to Check-In */}
+                    {/* ① PLAN TO GO — green ✓ when checked in; click jumps to Check-In */}
                     {dayRoutes.map((r, i) =>
                       (r.location_name || '')
                         .split(',')
@@ -195,16 +193,15 @@ export default function CalendarRoute() {
                               className="cal-ticket plan"
                               onClick={() => {
                                 if (checkedIn) {
-                                  const subs = daySubs.filter(s => s.branch.includes(loc) && s.team === r.team);
-                                  if (subs.length === 1) openModal(subs[0]);
-                                  else if (subs.length > 1) setDayModal({ date: r.date, subs });
+                                  if (daySubs.length === 1) openModal(daySubs[0]);
+                                  else if (daySubs.length > 1) setDayModal({ date: r.date, subs: daySubs });
                                   else alert('No submission recorded yet for this location.');
                                 } else {
                                   navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`);
                                 }
                               }}
                               title={checkedIn ? `Checked in at ${loc} — click to view submission` : `Click to Check-In at ${loc} on ${r.date}`}
-                              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
+                              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                             >
                               <i className="fa-solid fa-route" style={{ fontSize: 8 }}></i>
                               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc}</span>
@@ -242,7 +239,6 @@ export default function CalendarRoute() {
                         </div>
                       );
                     })()}
-                    </div>
                   </>
                 )}
               </div>
