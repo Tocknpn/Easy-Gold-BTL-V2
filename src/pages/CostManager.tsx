@@ -4,7 +4,7 @@ import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } 
 import { supabase } from '../lib/supabase';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
-type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'buy_total' | 'merch_cost' | 'service_cost' | 'total_cost' | 'cpa' | 'status';
+type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'buy_total' | 'merch_cost' | 'service_cost' | 'total_cost' | 'cpa';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'date', label: 'Date' },
@@ -16,7 +16,6 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'service_cost', label: 'Service Cost (LAK)' },
   { key: 'total_cost', label: 'Total Cost' },
   { key: 'cpa', label: 'CPA (preview)' },
-  { key: 'status', label: 'Status' },
 ];
 
 export default function CostManager() {
@@ -73,7 +72,6 @@ export default function CostManager() {
         case 'service_cost': return s.team_cost || 0; // ₭0 = pending, filled by admin later
         case 'total_cost': return (s.merch_cost || 0) + (s.team_cost || 0);
         case 'cpa': return s.new_register > 0 ? ((s.merch_cost || 0) + (s.team_cost || 0)) / s.new_register : -Infinity;
-        case 'status': return (s.team_cost || 0) > 0 ? 1 : 0; // Pending(0) before Costed(1)
       }
     };
     return [...filtered].sort((a, b) => {
@@ -279,20 +277,13 @@ export default function CostManager() {
                         fontSize: '13px',
                         fontFamily: 'var(--font-mono)',
                         textAlign: 'right',
-                        borderColor: modified ? 'var(--gold)' : undefined,
+                        border: Number(getDraftValue(s)) > 0 ? '1px solid var(--green)' : '1px solid var(--red)',
                         background: modified ? 'var(--input-bg)' : undefined,
                       }}
                     />
                   </td>
                   <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>{fmtLAKShort(total)}</td>
                   <td>{Number.isFinite(cpa) ? fmtLAK(Math.round(cpa)) : '—'}</td>
-                  <td>
-                    {modified
-                      ? <span className="pill pill-blue">Edited</span>
-                      : (s.team_cost || 0) > 0
-                        ? <span className="pill pill-green">Costed</span>
-                        : <span className="pill pill-red">Pending</span>}
-                  </td>
                 </tr>
               );
             })}

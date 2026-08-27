@@ -46,7 +46,7 @@ export default function StaffReport() {
 
   // KPV records only
   const kpvSubs = useMemo(
-    () => submissions.filter(s => (s.team || 'KPV') === 'KPV'),
+    () => submissions.filter(s => (s.team || 'KPV').toUpperCase().includes('KPV')),
     [submissions]
   );
 
@@ -59,7 +59,8 @@ export default function StaffReport() {
       const dates = new Set<string>();
       for (const s of kpvSubs) {
         if (!inDateRange(s)) continue;
-        if ((s.staff_in_charge || []).includes(st.name)) dates.add(s.date);
+        const staffNames = (s.staff_in_charge || []).map(n => n.trim());
+        if (staffNames.includes(st.name.trim())) dates.add(s.date);
       }
       const sorted = [...dates].sort();
       return {
