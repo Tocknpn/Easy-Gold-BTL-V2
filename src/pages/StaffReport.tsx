@@ -52,7 +52,7 @@ export default function StaffReport() {
   const inDateRange = (s: Submission) =>
     (!from || s.date >= from) && (!to || s.date <= to);
 
-    // ── Per-staff working-day summary (All view) ───────────────────────────
+  // ── Per-staff working-day summary (All view) ───────────────────────────
   const staffSummary = useMemo(() => {
     return kpvStaff.map(st => {
       const dates = new Set<string>();
@@ -87,7 +87,7 @@ export default function StaffReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kpvSubs, staffName, from, to]);
 
-    const totalWorkingDays = new Set(detailRows.map(r => r.date)).size;
+  const totalWorkingDays = new Set(detailRows.map(r => r.date)).size;
 
   // ── Export: document-style printable report (matches pic2 template) ──
   const buildDocHtml = (): string => {
@@ -163,7 +163,7 @@ export default function StaffReport() {
   @media print { body { padding: 0; } }
 </style></head>
 <body>
-  <div class="title">ສະຫລຸບ ລາຍຊື່ອອກບຸກຄະລາກອນໄດ້ຮ່ານຄຳພູວົງ ປະຈຳເດືອນ ${monthLabel} ( ${range} )</div>
+  <div class="title">ສະຫລຸບ ລາຍຊື່ອອກບູສໜ້າຮ້ານຄຳພູວົງ ປະຈຳເດືອນ ${monthLabel} ( ${range} )</div>
 
   <table>
     <thead>
@@ -172,7 +172,7 @@ export default function StaffReport() {
         <th style="width:42px">ວັນ</th>
         <th style="width:90px">ວັນທີ</th>
         <th style="width:110px">ສາຂາ</th>
-        <th>ຜູ້ຮັບຜິດຊອບຊຸກ</th>
+        <th>ຜູ້ຮັບຜິດຊອບ</th>
         <th style="width:80px">Remark</th>
       </tr>
     </thead>
@@ -195,8 +195,8 @@ export default function StaffReport() {
 
   <div class="sign-header">
     <div>ຜູ້ສະເໝີ</div>
-    <div>ຊື່ອທ່ານຂາຍການ</div>
-    <div>ຜູ້ອຳນວຍການໂຄງການ ແລະ ບໍລິການລູກຄ້າ</div>
+    <div>ຫົວໜ້າສາຍງານ</div>
+    <div>ຜູ້ອຳນວຍການການຕະຫລາດ ແລະ ບໍລິການລູກຄ້າ</div>
   </div>
   <div class="sign-area">
     <div class="sign-cell">
@@ -253,7 +253,7 @@ export default function StaffReport() {
         </button>
       </div>
 
-            {/* Summary cards */}
+      {/* Summary cards */}
       {staffName ? (
         <>
           {/* Back arrow → previous view */}
