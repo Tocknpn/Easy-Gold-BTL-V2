@@ -79,20 +79,19 @@ export default function CalendarRoute() {
 
   const subsForMonth = submissions.filter(s => 
     s.date.startsWith(currentMonthStr) &&
-    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || s.team === user.team) &&
-    (teamFilter === 'All' || s.team === teamFilter)
+    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (s.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
+    (teamFilter === 'All' || (s.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
   
   const checkinsForMonth = checkins.filter(c => 
     c.date.startsWith(currentMonthStr) &&
-    (teamFilter === 'All' || c.team === teamFilter)
+    (teamFilter === 'All' || (c.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
   
   const routesForMonth = routePlans.filter(r =>
     r.date.startsWith(currentMonthStr) &&
-    // Staff only see the plans assigned to their own team
-    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || r.team === user.team) &&
-    (teamFilter === 'All' || r.team === teamFilter)
+    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (r.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
+    (teamFilter === 'All' || (r.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
 
     const openModal = (sub: Submission) => setModalSub(sub);
