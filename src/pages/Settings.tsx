@@ -4,6 +4,31 @@ import { getCurrentDateHelpers } from '../lib/submissions';
 import { fetchStaff, addStaffRecord, updateStaffRecord, deleteStaffRecord, suggestStaffId } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
+const NumberInput = ({ value, onChange, placeholder, style }: any) => {
+  const [str, setStr] = useState(value ? Number(value).toLocaleString() : '');
+  useEffect(() => {
+    if (!value && str !== '') setStr('');
+    else if (value && Number(str.replace(/,/g, '')) !== Number(value)) setStr(Number(value).toLocaleString());
+  }, [value]);
+  
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={str}
+      style={style}
+      onChange={e => {
+        const raw = e.target.value.replace(/,/g, '');
+        if (/^\d*$/.test(raw)) {
+          setStr(raw ? Number(raw).toLocaleString() : '');
+          onChange(raw);
+        }
+      }}
+    />
+  );
+};
+
 // ── Staff Directory (Admin-managed; feeds Submit Results "Staff In Charge" for KPV) ──
 function StaffDirectory() {
   const [list, setList] = useState<StaffMember[]>([]);
@@ -40,6 +65,7 @@ function StaffDirectory() {
   };
 
   const remove = async (id: string) => {
+    if (!window.confirm("Are you sure you want to remove this staff member?")) return;
     setList(list.filter(s => s.id !== id));
     await deleteStaffRecord(id);
     await loadStaff();
@@ -48,6 +74,7 @@ function StaffDirectory() {
   const startEdit = (s: StaffMember) => { setEditingId(s.id); setEditCode(s.staffId || ''); setEditName(s.name); };
   
   const rename = async (id: string) => {
+    if (!window.confirm("Are you sure you want to save these changes?")) return;
     const name = editName.trim();
     if (!name) return;
     
@@ -238,13 +265,6 @@ const loadRoutes = (): RouteRow[] => {
   return seedRoutes.map(r => ({ ...r, id: uid() }));
 };
 
-const loadTargets = (): TargetRow[] => {
-  try {
-    const raw = localStorage.getItem('easygold_targets');
-    if (raw) return JSON.parse(raw) as TargetRow[];
-  } catch { /* ignore */ }
-  return seedTargets.map(t => ({ ...t }));
-};
 
 
 
@@ -284,7 +304,7 @@ export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [routeMsg, setRouteMsg] = useState<AlertMsg | null>(null);
 
-  const [targets, setTargets] = useState<TargetRow[]>(loadTargets);
+  const [targets, setTargets] = useState<TargetRow[]>([]);
   const [targetTeam, setTargetTeam] = useState('KPV Team');
   const [targetMonth, setTargetMonth] = useState(currentMonthStr);
   const [targetForm, setTargetForm] = useState<TargetForm>(emptyTargetForm);
@@ -292,14 +312,36 @@ export default function Settings() {
 
   const [merch, setMerch] = useState<MerchItem[]>([]);
   const [merchLoading, setMerchLoading] = useState(true);
+  const [merchSaving, setMerchSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ itemName: '', cpu: '' });
   const [newItem, setNewItem] = useState({ itemName: '', cpu: '' });
   const [merchMsg, setMerchMsg] = useState<AlertMsg | null>(null);
 
-  // Persist routes + targets to localStorage on every change
+  // Persist routes to localStorage on every change
   useEffect(() => { localStorage.setItem('easygold_route_plan', JSON.stringify(routes)); }, [routes]);
-  useEffect(() => { localStorage.setItem('easygold_targets', JSON.stringify(targets)); }, [targets]);
+
+  // Load targets from Supabase on mount
+  useEffect(() => {
+    supabase.from('targets').select('*').then(({ data, error }) => {
+      if (!error && data && data.length > 0) {
+        setTargets(data.map((r: any) => ({
+          id: r.id,
+          team: r.team,
+          month: r.month,
+          new_reg_target: Number(r.new_reg_target) || 0,
+          buy_value_target: Number(r.buy_value_target) || 0,
+          footfall_target: Number(r.footfall_target) || 0,
+          cost_budget: Number(r.cost_budget) || 0,
+          cpo_target: Number(r.cpo_target) || 0,
+          cpa_target: Number(r.cpa_target) || 0,
+          cpao_target: Number(r.cpao_target) || 0,
+        })));
+      } else {
+        setTargets(seedTargets.map(t => ({ ...t })));
+      }
+    });
+  }, []);
 
   // Load merch from Supabase on mount
   useEffect(() => {
@@ -317,8 +359,9 @@ export default function Settings() {
 
   // Pre-fill target form whenever team/month changes and a saved target exists
   useEffect(() => {
-    const id = `${normalizeTeam(targetTeam)}|${targetMonth}`;
-    const found = targets.find(t => t.id === id);
+    const team = normalizeTeam(targetTeam);
+    // DB stores month as YYYY-MM-01; compare by stripping the -01
+    const found = targets.find(t => t.team === team && (t.month === `${targetMonth}-01` || t.month === targetMonth));
     if (found) {
       setTargetForm({
         new_reg_target: String(found.new_reg_target),
@@ -379,12 +422,15 @@ export default function Settings() {
   const previewRoutes = routes.filter(r => r.date.startsWith(routeMonth) && r.team === normalizeTeam(routeTeam));
 
   // ── Target handlers ──────────────────────────────────────────────────
-  const saveTarget = () => {
-    const id = `${normalizeTeam(targetTeam)}|${targetMonth}`;
-    const row: TargetRow = {
+  const [targetSaving, setTargetSaving] = useState(false);
+
+  const saveTarget = async () => {
+    setTargetSaving(true);
+    const id = `${normalizeTeam(targetTeam)}|${targetMonth}-01`;
+    const row = {
       id,
       team: normalizeTeam(targetTeam),
-      month: targetMonth,
+      month: `${targetMonth}-01`,
       new_reg_target: Number(targetForm.new_reg_target) || 0,
       buy_value_target: Number(targetForm.buy_value_target) || 0,
       footfall_target: Number(targetForm.footfall_target) || 0,
@@ -393,14 +439,25 @@ export default function Settings() {
       cpa_target: Number(targetForm.cpa_target) || 0,
       cpao_target: Number(targetForm.cpao_target) || 0,
     };
+    
+    const { error } = await supabase.from('targets').upsert(row);
+    if (error) {
+      setTargetMsg({ type: 'err', text: 'Failed to save targets: ' + error.message });
+      setTargetSaving(false);
+      return;
+    }
+
     setTargets(prev => {
       const exists = prev.some(t => t.id === id);
       return exists ? prev.map(t => (t.id === id ? row : t)) : [...prev, row];
     });
     setTargetMsg({ type: 'ok', text: `Targets saved for ${row.team} (${targetMonth}).` });
+    setTargetSaving(false);
   };
 
-  const deleteTarget = (id: string) => {
+  const deleteTarget = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this target?")) return;
+    await supabase.from('targets').delete().eq('id', id);
     setTargets(prev => prev.filter(t => t.id !== id));
     setTargetMsg({ type: 'ok', text: 'Target entry removed.' });
   };
@@ -424,6 +481,7 @@ export default function Settings() {
       setMerchMsg({ type: 'err', text: 'Item name cannot be empty.' });
       return;
     }
+    setMerchSaving(true);
     const newName = editForm.itemName.trim();
     const newCpu = Number(editForm.cpu) || 0;
     // If name changed: delete old row & insert new one (itemname is PK)
@@ -436,12 +494,16 @@ export default function Settings() {
     setMerch(prev => prev.map(m => (m.id === id ? { id: newName, itemName: newName, cpu: newCpu } : m)));
     setEditingId(null);
     setMerchMsg({ type: 'ok', text: 'Item updated in Supabase.' });
+    setMerchSaving(false);
   };
 
   const deleteMerch = async (id: string) => {
+    if (!window.confirm("Are you sure you want to remove this merchandise?")) return;
+    setMerchSaving(true);
     await supabase.from('merch').delete().eq('itemname', id);
     setMerch(prev => prev.filter(m => m.id !== id));
     setMerchMsg({ type: 'ok', text: 'Item removed from Supabase.' });
+    setMerchSaving(false);
   };
 
   const addMerch = async () => {
@@ -449,16 +511,19 @@ export default function Settings() {
       setMerchMsg({ type: 'err', text: 'Enter an item name first.' });
       return;
     }
+    setMerchSaving(true);
     const name = newItem.itemName.trim();
     const cpu = Number(newItem.cpu) || 0;
     const { error } = await supabase.from('merch').insert({ itemname: name, cpu });
     if (error) {
       setMerchMsg({ type: 'err', text: 'Failed to add: ' + error.message });
+      setMerchSaving(false);
       return;
     }
     setMerch(prev => [...prev, { id: name, itemName: name, cpu }]);
     setNewItem({ itemName: '', cpu: '' });
     setMerchMsg({ type: 'ok', text: 'New item saved to Supabase.' });
+    setMerchSaving(false);
   };
 
   const saveMerchConfig = () => {
@@ -589,19 +654,19 @@ return (
           <div className="grid-2" style={{ gap: '14px', marginBottom: '14px' }}>
             <div className="form-field" style={{ margin: 0 }}>
               <label>Acquisition Target</label>
-              <input type="number" value={targetForm.new_reg_target} placeholder="e.g. 1500" onChange={e => setTargetForm(f => ({ ...f, new_reg_target: e.target.value }))} />
+              <NumberInput value={targetForm.new_reg_target} placeholder="e.g. 1500" onChange={(v: string) => setTargetForm(f => ({ ...f, new_reg_target: v }))} />
             </div>
             <div className="form-field" style={{ margin: 0 }}>
               <label>Buy Value Target (LAK)</label>
-              <input type="number" value={targetForm.buy_value_target} placeholder="e.g. 100000000" onChange={e => setTargetForm(f => ({ ...f, buy_value_target: e.target.value }))} />
+              <NumberInput value={targetForm.buy_value_target} placeholder="e.g. 100,000,000" onChange={(v: string) => setTargetForm(f => ({ ...f, buy_value_target: v }))} />
             </div>
             <div className="form-field" style={{ margin: 0 }}>
               <label>Cost Budget (LAK)</label>
-              <input type="number" value={targetForm.cost_budget} placeholder="e.g. 20000000" onChange={e => setTargetForm(f => ({ ...f, cost_budget: e.target.value }))} />
+              <NumberInput value={targetForm.cost_budget} placeholder="e.g. 20,000,000" onChange={(v: string) => setTargetForm(f => ({ ...f, cost_budget: v }))} />
             </div>
             <div className="form-field" style={{ margin: 0 }}>
               <label>Footfall Target</label>
-              <input type="number" value={targetForm.footfall_target} placeholder="e.g. 5000" onChange={e => setTargetForm(f => ({ ...f, footfall_target: e.target.value }))} />
+              <NumberInput value={targetForm.footfall_target} placeholder="e.g. 5,000" onChange={(v: string) => setTargetForm(f => ({ ...f, footfall_target: v }))} />
             </div>
           </div>
 
@@ -611,15 +676,15 @@ return (
           <div className="grid-2" style={{ gap: '14px', marginBottom: '16px' }}>
             <div className="form-field" style={{ margin: 0 }}>
               <label>CPO Target (LAK)</label>
-              <input type="number" value={targetForm.cpo_target} onChange={e => setTargetForm(f => ({ ...f, cpo_target: e.target.value }))} />
+              <NumberInput value={targetForm.cpo_target} placeholder="e.g. 60,000" onChange={(v: string) => setTargetForm(f => ({ ...f, cpo_target: v }))} />
             </div>
             <div className="form-field" style={{ margin: 0 }}>
               <label>CPA Target (LAK)</label>
-              <input type="number" value={targetForm.cpa_target} onChange={e => setTargetForm(f => ({ ...f, cpa_target: e.target.value }))} />
+              <NumberInput value={targetForm.cpa_target} placeholder="e.g. 100,000" onChange={(v: string) => setTargetForm(f => ({ ...f, cpa_target: v }))} />
             </div>
             <div className="form-field" style={{ margin: 0 }}>
               <label>CPAO Target (LAK)</label>
-              <input type="number" value={targetForm.cpao_target} onChange={e => setTargetForm(f => ({ ...f, cpao_target: e.target.value }))} />
+              <NumberInput value={targetForm.cpao_target} placeholder="e.g. 130,000" onChange={(v: string) => setTargetForm(f => ({ ...f, cpao_target: v }))} />
             </div>
           </div>
 
@@ -629,8 +694,8 @@ return (
             </div>
           )}
 
-          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={saveTarget}>
-            <i className="fa-solid fa-check"></i> Save Targets
+          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', opacity: targetSaving ? 0.6 : 1 }} onClick={saveTarget} disabled={targetSaving}>
+            <i className={`fa-solid ${targetSaving ? 'fa-spinner fa-spin' : 'fa-check'}`}></i> {targetSaving ? 'Saving...' : 'Save Targets'}
           </button>
 {/* Saved targets table */}
           <div style={{ marginTop: '18px', borderTop: '1px solid var(--border)', paddingTop: '14px' }}>
@@ -696,13 +761,13 @@ return (
                         <input type="text" value={editForm.itemName} placeholder="Item name" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={e => setEditForm(f => ({ ...f, itemName: e.target.value }))} />
                       </td>
                       <td style={{ fontFamily: 'var(--font-mono)' }}>
-                        <input type="number" value={editForm.cpu} placeholder="CPU (LAK)" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={e => setEditForm(f => ({ ...f, cpu: e.target.value }))} />
+                        <NumberInput value={editForm.cpu} placeholder="CPU (LAK)" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={(v: string) => setEditForm(f => ({ ...f, cpu: v }))} />
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => saveMerchEdit(m.id)}>
-                          <i className="fa-solid fa-check"></i> Save
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => saveMerchEdit(m.id)} disabled={merchSaving}>
+                          <i className="fa-solid fa-check"></i> {merchSaving ? '...' : 'Save'}
                         </button>
-                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px' }} onClick={() => setEditingId(null)}>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px' }} onClick={() => setEditingId(null)} disabled={merchSaving}>
                           Cancel
                         </button>
                       </td>
@@ -712,10 +777,10 @@ return (
                       <td>{m.itemName}</td>
                       <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtLAK(m.cpu)}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => startMerchEdit(m)}>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => startMerchEdit(m)} disabled={merchSaving}>
                           <i className="fa-solid fa-pen"></i> Edit
                         </button>
-                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px', color: 'var(--red)' }} onClick={() => deleteMerch(m.id)}>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px', color: 'var(--red)' }} onClick={() => deleteMerch(m.id)} disabled={merchSaving}>
                           <i className="fa-solid fa-trash"></i>
                         </button>
                       </td>
@@ -733,15 +798,15 @@ return (
         <div className="grid-2" style={{ gap: '14px', alignItems: 'end', marginBottom: '14px' }}>
           <div className="form-field" style={{ margin: 0 }}>
             <label>New Item Name</label>
-            <input type="text" placeholder="Name" value={newItem.itemName} onChange={e => setNewItem(n => ({ ...n, itemName: e.target.value }))} />
+            <input type="text" placeholder="Name" value={newItem.itemName} onChange={e => setNewItem(n => ({ ...n, itemName: e.target.value }))} disabled={merchSaving} />
           </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'end' }}>
             <div className="form-field" style={{ margin: 0, flex: 1 }}>
               <label>Cost (LAK)</label>
-              <input type="number" placeholder="0" value={newItem.cpu} onChange={e => setNewItem(n => ({ ...n, cpu: e.target.value }))} />
+              <NumberInput placeholder="0" value={newItem.cpu} onChange={(v: string) => setNewItem(n => ({ ...n, cpu: v }))} disabled={merchSaving} />
             </div>
-            <button className="btn btn-ghost" style={{ height: '42px', padding: '0 16px' }} onClick={addMerch}>
-              <i className="fa-solid fa-plus"></i> Add
+            <button className="btn btn-ghost" style={{ height: '42px', padding: '0 16px', opacity: merchSaving ? 0.6 : 1 }} onClick={addMerch} disabled={merchSaving}>
+              <i className="fa-solid fa-plus"></i> {merchSaving ? 'Adding...' : 'Add'}
             </button>
           </div>
         </div>

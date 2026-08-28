@@ -18,6 +18,31 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'cpa', label: 'CPA (preview)' },
 ];
 
+const CostInput = ({ value, onChange, style, title }: any) => {
+  const [str, setStr] = useState(value ? Number(value).toLocaleString() : '');
+  useEffect(() => {
+    if (!value && str !== '') setStr('');
+    else if (value && Number(str.replace(/,/g, '')) !== Number(value)) setStr(Number(value).toLocaleString());
+  }, [value]);
+  
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={str}
+      title={title}
+      style={style}
+      onChange={e => {
+        const raw = e.target.value.replace(/,/g, '');
+        if (/^\d*$/.test(raw)) {
+          setStr(raw ? Number(raw).toLocaleString() : '');
+          onChange(raw);
+        }
+      }}
+    />
+  );
+};
+
 export default function CostManager() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
@@ -265,11 +290,9 @@ export default function CostManager() {
                   <td>{fmtLAKShort(buyTotal(s))}</td>
                   <td>{fmtLAKShort(s.merch_cost)}</td>
                   <td>
-                    <input
-                      type="number"
-                      min={0}
+                    <CostInput
                       value={getDraftValue(s)}
-                      onChange={e => setDraft(s.id, e.target.value)}
+                      onChange={(val: string) => setDraft(s.id, val)}
                       title="Fill the team operating cost for this day"
                       style={{
                         width: '130px',
