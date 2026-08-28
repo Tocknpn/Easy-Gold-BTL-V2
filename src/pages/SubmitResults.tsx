@@ -1,10 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { MERCH_CATALOG, saveLocalSubmission, labelDate, fmtLAKShort } from '../lib/submissions';
 import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
+
+// Helper component for number inputs with comma formatting (e.g. 1,000)
+const NumberInput = ({ value, onChange, placeholder }: { value: number, onChange: (v: number) => void, placeholder?: string }) => {
+  const [str, setStr] = useState(value === 0 ? '' : value.toLocaleString());
+  useEffect(() => {
+    if (value === 0 && str !== '') setStr('');
+  }, [value]);
+  
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      placeholder={placeholder}
+      value={str}
+      onChange={e => {
+        const raw = e.target.value.replace(/,/g, '');
+        if (/^\d*$/.test(raw)) {
+          setStr(raw ? Number(raw).toLocaleString() : '');
+          onChange(raw ? Number(raw) : 0);
+        }
+      }}
+    />
+  );
+};
 
 export default function SubmitResults() {
   const user = getCurrentUser();
@@ -86,10 +110,7 @@ export default function SubmitResults() {
       status: 'active',
     };
 
-    // Persist locally so the record shows up everywhere instantly
-    saveLocalSubmission(record);
-
-    // Best-effort database write (works when Supabase is connected)
+    // Best-effort database write. We only save locally if the DB fails to avoid duplicate row glitches.
     try {
       const { error } = await supabase
         .from('submissions')
@@ -110,9 +131,13 @@ export default function SubmitResults() {
           step_in: record.step_in,
           status: record.status,
         }]);
-      if (error) console.error('Saved locally only — DB insert failed:', error.message);
+      if (error) {
+        console.error('DB insert failed — saving locally:', error.message);
+        saveLocalSubmission(record);
+      }
     } catch (err) {
-      console.error('Saved locally only — DB unavailable:', err);
+      console.error('DB unavailable — saving locally:', err);
+      saveLocalSubmission(record);
     }
 
     setSubmitting(false);
@@ -175,27 +200,27 @@ export default function SubmitResults() {
 
           <div className="text-xs" style={{ color: 'var(--blue)', marginBottom: '8px' }}><i className="fa-solid fa-user-plus"></i> NEW CUSTOMER DATA</div>
           <div className="grid-3" style={{ marginBottom: '16px' }}>
-            <div className="form-field" style={{ margin: 0 }}><label>Total New Customer (NC)</label><input type="number" min={0} value={nc} onChange={e => setNc(+e.target.value || 0)} required /></div>
-            <div className="form-field" style={{ margin: 0 }}><label>New Customer Purchased</label><input type="number" min={0} value={nrp} onChange={e => setNrp(+e.target.value || 0)} required /></div>
-            <div className="form-field" style={{ margin: 0 }}><label>Buy Value — New (LAK)</label><input type="number" min={0} value={buyNew} onChange={e => setBuyNew(+e.target.value || 0)} required /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>Total New Customer (NC)</label><NumberInput value={nc} onChange={setNc} /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>New Customer Purchased</label><NumberInput value={nrp} onChange={setNrp} /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>Buy Value — New (LAK)</label><NumberInput value={buyNew} onChange={setBuyNew} /></div>
           </div>
 
           <div className="text-xs" style={{ color: 'var(--blue)', marginBottom: '8px' }}><i className="fa-solid fa-users"></i> EXISTING CUSTOMER DATA</div>
           <div className="grid-2" style={{ marginBottom: '16px' }}>
-            <div className="form-field" style={{ margin: 0 }}><label>Total Existing Customers Met (EC)</label><input type="number" min={0} value={ec} onChange={e => setEc(+e.target.value || 0)} required /></div>
-            <div className="form-field" style={{ margin: 0 }}><label>Buy Value — Existing (LAK)</label><input type="number" min={0} value={buyExisting} onChange={e => setBuyExisting(+e.target.value || 0)} required /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>Total Existing Customers Met (EC)</label><NumberInput value={ec} onChange={setEc} /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>Buy Value — Existing (LAK)</label><NumberInput value={buyExisting} onChange={setBuyExisting} /></div>
           </div>
 
           <div className="text-xs" style={{ color: 'var(--green)', marginBottom: '8px' }}><i className="fa-solid fa-shoe-prints"></i> FOOTFALL</div>
           <div className="grid-2" style={{ marginBottom: '16px' }}>
-            <div className="form-field" style={{ margin: 0 }}><label>Total Footfall</label><input type="number" min={0} value={footfall} onChange={e => setFootfall(+e.target.value || 0)} required /></div>
-                        <div className="form-field" style={{ margin: 0 }}><label>Step-in Booth</label><input type="number" min={0} value={stepIn} onChange={e => setStepIn(+e.target.value || 0)} required /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>Total Footfall</label><NumberInput value={footfall} onChange={setFootfall} /></div>
+            <div className="form-field" style={{ margin: 0 }}><label>Step-in Booth</label><NumberInput value={stepIn} onChange={setStepIn} /></div>
           </div>
 
           {/* ── Merchandise used ── */}
           <div className="text-xs" style={{ color: 'var(--gold)', marginBottom: '8px', marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span><i className="fa-solid fa-box"></i> MERCHANDISE USED</span>
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--gold)' }}>Cost: {fmtLAKShort(merchCost)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--gold)', fontSize: '16px', fontWeight: 800 }}>Total: {fmtLAKShort(merchCost)}</span>
           </div>
           <div style={{ marginBottom: '24px' }}>
             {merchRows.map((row, idx) => {
@@ -205,8 +230,8 @@ export default function SubmitResults() {
                   <select value={row.name} onChange={e => updateMerch(idx, { name: e.target.value })} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
                     {MERCH_CATALOG.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                   </select>
-                  <input type="number" min={0} placeholder="Qty" value={row.qty} onChange={e => updateMerch(idx, { qty: +e.target.value || 0 })} style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '13px' }} />
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--txt-sub)' }}>{fmtLAKShort(Number(row.qty) * cpu)}</div>
+                  <NumberInput value={Number(row.qty)} onChange={qty => updateMerch(idx, { qty })} placeholder="Qty" />
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700, color: 'var(--txt-main)' }}>{fmtLAKShort(Number(row.qty) * cpu)}</div>
                   <button type="button" className="btn" onClick={() => setMerchRows(rows => rows.filter((_, i) => i !== idx))} style={{ padding: '4px', borderRadius: '6px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} title="Remove">
                     <i className="fa-solid fa-xmark"></i>
                   </button>

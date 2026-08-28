@@ -110,7 +110,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--txt-sub)', lineHeight: 1.2 }}>
               Last updated<br/>Just now
             </div>
-            <button className="btn btn-ghost" style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px' }}>
+            <button className="btn btn-ghost" onClick={() => window.location.reload()} style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px' }} title="Refresh Page">
               <i className="fa-solid fa-rotate-right"></i>
             </button>
             {(user.role === 'admin' || user.role === 'manager') && (
