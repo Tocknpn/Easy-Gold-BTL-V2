@@ -11,8 +11,9 @@ const YEARS = [2024, 2025, 2026, 2027];
 const normLoc = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean).join(', ');
 
 export default function PlanSetting() {
-  const [year, setYear] = useState(2025);
-  const [month, setMonth] = useState(2); // 0-based → March
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
   const [team, setTeam] = useState<'KPV' | 'Agency'>('KPV');
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
