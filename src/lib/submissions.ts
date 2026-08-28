@@ -153,6 +153,8 @@ export function genMockSubmissions(): Submission[] {
 
 // ── Locally submitted records (appear instantly even without a DB) ───────
 const LOCAL_SUBS_KEY = 'easygold_submissions';
+const CACHE_KEY = 'easygold_cache';          // last successful full fetch
+const CACHE_TS_KEY = 'easygold_cache_ts';    // when it was cached
 
 export function getLocalSubmissions(): Submission[] {
   try {
@@ -169,15 +171,54 @@ export function saveLocalSubmission(s: Submission): void {
   localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(all));
 }
 
-// ── Supabase fetch with graceful fallback to mock data ───────────────────
-export async function fetchSubmissions(): Promise<{ data: Submission[]; error: any }> {
+function getCachedSubmissions(): { data: Submission[]; cachedAt: string | null } {
   try {
-    const { data, error } = await supabase
+    const raw = localStorage.getItem(CACHE_KEY);
+    const ts = localStorage.getItem(CACHE_TS_KEY);
+    if (!raw) return { data: [], cachedAt: null };
+    const arr = JSON.parse(raw);
+    return { data: Array.isArray(arr) ? arr : [], cachedAt: ts };
+  } catch {
+    return { data: [], cachedAt: null };
+  }
+}
+
+function setCachedSubmissions(data: Submission[]) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(CACHE_TS_KEY, new Date().toISOString());
+  } catch { /* storage full — ignore */ }
+}
+
+// ── Return type for fetchSubmissions ──────────────────────────────────────
+export interface FetchResult {
+  data: Submission[];
+  error: any;
+  /** true = Supabase timed out / errored → data is from local cache */
+  stale: boolean;
+  /** ISO timestamp of when the cache was last saved */
+  cachedAt: string | null;
+}
+
+// ── Supabase fetch: timeout → real cached data, NOT mock/demo data ─────────
+export async function fetchSubmissions(): Promise<FetchResult> {
+  try {
+    // 10-second timeout — if Supabase is slow, return cached real data
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('__timeout__')), 10000)
+    );
+    const query = supabase
       .from('submissions')
       .select('*')
       .order('date', { ascending: false });
 
-    if (error) return { data: [], error };
+    const { data, error } = await Promise.race([query, timeoutPromise]);
+
+    if (error) {
+      // Supabase replied with an error — serve cache if available
+      const cached = getCachedSubmissions();
+      return { data: cached.data, error, stale: cached.data.length > 0, cachedAt: cached.cachedAt };
+    }
 
     const mapped: Submission[] = (data || []).map((r: any, i: number) => ({
       id: String(r.id ?? `sb-${i}`),
@@ -198,13 +239,23 @@ export async function fetchSubmissions(): Promise<{ data: Submission[]; error: a
       status: r.status || 'active',
     }));
 
-    // Merge locally submitted records so they show up instantly everywhere
+    // Merge locally submitted records so they appear instantly everywhere
     const seen = new Set(mapped.map(m => m.id));
     const local = getLocalSubmissions().filter(l => !seen.has(l.id));
     const merged = [...local, ...mapped].sort((a, b) => b.date.localeCompare(a.date));
 
-    return { data: merged, error: null };
-  } catch (err) {
-    return { data: [], error: err };
+    // Save to cache so next timeout can use this real data
+    setCachedSubmissions(merged);
+
+    return { data: merged, error: null, stale: false, cachedAt: null };
+
+  } catch (err: any) {
+    // Timed out or network error — return whatever real data we have cached
+    const cached = getCachedSubmissions();
+    const local = getLocalSubmissions();
+    const combined = [...local, ...cached.data].filter(
+      (v, i, a) => a.findIndex(x => x.id === v.id) === i
+    ).sort((a, b) => b.date.localeCompare(a.date));
+    return { data: combined, error: err, stale: true, cachedAt: cached.cachedAt };
   }
 }

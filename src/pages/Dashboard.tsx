@@ -87,6 +87,8 @@ function SplitRow({ items }: { items: { label: string; val: string; pct: number;
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
+  const [isStale, setIsStale] = useState(false);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const { startOfMonth, endOfMonth } = getCurrentDateHelpers();
   const [startDate, setStartDate] = useState(startOfMonth);
   const [endDate, setEndDate] = useState(endOfMonth);
@@ -100,9 +102,11 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await fetchSubmissions();
-    if (error) console.error('Error fetching submissions:', error);
-    if (data && data.length > 0) setSubmissions(data);
+    const result = await fetchSubmissions();
+    if (result.error && !result.stale) console.error('Error fetching submissions:', result.error);
+    if (result.data && result.data.length > 0) setSubmissions(result.data);
+    setIsStale(result.stale);
+    setCachedAt(result.cachedAt);
     setLoading(false);
   };
 
@@ -132,7 +136,7 @@ export default function Dashboard() {
     });
   }, [submissions, startDate, endDate, teamFilter]);
 
-  const hasData = filtered.length > 0;
+
 
   // ── KPI aggregator ─────────────────────────────────────────────────────
   const aggregateKPI = (rows: Submission[]) => {
@@ -304,12 +308,44 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="demo-banner">
-        <i className="fa-solid fa-circle-info"></i>{' '}
-        {loading ? 'Loading data...' : hasData
-          ? 'Showing live data with KPIs recalculated on every filter change.'
-          : 'Showing Sample Data. Connect to Supabase to see real data.'}
-      </div>
+      {/* ── Connection status banner ─────────────────────────────────────── */}
+      {loading ? (
+        <div className="demo-banner">
+          <i className="fa-solid fa-spinner fa-spin"></i> Loading live data…
+        </div>
+      ) : isStale ? (
+        <div style={{
+          background: 'rgba(244,148,58,0.1)',
+          border: '1px solid rgba(244,148,58,0.3)',
+          borderRadius: '10px',
+          padding: '10px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '12px',
+        }}>
+          <i className="fa-solid fa-triangle-exclamation" style={{ color: '#F4943A' }}></i>
+          <span style={{ flex: 1 }}>
+            <strong style={{ color: '#F4943A' }}>Server slow to respond</strong>
+            {' — '}showing your last saved data
+            {cachedAt && ` from ${new Date(cachedAt).toLocaleString()}`}.
+            {' '}Your internet is fine — this is a server delay.
+          </span>
+          <button
+            className="btn btn-ghost"
+            onClick={fetchData}
+            style={{ fontSize: '11px', padding: '4px 12px', borderColor: '#F4943A', color: '#F4943A', flexShrink: 0 }}
+          >
+            <i className="fa-solid fa-rotate-right"></i> Retry
+          </button>
+        </div>
+      ) : (
+        <div className="demo-banner">
+          <i className="fa-solid fa-circle-check" style={{ color: 'var(--green)' }}></i>{' '}
+          Live data · KPIs recalculated on every filter change.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>

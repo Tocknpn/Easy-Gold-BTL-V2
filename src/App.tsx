@@ -71,7 +71,12 @@ function Layout({ children }: { children: React.ReactNode }) {
   const currentPath = location.pathname;
   const headerInfo = pageTitles[currentPath] || { title: 'Easy Gold BTL', sub: '' };
 
-  if (!user) return null;
+  if (!user) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--ink)', flexDirection: 'column', gap: '16px' }}>
+      <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '28px', color: 'var(--accent)' }}></i>
+      <span style={{ color: 'var(--txt-sub)', fontSize: '13px' }}>Loading…</span>
+    </div>
+  );
 
   return (
     <>

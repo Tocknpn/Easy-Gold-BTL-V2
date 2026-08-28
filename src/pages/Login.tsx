@@ -2,56 +2,79 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
+// Demo credentials — only work when no real Supabase DB is configured
+const DEMO_USERS: Record<string, { name: string; role: string; team: string; dest: string }> = {
+  'admin@easygold.la:admin123':   { name: 'Admin',       role: 'admin', team: 'Admin Team',   dest: '/' },
+  'manager@easygold.la:manager123': { name: 'Souphaxay K.', role: 'admin', team: 'Manager Team', dest: '/' },
+  'kpv@easygold.la:kpv123':       { name: 'Somxay K.',   role: 'staff', team: 'KPV',          dest: '/calendar' },
+  'agency@easygold.la:agency123': { name: 'Alita P.',    role: 'staff', team: 'Agency',        dest: '/calendar' },
+};
+
+const hasRealDB = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL || '';
+  return url.length > 0 && !url.includes('xyzcompany');
+};
+
 export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isTimeout, setIsTimeout] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsTimeout(false);
     setLoading(true);
 
     try {
-      // Custom auth against the users table
-      const { data, error: fetchError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username)
-        .eq('password', password)
-        .single();
+      if (hasRealDB()) {
+        // ── Real Supabase login with 8-second timeout ─────────────────────
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('__timeout__')), 8000)
+        );
+        const query = supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .eq('password', password)
+          .single();
 
-            if (fetchError || !data) {
-        // Fallback for local testing before Supabase is connected
-        if (username === 'admin@easygold.la' && password === 'admin123') {
-          localStorage.setItem('easygold_user', JSON.stringify({ username, name: 'Admin', role: 'admin', team: 'Admin Team' }));
-          navigate('/');
-        } else if (username === 'kpv@easygold.la' && password === 'kpv123') {
-          localStorage.setItem('easygold_user', JSON.stringify({ username, name: 'Somxay K.', role: 'staff', team: 'KPV' }));
-          navigate('/calendar');
-        } else if (username === 'agency@easygold.la' && password === 'agency123') {
-          localStorage.setItem('easygold_user', JSON.stringify({ username, name: 'Alita P.', role: 'staff', team: 'Agency' }));
-          navigate('/calendar');
-        } else if (username === 'manager@easygold.la' && password === 'manager123') {
-          localStorage.setItem('easygold_user', JSON.stringify({ username, name: 'Souphaxay K.', role: 'admin', team: 'Manager Team' }));
-          navigate('/');
+        const { data, error: fetchError } = await Promise.race([query, timeoutPromise]);
+
+        if (fetchError || !data) {
+          setError('Invalid username or password.');
         } else {
-          setError('Invalid username or password');
+          const role = data.role === 'admin' || data.role === 'manager' ? 'admin' : 'staff';
+          localStorage.setItem('easygold_user', JSON.stringify({
+            username: data.username ?? username,
+            name: data.name ?? username,
+            role,
+            team: role === 'staff' ? (data.team === 'Agency' ? 'Agency' : 'KPV') : (data.team || ''),
+          }));
+          navigate(role === 'admin' ? '/' : '/calendar');
         }
       } else {
-        const role = data.role === 'admin' || data.role === 'manager' ? 'admin' : 'staff';
-        localStorage.setItem('easygold_user', JSON.stringify({
-          username: data.username ?? username,
-          name: data.name ?? username,
-          role,
-          team: role === 'staff' ? (data.team === 'Agency' ? 'Agency' : 'KPV') : (data.team || ''),
-        }));
-        navigate(role === 'admin' ? '/' : '/calendar');
+        // ── No real DB configured — use local demo credentials ─────────────
+        const key = `${username}:${password}`;
+        const match = DEMO_USERS[key];
+        if (match) {
+          localStorage.setItem('easygold_user', JSON.stringify({ username, name: match.name, role: match.role, team: match.team }));
+          navigate(match.dest);
+        } else {
+          setError('Invalid username or password.');
+        }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred');
+      if (err.message === '__timeout__') {
+        // Supabase didn't reply in time → show a retry message, NOT demo data
+        setIsTimeout(true);
+        setError('');
+      } else {
+        setError(err.message || 'An error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -66,18 +89,40 @@ export default function Login() {
           <div style={{ color: 'var(--txt-sub)' }}>Sign in to BTL Tracker</div>
         </div>
 
+        {/* Normal error */}
         {error && (
-          <div className="alert alert-info" style={{ background: 'var(--red-dim)', color: 'var(--red)', borderColor: 'rgba(232,84,84,0.2)', marginBottom: '20px' }}>
+          <div className="alert" style={{ background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(224,82,82,0.2)', marginBottom: '20px' }}>
             <i className="fa-solid fa-circle-exclamation"></i> {error}
+          </div>
+        )}
+
+        {/* Timeout — special message with retry hint */}
+        {isTimeout && (
+          <div style={{
+            background: 'rgba(244,148,58,0.1)',
+            border: '1px solid rgba(244,148,58,0.35)',
+            borderRadius: '10px',
+            padding: '14px 16px',
+            marginBottom: '20px',
+            fontSize: '13px',
+          }}>
+            <div style={{ fontWeight: 700, color: '#F4943A', marginBottom: '6px' }}>
+              <i className="fa-solid fa-wifi" style={{ marginRight: '8px' }}></i>
+              Server is taking too long to respond
+            </div>
+            <div style={{ color: 'var(--txt-sub)', fontSize: '12px', lineHeight: 1.5 }}>
+              Your internet is fine, but our server didn't reply in time.
+              <br />Please <strong>tap Sign In again</strong> to retry — it usually works on the 2nd attempt.
+            </div>
           </div>
         )}
 
         <form onSubmit={handleLogin}>
           <div className="form-field">
             <label>Username</label>
-            <input 
-              type="text" 
-              placeholder="e.g. manager@easygold.la" 
+            <input
+              type="text"
+              placeholder="e.g. manager@easygold.la"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -85,41 +130,50 @@ export default function Login() {
           </div>
           <div className="form-field">
             <label>Password</label>
-            <input 
-              type="password" 
-              placeholder="••••••••" 
+            <input
+              type="password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
-          <button 
-            type="submit" 
-            className="btn btn-primary" 
+          <button
+            type="submit"
+            className="btn btn-primary"
             style={{ width: '100%', padding: '12px', fontSize: '15px' }}
             disabled={loading}
           >
-                      {loading ? 'Signing in...' : 'Sign In'}
+            {loading
+              ? <><i className="fa-solid fa-spinner fa-spin"></i> Signing in…</>
+              : isTimeout
+              ? <><i className="fa-solid fa-rotate-right"></i> Retry Sign In</>
+              : 'Sign In'
+            }
           </button>
         </form>
 
-        <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Demo Accounts — click to fill</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('admin@easygold.la'); setPassword('admin123'); }}>
-              <span><i className="fa-solid fa-user-shield" style={{ color: 'var(--gold)', marginRight: '8px' }}></i>Admin</span>
-              <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>full access</span>
-            </button>
-            <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('kpv@easygold.la'); setPassword('kpv123'); }}>
-              <span><i className="fa-solid fa-user" style={{ color: 'var(--blue)', marginRight: '8px' }}></i>Staff — KPV</span>
-              <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
-            </button>
-            <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('agency@easygold.la'); setPassword('agency123'); }}>
-              <span><i className="fa-solid fa-user" style={{ color: 'var(--green)', marginRight: '8px' }}></i>Staff — Agency</span>
-              <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
-            </button>
+        {!hasRealDB() && (
+          <div style={{ marginTop: '20px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+              Demo Accounts — click to fill
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('admin@easygold.la'); setPassword('admin123'); setError(''); setIsTimeout(false); }}>
+                <span><i className="fa-solid fa-user-shield" style={{ color: 'var(--accent)', marginRight: '8px' }}></i>Admin</span>
+                <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>full access</span>
+              </button>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('kpv@easygold.la'); setPassword('kpv123'); setError(''); setIsTimeout(false); }}>
+                <span><i className="fa-solid fa-user" style={{ color: 'var(--blue)', marginRight: '8px' }}></i>Staff — KPV</span>
+                <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
+              </button>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('agency@easygold.la'); setPassword('agency123'); setError(''); setIsTimeout(false); }}>
+                <span><i className="fa-solid fa-user" style={{ color: 'var(--green)', marginRight: '8px' }}></i>Staff — Agency</span>
+                <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
