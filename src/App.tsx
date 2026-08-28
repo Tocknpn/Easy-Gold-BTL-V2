@@ -15,20 +15,21 @@ import CostManager from './pages/CostManager';
 import PlanSetting from './pages/PlanSetting';
 import Settings from './pages/Settings';
 import Diagnostic from './pages/Diagnostic';
+import HealthMonitor from './pages/HealthMonitor';
 import './index.css';
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
+  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem('eg_sidebar_collapsed') === '1');
   const navigate = useNavigate();
   const location = useLocation();
 
-    useEffect(() => {
+  useEffect(() => {
     const storedUser = localStorage.getItem('easygold_user');
     if (storedUser) {
       const u = JSON.parse(storedUser);
       setUser(u);
-      // Role guard: staff accounts are limited to the field workflow pages
-                  const ADMIN_ONLY = ['/', '/report', '/staff-report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings'];
+      const ADMIN_ONLY = ['/', '/report', '/staff-report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health'];
       const privileged = u.role === 'admin' || u.role === 'manager';
       if (!privileged && ADMIN_ONLY.includes(location.pathname)) {
         navigate('/calendar', { replace: true });
@@ -43,6 +44,14 @@ function Layout({ children }: { children: React.ReactNode }) {
     navigate('/login');
   };
 
+  const handleToggleCollapse = () => {
+    setCollapsed(c => {
+      const next = !c;
+      localStorage.setItem('eg_sidebar_collapsed', next ? '1' : '0');
+      return next;
+    });
+  };
+
   const pageTitles: Record<string, { title: string; sub: string }> = {
     '/': { title: 'Dashboard', sub: 'Event Manager - Overview' },
     '/submit': { title: 'Submit Results', sub: 'Team - Daily Entry' },
@@ -53,9 +62,10 @@ function Layout({ children }: { children: React.ReactNode }) {
     '/staff-report': { title: 'Staff Report', sub: 'Team - Member Performance' },
     '/merch-report': { title: 'Merch Report', sub: 'Manager - Distribution Analysis' },
     '/route-map': { title: 'Route Map', sub: 'Manager - Visual Routing' },
-        '/cost-manager': { title: 'Cost Manager', sub: 'Admin - Financial Overview' },
+    '/cost-manager': { title: 'Cost Manager', sub: 'Admin - Financial Overview' },
     '/plan-setting': { title: 'Monthly Route Plan', sub: 'Admin - Editable Monthly Schedule' },
     '/settings': { title: 'Upload & Settings', sub: 'Admin - Config Panel' },
+    '/health': { title: 'Health Monitor', sub: 'Admin - Connection & Performance' },
   };
 
   const currentPath = location.pathname;
@@ -65,12 +75,31 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <Sidebar user={user} onLogout={handleLogout} currentPath={currentPath} />
+      <Sidebar
+        user={user}
+        onLogout={handleLogout}
+        currentPath={currentPath}
+        collapsed={collapsed}
+        onToggleCollapse={handleToggleCollapse}
+      />
       <div id="main">
         <header className="topbar">
-          <div>
-            <h1 id="tb-title">{headerInfo.title}</h1>
-            <div className="sub" id="tb-sub">{headerInfo.sub}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Mini expand button in topbar when sidebar is collapsed */}
+            {collapsed && (
+              <button
+                onClick={handleToggleCollapse}
+                title="Expand sidebar"
+                className="btn btn-ghost"
+                style={{ padding: '5px 8px', fontSize: '12px', flexShrink: 0 }}
+              >
+                <i className="fa-solid fa-bars"></i>
+              </button>
+            )}
+            <div>
+              <h1 id="tb-title">{headerInfo.title}</h1>
+              <div className="sub" id="tb-sub">{headerInfo.sub}</div>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--txt-sub)', lineHeight: 1.2 }}>
@@ -79,7 +108,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             <button className="btn btn-ghost" style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px' }}>
               <i className="fa-solid fa-rotate-right"></i>
             </button>
-                        {(user.role === 'admin' || user.role === 'manager') && (
+            {(user.role === 'admin' || user.role === 'manager') && (
               <button className="pill pill-blue" style={{ fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}>
                 MANAGEMENT
               </button>
@@ -110,9 +139,10 @@ function App() {
         <Route path="/staff-report" element={<Layout><StaffReport /></Layout>} />
         <Route path="/merch-report" element={<Layout><MerchReport /></Layout>} />
         <Route path="/route-map" element={<Layout><RouteMap /></Layout>} />
-                <Route path="/cost-manager" element={<Layout><CostManager /></Layout>} />
+        <Route path="/cost-manager" element={<Layout><CostManager /></Layout>} />
         <Route path="/plan-setting" element={<Layout><PlanSetting /></Layout>} />
-                <Route path="/settings" element={<Layout><Settings /></Layout>} />
+        <Route path="/settings" element={<Layout><Settings /></Layout>} />
+        <Route path="/health" element={<Layout><HealthMonitor /></Layout>} />
         <Route path="/diagnostic" element={<Diagnostic />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
