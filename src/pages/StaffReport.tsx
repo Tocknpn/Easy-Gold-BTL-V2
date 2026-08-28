@@ -188,7 +188,7 @@ export default function StaffReport() {
       <tr>
         <th>ລວມໜ້າວຽກ ${staffDaySummary.length} ຄົນ</th>
         <th style="width:80px">ຈຳນວນມື້</th>
-        <th style="width:80px">ລາຍຮັບ</th>
+        <th style="width:80px">ລາຍເຊັນ</th>
       </tr>
     </thead>
     <tbody>${summaryRowsHtml}</tbody>
