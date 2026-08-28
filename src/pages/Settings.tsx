@@ -426,11 +426,11 @@ export default function Settings() {
 
   const saveTarget = async () => {
     setTargetSaving(true);
-    const id = `${normalizeTeam(targetTeam)}|${targetMonth}-01`;
-    const row = {
-      id,
-      team: normalizeTeam(targetTeam),
-      month: `${targetMonth}-01`,
+    const team = normalizeTeam(targetTeam);
+    const monthDate = `${targetMonth}-01`;
+    const payload = {
+      team,
+      month: monthDate,
       new_reg_target: Number(targetForm.new_reg_target) || 0,
       buy_value_target: Number(targetForm.buy_value_target) || 0,
       footfall_target: Number(targetForm.footfall_target) || 0,
@@ -439,19 +439,40 @@ export default function Settings() {
       cpa_target: Number(targetForm.cpa_target) || 0,
       cpao_target: Number(targetForm.cpao_target) || 0,
     };
-    
-    const { error } = await supabase.from('targets').upsert(row);
+
+    // Check if a record already exists for this team + month
+    const existing = targets.find(t => t.team === team && (t.month === monthDate || t.month === targetMonth));
+
+    let error;
+    if (existing) {
+      // Update the existing row using its real UUID
+      ({ error } = await supabase.from('targets').update(payload).eq('id', existing.id));
+    } else {
+      // Insert a new row — let Supabase generate the UUID
+      ({ error } = await supabase.from('targets').insert(payload));
+    }
+
     if (error) {
       setTargetMsg({ type: 'err', text: 'Failed to save targets: ' + error.message });
       setTargetSaving(false);
       return;
     }
 
-    setTargets(prev => {
-      const exists = prev.some(t => t.id === id);
-      return exists ? prev.map(t => (t.id === id ? row : t)) : [...prev, row];
-    });
-    setTargetMsg({ type: 'ok', text: `Targets saved for ${row.team} (${targetMonth}).` });
+    // Reload from Supabase so we have the real UUID
+    const { data: fresh } = await supabase.from('targets').select('*');
+    if (fresh) {
+      setTargets(fresh.map((r: any) => ({
+        id: r.id, team: r.team, month: r.month,
+        new_reg_target: Number(r.new_reg_target) || 0,
+        buy_value_target: Number(r.buy_value_target) || 0,
+        footfall_target: Number(r.footfall_target) || 0,
+        cost_budget: Number(r.cost_budget) || 0,
+        cpo_target: Number(r.cpo_target) || 0,
+        cpa_target: Number(r.cpa_target) || 0,
+        cpao_target: Number(r.cpao_target) || 0,
+      })));
+    }
+    setTargetMsg({ type: 'ok', text: `Targets saved for ${team} (${targetMonth}).` });
     setTargetSaving(false);
   };
 
@@ -465,9 +486,11 @@ export default function Settings() {
   const loadTargetIntoForm = (id: string) => {
     const found = targets.find(t => t.id === id);
     if (!found) return;
+    // DB month is YYYY-MM-01, strip -01 for the month input
+    const monthStr = found.month.length === 10 ? found.month.slice(0, 7) : found.month;
     setTargetTeam(found.team === 'KPV' ? 'KPV Team' : 'Agency Team');
-    setTargetMonth(found.month);
-    setTargetMsg({ type: 'ok', text: `Loaded target for ${found.team} (${found.month}) into the form.` });
+    setTargetMonth(monthStr);
+    setTargetMsg({ type: 'ok', text: `Loaded target for ${found.team} (${monthStr}) into the form.` });
   };
 
   // ── Merch handlers (Supabase) ────────────────────────────────────────
