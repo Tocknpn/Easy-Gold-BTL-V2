@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, labelDate, fmtLAKShort } from '../lib/submissions';
+import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort } from '../lib/submissions';
 import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
 
@@ -96,6 +96,9 @@ export default function SubmitResults() {
     setSubmitting(true);
 
     // Prevent duplicate records for the same branch on the same day
+    const localSubs = getLocalSubmissions();
+    const localExists = localSubs.some(s => s.date === date && s.branch === branch && s.team === (user?.team || 'KPV'));
+
     const { data: existingRecords } = await supabase
       .from('submissions')
       .select('id')
@@ -104,7 +107,7 @@ export default function SubmitResults() {
       .eq('team', user?.team || 'KPV')
       .limit(1);
 
-    if (existingRecords && existingRecords.length > 0) {
+    if ((existingRecords && existingRecords.length > 0) || localExists) {
       window.alert(`A record for ${branch} on ${labelDate(date)} already exists! Please update the existing record from the Calendar or Dashboard instead.`);
       setSubmitting(false);
       return;

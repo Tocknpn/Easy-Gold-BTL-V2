@@ -29,44 +29,82 @@ export interface CheckInRecord {
   lng: number;
 }
 
-export async function fetchCheckIns(): Promise<CheckInRecord[]> {
-  try {
-    const { data, error } = await supabase
-      .from('checkins')
-      .select('*')
-      .order('timestamp', { ascending: false });
-    
-    if (error) {
-      console.error('Error fetching checkins:', error);
-      return [];
-    }
+const LOCAL_CHECKINS_KEY = 'easygold_checkins';
 
-    return (data || []).map((r: any) => ({
-      id: r.id,
-      date: r.date,
-      time: r.timestamp ? new Date(r.timestamp).toTimeString().slice(0, 5) : '',
-      location: r.note || '',
-      team: r.team,
-      user: '', // Supabase table doesn't have user_name currently
-      lat: Number(r.lat) || 0,
-      lng: Number(r.lng) || 0,
-    }));
-  } catch (err) {
-    console.error(err);
+export function getLocalCheckIns(): CheckInRecord[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LOCAL_CHECKINS_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
     return [];
   }
 }
 
+export function saveLocalCheckIn(rec: CheckInRecord): void {
+  const all = getLocalCheckIns();
+  all.unshift(rec);
+  localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(all));
+}
+
+export async function fetchCheckIns(): Promise<CheckInRecord[]> {
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('__timeout__')), 5000)
+    );
+    const query = supabase
+      .from('checkins')
+      .select('*')
+      .order('timestamp', { ascending: false });
+    
+    const { data, error } = await Promise.race([query, timeoutPromise]);
+    
+    let remote: CheckInRecord[] = [];
+    if (error) {
+      console.error('Error fetching checkins:', error);
+    } else {
+      remote = (data || []).map((r: any) => ({
+        id: r.id,
+        date: r.date,
+        time: r.timestamp ? new Date(r.timestamp).toTimeString().slice(0, 5) : '',
+        location: r.note || '',
+        team: r.team,
+        user: '', // Supabase table doesn't have user_name currently
+        lat: Number(r.lat) || 0,
+        lng: Number(r.lng) || 0,
+      }));
+    }
+
+    const local = getLocalCheckIns();
+    const seenSignatures = new Set(remote.map(m => `${m.date}|${m.team}|${m.location}`));
+    const localFiltered = local.filter(l => !seenSignatures.has(`${l.date}|${l.team}|${l.location}`));
+    
+    if (localFiltered.length !== local.length) {
+      localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(localFiltered));
+    }
+    
+    return [...localFiltered, ...remote].sort((a, b) => b.date.localeCompare(a.date));
+  } catch (err) {
+    console.error('fetchCheckIns offline fallback:', err);
+    return getLocalCheckIns();
+  }
+}
+
 export async function addCheckIn(rec: CheckInRecord): Promise<void> {
-  const { error } = await supabase.from('checkins').insert([{
-    date: rec.date,
-    team: rec.team,
-    lat: rec.lat,
-    lng: rec.lng,
-    note: rec.location
-  }]);
-  if (error) {
-    console.error('Error adding checkin:', error);
+  try {
+    const { error } = await supabase.from('checkins').insert([{
+      date: rec.date,
+      team: rec.team,
+      lat: rec.lat,
+      lng: rec.lng,
+      note: rec.location
+    }]);
+    if (error) {
+      console.error('Error adding checkin:', error);
+      saveLocalCheckIn(rec);
+    }
+  } catch (err) {
+    console.error('Network error adding checkin:', err);
+    saveLocalCheckIn(rec);
   }
 }
 
