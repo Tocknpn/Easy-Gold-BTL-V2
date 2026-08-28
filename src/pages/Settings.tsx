@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { getCurrentDateHelpers } from '../lib/submissions';
 import { fetchStaff, addStaffRecord, updateStaffRecord, deleteStaffRecord, suggestStaffId } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
@@ -245,13 +246,7 @@ const loadTargets = (): TargetRow[] => {
   return seedTargets.map(t => ({ ...t }));
 };
 
-const loadMerch = (): MerchItem[] => {
-  try {
-    const raw = localStorage.getItem('easygold_merch');
-    if (raw) return JSON.parse(raw) as MerchItem[];
-  } catch { /* ignore */ }
-  return seedMerch.map(m => ({ ...m }));
-};
+
 
 // ── CSV parser: date, team, location_name, lat, lng ─────────────────────
 const parseRouteCSV = (text: string): RouteRow[] => {
@@ -295,16 +290,30 @@ export default function Settings() {
   const [targetForm, setTargetForm] = useState<TargetForm>(emptyTargetForm);
   const [targetMsg, setTargetMsg] = useState<AlertMsg | null>(null);
 
-  const [merch, setMerch] = useState<MerchItem[]>(loadMerch);
+  const [merch, setMerch] = useState<MerchItem[]>([]);
+  const [merchLoading, setMerchLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ itemName: '', cpu: '' });
   const [newItem, setNewItem] = useState({ itemName: '', cpu: '' });
   const [merchMsg, setMerchMsg] = useState<AlertMsg | null>(null);
 
-  // Persist to localStorage on every change
+  // Persist routes + targets to localStorage on every change
   useEffect(() => { localStorage.setItem('easygold_route_plan', JSON.stringify(routes)); }, [routes]);
   useEffect(() => { localStorage.setItem('easygold_targets', JSON.stringify(targets)); }, [targets]);
-  useEffect(() => { localStorage.setItem('easygold_merch', JSON.stringify(merch)); }, [merch]);
+
+  // Load merch from Supabase on mount
+  useEffect(() => {
+    setMerchLoading(true);
+    supabase.from('merch').select('*').order('itemname').then(({ data, error }) => {
+      if (!error && data && data.length > 0) {
+        setMerch(data.map((r: any) => ({ id: r.itemname, itemName: r.itemname, cpu: Number(r.cpu) || 0 })));
+      } else {
+        // fallback to seed if table empty
+        setMerch(seedMerch.map(m => ({ ...m })));
+      }
+      setMerchLoading(false);
+    });
+  }, []);
 
   // Pre-fill target form whenever team/month changes and a saved target exists
   useEffect(() => {
@@ -404,39 +413,56 @@ export default function Settings() {
     setTargetMsg({ type: 'ok', text: `Loaded target for ${found.team} (${found.month}) into the form.` });
   };
 
-  // ── Merch handlers ───────────────────────────────────────────────────
+  // ── Merch handlers (Supabase) ────────────────────────────────────────
   const startMerchEdit = (m: MerchItem) => {
     setEditingId(m.id);
     setEditForm({ itemName: m.itemName, cpu: String(m.cpu) });
   };
 
-  const saveMerchEdit = (id: string) => {
+  const saveMerchEdit = async (id: string) => {
     if (!editForm.itemName.trim()) {
       setMerchMsg({ type: 'err', text: 'Item name cannot be empty.' });
       return;
     }
-    setMerch(prev => prev.map(m => (m.id === id ? { ...m, itemName: editForm.itemName.trim(), cpu: Number(editForm.cpu) || 0 } : m)));
+    const newName = editForm.itemName.trim();
+    const newCpu = Number(editForm.cpu) || 0;
+    // If name changed: delete old row & insert new one (itemname is PK)
+    if (newName !== id) {
+      await supabase.from('merch').delete().eq('itemname', id);
+      await supabase.from('merch').insert({ itemname: newName, cpu: newCpu });
+    } else {
+      await supabase.from('merch').update({ cpu: newCpu }).eq('itemname', id);
+    }
+    setMerch(prev => prev.map(m => (m.id === id ? { id: newName, itemName: newName, cpu: newCpu } : m)));
     setEditingId(null);
-    setMerchMsg({ type: 'ok', text: 'Item updated.' });
+    setMerchMsg({ type: 'ok', text: 'Item updated in Supabase.' });
   };
 
-  const deleteMerch = (id: string) => {
+  const deleteMerch = async (id: string) => {
+    await supabase.from('merch').delete().eq('itemname', id);
     setMerch(prev => prev.filter(m => m.id !== id));
-    setMerchMsg({ type: 'ok', text: 'Item removed.' });
+    setMerchMsg({ type: 'ok', text: 'Item removed from Supabase.' });
   };
 
-  const addMerch = () => {
+  const addMerch = async () => {
     if (!newItem.itemName.trim()) {
       setMerchMsg({ type: 'err', text: 'Enter an item name first.' });
       return;
     }
-    setMerch(prev => [...prev, { id: uid(), itemName: newItem.itemName.trim(), cpu: Number(newItem.cpu) || 0 }]);
+    const name = newItem.itemName.trim();
+    const cpu = Number(newItem.cpu) || 0;
+    const { error } = await supabase.from('merch').insert({ itemname: name, cpu });
+    if (error) {
+      setMerchMsg({ type: 'err', text: 'Failed to add: ' + error.message });
+      return;
+    }
+    setMerch(prev => [...prev, { id: name, itemName: name, cpu }]);
     setNewItem({ itemName: '', cpu: '' });
-    setMerchMsg({ type: 'ok', text: 'New item added to the catalog.' });
+    setMerchMsg({ type: 'ok', text: 'New item saved to Supabase.' });
   };
 
   const saveMerchConfig = () => {
-    setMerchMsg({ type: 'ok', text: `Merch catalog saved (${merch.length} items). CPUs now feed the Submit Results merchand form.` });
+    setMerchMsg({ type: 'ok', text: `All ${merch.length} items are live in Supabase — changes are saved instantly.` });
   };
 
 return (
@@ -657,42 +683,48 @@ return (
             <tr><th>ITEM NAME</th><th>COST PER UNIT (LAK)</th><th>EDIT</th></tr>
           </thead>
           <tbody>
-            {merch.map(m => (
-              <tr key={m.id}>
-                {editingId === m.id ? (
-                  <>
-                    <td>
-                      <input type="text" value={editForm.itemName} placeholder="Item name" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={e => setEditForm(f => ({ ...f, itemName: e.target.value }))} />
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>
-                      <input type="number" value={editForm.cpu} placeholder="CPU (LAK)" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={e => setEditForm(f => ({ ...f, cpu: e.target.value }))} />
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => saveMerchEdit(m.id)}>
-                        <i className="fa-solid fa-check"></i> Save
-                      </button>
-                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px' }} onClick={() => setEditingId(null)}>
-                        Cancel
-                      </button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td>{m.itemName}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtLAK(m.cpu)}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => startMerchEdit(m)}>
-                        <i className="fa-solid fa-pen"></i> Edit
-                      </button>
-                      <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px', color: 'var(--red)' }} onClick={() => deleteMerch(m.id)}>
-                        <i className="fa-solid fa-trash"></i>
-                      </button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
-            {merch.length === 0 && (
+            {merchLoading ? (
+              <tr><td colSpan={3} style={{ color: 'var(--txt-dim)', textAlign: 'center', padding: '20px' }}>
+                <i className="fa-solid fa-spinner fa-spin" style={{ marginRight: '8px' }}></i>Loading from Supabase…
+              </td></tr>
+            ) : (
+              merch.map(m => (
+                <tr key={m.id}>
+                  {editingId === m.id ? (
+                    <>
+                      <td>
+                        <input type="text" value={editForm.itemName} placeholder="Item name" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={e => setEditForm(f => ({ ...f, itemName: e.target.value }))} />
+                      </td>
+                      <td style={{ fontFamily: 'var(--font-mono)' }}>
+                        <input type="number" value={editForm.cpu} placeholder="CPU (LAK)" style={{ padding: '6px 8px', fontSize: '13px' }} onChange={e => setEditForm(f => ({ ...f, cpu: e.target.value }))} />
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => saveMerchEdit(m.id)}>
+                          <i className="fa-solid fa-check"></i> Save
+                        </button>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px' }} onClick={() => setEditingId(null)}>
+                          Cancel
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{m.itemName}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)' }}>{fmtLAK(m.cpu)}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px' }} onClick={() => startMerchEdit(m)}>
+                          <i className="fa-solid fa-pen"></i> Edit
+                        </button>
+                        <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11px', marginLeft: '6px', color: 'var(--red)' }} onClick={() => deleteMerch(m.id)}>
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))
+            )}
+            {!merchLoading && merch.length === 0 && (
               <tr><td colSpan={3} style={{ color: 'var(--txt-dim)' }}>No merchandise items yet. Add one below.</td></tr>
             )}
           </tbody>
