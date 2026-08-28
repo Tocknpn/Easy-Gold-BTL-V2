@@ -111,8 +111,6 @@ export default function CalendarRoute() {
 
   return (
     <div>
-            <div className="demo-banner"><i className="fa-solid fa-circle-info"></i> Each day shows: <b>Plan to go</b> (✓ = checked in) · summed <b>Results</b> — click results to open submissions · <b>Staff in charge</b>. Click a plan to start Check-In.</div>
-
       {/* Header / Nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

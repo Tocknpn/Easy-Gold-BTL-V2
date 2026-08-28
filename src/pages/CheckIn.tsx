@@ -71,10 +71,6 @@ export default function CheckIn() {
 
   return (
     <div>
-      <div className="demo-banner">
-        <i className="fa-solid fa-circle-info"></i> Pick a plan in Calendar &amp; Route to prefill this page, then capture your GPS location to mark yourself on standby. After the activity, go to Submit Results.
-      </div>
-
       <div className="grid-2" style={{ alignItems: 'start' }}>
         {/* ── Capture card ── */}
         <div className="card">

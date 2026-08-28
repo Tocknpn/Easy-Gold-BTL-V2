@@ -20,7 +20,6 @@ const formatInCharge = (names: string[]): string => {
 
 export default function StaffReport() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
-  const [loading, setLoading] = useState(true);
   const { startOfMonth, endOfMonth } = getCurrentDateHelpers();
   const [from, setFrom] = useState(startOfMonth);
   const [to, setTo] = useState(endOfMonth);
@@ -30,7 +29,6 @@ export default function StaffReport() {
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
-    setLoading(true);
     const [{ data, error }, staffData] = await Promise.all([
       fetchSubmissions(),
       fetchStaff()
@@ -38,7 +36,6 @@ export default function StaffReport() {
     if (error) console.error('Error fetching submissions:', error);
     if (data && data.length > 0) setSubmissions(data);
     if (staffData) setStaffList(staffData);
-    setLoading(false);
   };
 
   const kpvStaff = useMemo(() => staffList.filter(s => s.team === 'KPV'), [staffList]);
@@ -236,12 +233,6 @@ export default function StaffReport() {
 
   return (
     <div>
-      <div className="demo-banner">
-        <i className="fa-solid fa-circle-info"></i> {loading
-          ? 'Loading KPV records…'
-          : 'KPV expense-claim summary — pick a date range and staff member to total their working days, then export the document for HR signatures.'}
-      </div>
-
       {/* Filters */}
       <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />

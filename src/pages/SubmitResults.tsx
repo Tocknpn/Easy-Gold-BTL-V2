@@ -91,6 +91,21 @@ export default function SubmitResults() {
     if (!date || !branch) return;
     setSubmitting(true);
 
+    // Prevent duplicate records for the same branch on the same day
+    const { data: existingRecords } = await supabase
+      .from('submissions')
+      .select('id')
+      .eq('date', date)
+      .eq('branch', branch)
+      .eq('team', user?.team || 'KPV')
+      .limit(1);
+
+    if (existingRecords && existingRecords.length > 0) {
+      window.alert(`A record for ${branch} on ${labelDate(date)} already exists! Please update the existing record from the Calendar or Dashboard instead.`);
+      setSubmitting(false);
+      return;
+    }
+
     const record: Submission = {
       id: `sub-${Date.now()}`,
       date,
@@ -230,8 +245,8 @@ export default function SubmitResults() {
                   <select value={row.name} onChange={e => updateMerch(idx, { name: e.target.value })} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
                     {MERCH_CATALOG.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                   </select>
-                  <NumberInput value={Number(row.qty)} onChange={qty => updateMerch(idx, { qty })} placeholder="Qty" />
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', fontWeight: 700, color: 'var(--txt-main)' }}>{fmtLAKShort(Number(row.qty) * cpu)}</div>
+                  <input type="number" min={0} placeholder="Qty" value={row.qty} onChange={e => updateMerch(idx, { qty: +e.target.value || 0 })} style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '13px', padding: '8px 12px' }} />
+                  <div style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700, color: 'var(--txt-main)' }}>{fmtLAKShort(Number(row.qty) * cpu)}</div>
                   <button type="button" className="btn" onClick={() => setMerchRows(rows => rows.filter((_, i) => i !== idx))} style={{ padding: '4px', borderRadius: '6px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} title="Remove">
                     <i className="fa-solid fa-xmark"></i>
                   </button>
