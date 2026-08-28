@@ -99,7 +99,6 @@ export default function CalendarRoute() {
   const closeModal = () => setModalSub(null);
 
   const handleDelete = (id: string) => {
-    if (!window.confirm('Delete this submission?')) return;
     setSubmissions(prev => prev.filter(s => s.id !== id));
     closeModal();
   };

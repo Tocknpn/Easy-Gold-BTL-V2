@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { fmtLAK, fmtLAKShort, MERCH_CATALOG, STAFF_NAMES } from '../lib/submissions';
 import { fetchStaff } from '../lib/workflow';
@@ -37,6 +38,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Submission | null>(null);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     fetchStaff().then(setStaffList);
@@ -77,8 +79,55 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
   const addStaff = () => {
     setEditData(d => (d ? { ...d, staff_in_charge: [...(d.staff_in_charge || []), STAFF_NAMES[0]] } : d));
   };
-  const handleSave = () => {
-    onSave({ ...editData, merch_cost: merchTotal });
+  const handleSave = async () => {
+    setSubmitting(true);
+    const updated = { ...editData, merch_cost: merchTotal };
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .update({
+          branch: updated.branch,
+          date: updated.date,
+          new_register: updated.new_register,
+          new_reg_purchased: updated.new_reg_purchased,
+          buy_value_new: updated.buy_value_new,
+          existing_users: updated.existing_users,
+          buy_value_existing: updated.buy_value_existing,
+          footfall: updated.footfall,
+          step_in: updated.step_in,
+          team_cost: updated.team_cost,
+          merch_cost: updated.merch_cost,
+          merch_items: JSON.stringify(updated.merch_items || []),
+          staff_in_charge: JSON.stringify(updated.staff_in_charge || [])
+        })
+        .eq('id', updated.id);
+
+      if (error) throw error;
+      onSave(updated);
+      setIsEditing(false);
+    } catch (err: any) {
+      window.alert('Failed to save changes: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteClick = async () => {
+    if (!window.confirm('Delete this submission?')) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('submissions')
+        .delete()
+        .eq('id', editData.id);
+
+      if (error) throw error;
+      onDelete(editData.id);
+    } catch (err: any) {
+      window.alert('Failed to delete: ' + err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -95,7 +144,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--gold-dim)', color: 'var(--gold)', border: '1px solid rgba(167,123,39,0.3)' }} onClick={() => setIsEditing(true)} title="Edit"><i className="fa-solid fa-pen-to-square"></i> Edit</button>
-            <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} onClick={() => onDelete(editData.id)} title="Delete"><i className="fa-solid fa-trash"></i> Delete</button>
+            <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} onClick={handleDeleteClick} disabled={submitting} title="Delete"><i className="fa-solid fa-trash"></i> Delete</button>
             <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px', lineHeight: 1, fontSize: '14px' }} title="Close">✕</button>
           </div>
         </div>
@@ -203,8 +252,8 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '18px' }}>
-              <button className="btn btn-primary" onClick={handleSave} style={{ flex: 1 }}>
-                <i className="fa-solid fa-check"></i> Save Changes
+              <button className="btn btn-primary" onClick={handleSave} disabled={submitting} style={{ flex: 1, opacity: submitting ? 0.6 : 1 }}>
+                <i className="fa-solid fa-check"></i> {submitting ? 'Saving...' : 'Save Changes'}
               </button>
               <button className="btn btn-ghost" onClick={() => setIsEditing(false)} style={{ flex: 1 }}>
                 Cancel

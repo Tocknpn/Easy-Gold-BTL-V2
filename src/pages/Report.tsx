@@ -122,7 +122,6 @@ export default function Report() {
     setModal(m => ({ ...m, submission: saved }));
   };
   const handleDelete = (id: string) => {
-    if (!window.confirm('Delete this submission?')) return;
     setSubmissions(prev => prev.filter(s => s.id !== id));
     closeModal();
   };

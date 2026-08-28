@@ -244,7 +244,6 @@ export default function Dashboard() {
   const openModal = (sub: Submission) => setModal({ open: true, submission: sub, isEditing: false });
   const closeModal = () => setModal({ open: false, submission: null, isEditing: false });
   const handleDelete = (id: string) => {
-    if (!window.confirm('Delete this submission?')) return;
     setSubmissions(prev => prev.filter(s => s.id !== id));
     closeModal();
   };

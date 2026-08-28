@@ -192,12 +192,6 @@ export default function SubmitResults() {
         )}
       </div>
 
-      {done && (
-        <div className="alert alert-ok" style={{ marginBottom: '20px' }}>
-          <i className="fa-solid fa-circle-check"></i> {done}
-        </div>
-      )}
-
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
           <div>
@@ -295,6 +289,11 @@ export default function SubmitResults() {
               <i className="fa-solid fa-check"></i> {submitting ? 'Submitting...' : 'Submit Results'}
             </button>
           </div>
+          {done && (
+            <div className="alert alert-ok" style={{ marginTop: '16px', background: 'var(--green)', color: '#fff', border: 'none', textAlign: 'center', justifyContent: 'center' }}>
+              <i className="fa-solid fa-circle-check"></i> {done}
+            </div>
+          )}
         </form>
       </div>
     </div>
