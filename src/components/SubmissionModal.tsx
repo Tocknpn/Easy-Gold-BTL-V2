@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { fmtLAK, fmtLAKShort, MERCH_CATALOG, STAFF_NAMES } from '../lib/submissions';
+import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES } from '../lib/submissions';
 import { fetchStaff } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
@@ -39,9 +39,11 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
   const [editData, setEditData] = useState<Submission | null>(null);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [merchCatalog, setMerchCatalog] = useState<MerchItem[]>(MERCH_CATALOG);
 
   useEffect(() => {
     fetchStaff().then(setStaffList);
+    fetchMerchCatalog().then(setMerchCatalog);
   }, []);
 
   // Sync local edit copy whenever the modal opens or the record changes
@@ -68,7 +70,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
     setEditData(d => (d ? { ...d, merch_items: d.merch_items.filter((_, i) => i !== idx) } : d));
   };
   const addMerch = () => {
-    setEditData(d => (d ? { ...d, merch_items: [...(d.merch_items || []), { name: MERCH_CATALOG[0].name, qty: 1, cpu: MERCH_CATALOG[0].cpu }] } : d));
+    setEditData(d => (d ? { ...d, merch_items: [...(d.merch_items || []), { name: merchCatalog[0]?.name || '', qty: 1, cpu: merchCatalog[0]?.cpu || 0 }] } : d));
   };
   const updateStaff = (idx: number, name: string) => {
     setEditData(d => (d ? { ...d, staff_in_charge: d.staff_in_charge.map((s, i) => (i === idx ? name : s)) } : d));
@@ -209,13 +211,13 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
                 <span>Item</span><span>Qty</span><span>Cost</span><span></span>
               </div>
               {(editData.merch_items || []).map((item, idx) => {
-                const def = MERCH_CATALOG.find(m => m.name === item.name) || MERCH_CATALOG[0];
-                const cpu = item.cpu || def.cpu;
+                const def = merchCatalog.find(m => m.name === item.name) || merchCatalog[0];
+                const cpu = item.cpu || def?.cpu || 0;
                 const lineTotal = Number(item.qty) * cpu;
                 return (
                   <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.6fr 0.85fr 0.45fr', gap: '10px', alignItems: 'end', marginBottom: '8px' }}>
-                    <select value={item.name} onChange={e => updateMerch(idx, { name: e.target.value, cpu: (MERCH_CATALOG.find(m => m.name === e.target.value)?.cpu || cpu) })} style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--txt-main)', padding: '9px 12px', borderRadius: '8px', fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 500 }}>
-                      {MERCH_CATALOG.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                    <select value={item.name} onChange={e => updateMerch(idx, { name: e.target.value, cpu: (merchCatalog.find(m => m.name === e.target.value)?.cpu || cpu) })} style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--txt-main)', padding: '9px 12px', borderRadius: '8px', fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 500 }}>
+                      {merchCatalog.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                     </select>
                     <input type="number" min={0} value={item.qty} onChange={e => updateMerch(idx, { qty: +e.target.value || 0 })} style={{ width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)', color: 'var(--txt-main)', padding: '9px 12px', borderRadius: '8px', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 500 }} />
                     <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700, color: 'var(--txt-sub)' }}>{fmtLAK(lineTotal)}</div>

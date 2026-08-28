@@ -99,6 +99,21 @@ export const MERCH_CATALOG: MerchItem[] = [
   { name: 'Gold Flyer', qty: 0, cpu: 3500 },
   { name: 'Tote Bag', qty: 0, cpu: 28000 },
 ];
+
+export async function fetchMerchCatalog(): Promise<MerchItem[]> {
+  try {
+    const { data, error } = await supabase.from('merch').select('*').order('itemname');
+    if (error || !data || data.length === 0) return MERCH_CATALOG;
+    return data.map((row: any) => ({
+      name: row.itemname,
+      qty: 0,
+      cpu: Number(row.cpu) || 0
+    }));
+  } catch {
+    return MERCH_CATALOG;
+  }
+}
+
 export const STAFF_NAMES = [
   'ສົມສະໜຸກ ພົມມະຈັນ',
   'ບຸນມີທິບ ວົງພັດທະນະ',

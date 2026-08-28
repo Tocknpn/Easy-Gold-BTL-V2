@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { MERCH_CATALOG, saveLocalSubmission, labelDate, fmtLAKShort } from '../lib/submissions';
+import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, labelDate, fmtLAKShort } from '../lib/submissions';
 import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
 
@@ -64,11 +64,15 @@ export default function SubmitResults() {
   const [staffRows, setStaffRows] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState('');
+  
+  const [merchCatalog, setMerchCatalog] = useState<MerchItem[]>(MERCH_CATALOG);
 
-
+  useEffect(() => {
+    fetchMerchCatalog().then(setMerchCatalog);
+  }, []);
 
   const merchCost = merchRows.reduce((a, i) => {
-    const cpu = MERCH_CATALOG.find(m => m.name === i.name)?.cpu || 0;
+    const cpu = merchCatalog.find(m => m.name === i.name)?.cpu || 0;
     return a + Number(i.qty) * cpu;
   }, 0);
   const totalBuy = buyNew + buyExisting;
@@ -233,11 +237,11 @@ export default function SubmitResults() {
           </div>
           <div style={{ marginBottom: '24px' }}>
             {merchRows.map((row, idx) => {
-              const cpu = MERCH_CATALOG.find(m => m.name === row.name)?.cpu || 0;
+              const cpu = merchCatalog.find(m => m.name === row.name)?.cpu || 0;
               return (
                 <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.5fr 0.7fr 0.4fr', gap: '10px', alignItems: 'end', marginBottom: '8px' }}>
                   <select value={row.name} onChange={e => updateMerch(idx, { name: e.target.value })} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
-                    {MERCH_CATALOG.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                    {merchCatalog.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                   </select>
                   <input type="number" min={0} placeholder="Qty" value={row.qty === 0 ? '' : row.qty} onChange={e => updateMerch(idx, { qty: e.target.value === '' ? 0 : Number(e.target.value) })} style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '13px', padding: '8px 12px' }} />
                   <div style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700, color: 'var(--txt-main)' }}>{fmtLAKShort(Number(row.qty) * cpu)}</div>
@@ -247,7 +251,7 @@ export default function SubmitResults() {
                 </div>
               );
             })}
-            <button type="button" className="btn btn-ghost" onClick={() => setMerchRows(rows => [...rows, { name: MERCH_CATALOG[0].name, qty: 1, cpu: MERCH_CATALOG[0].cpu }])} style={{ fontSize: '12px', padding: '6px 14px' }}>+ Add Merch Item</button>
+            <button type="button" className="btn btn-ghost" onClick={() => setMerchRows(rows => [...rows, { name: merchCatalog[0]?.name || '', qty: 1, cpu: merchCatalog[0]?.cpu || 0 }])} style={{ fontSize: '12px', padding: '6px 14px' }}>+ Add Merch Item</button>
           </div>
 
           {/* ── Staff In Charge — KPV teams only (hidden for Agency) ── */}
