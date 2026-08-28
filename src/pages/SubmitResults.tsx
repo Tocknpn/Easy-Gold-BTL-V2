@@ -245,7 +245,7 @@ export default function SubmitResults() {
                   <select value={row.name} onChange={e => updateMerch(idx, { name: e.target.value })} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
                     {MERCH_CATALOG.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                   </select>
-                  <input type="number" min={0} placeholder="Qty" value={row.qty} onChange={e => updateMerch(idx, { qty: +e.target.value || 0 })} style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '13px', padding: '8px 12px' }} />
+                  <input type="number" min={0} placeholder="Qty" value={row.qty === 0 ? '' : row.qty} onChange={e => updateMerch(idx, { qty: e.target.value === '' ? 0 : Number(e.target.value) })} style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '13px', padding: '8px 12px' }} />
                   <div style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '13px', fontWeight: 700, color: 'var(--txt-main)' }}>{fmtLAKShort(Number(row.qty) * cpu)}</div>
                   <button type="button" className="btn" onClick={() => setMerchRows(rows => rows.filter((_, i) => i !== idx))} style={{ padding: '4px', borderRadius: '6px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} title="Remove">
                     <i className="fa-solid fa-xmark"></i>
