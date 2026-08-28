@@ -239,9 +239,16 @@ export async function fetchSubmissions(): Promise<FetchResult> {
       status: r.status || 'active',
     }));
 
-    // Merge locally submitted records so they appear instantly everywhere
-    const seen = new Set(mapped.map(m => m.id));
-    const local = getLocalSubmissions().filter(l => !seen.has(l.id));
+    // Clean up ghost local records (duplicate rows) that successfully made it to Supabase
+    // Since IDs won't match (local is 'sub-123', DB is UUID), we match by signature
+    const seenSignatures = new Set(mapped.map(m => `${m.date}|${m.team}|${m.branch}`));
+    const rawLocal = getLocalSubmissions();
+    const local = rawLocal.filter(l => !seenSignatures.has(`${l.date}|${l.team}|${l.branch}`));
+    
+    // If we removed duplicates, permanently wipe them from the local cache
+    if (local.length !== rawLocal.length) {
+      localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(local));
+    }
     const merged = [...local, ...mapped].sort((a, b) => b.date.localeCompare(a.date));
 
     // Save to cache so next timeout can use this real data
