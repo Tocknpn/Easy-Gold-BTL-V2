@@ -14,6 +14,10 @@ import type { ModalState, Submission } from '../lib/submissions';
 import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
+// ── Brand palette for NC / EC ─────────────────────────────────────────────
+const C_NC = '#F59E0B'; // amber  — warm, high contrast
+const C_EC = '#10B981'; // emerald — cool, very distinct from amber
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend);
 
 // ── KPI targets (absolute values) ─────────────────────────────────────────
@@ -31,7 +35,7 @@ const pctChange = (curr: number, prev: number): number | null => {
 };
 
 // ── Utility: formatted % change badge ────────────────────────────────────
-function DeltaBadge({ curr, prev, invertGood = false }: { curr: number; prev: number; invertGood?: boolean }) {
+function DeltaBadge({ curr, prev, invertGood = false, compact = false }: { curr: number; prev: number; invertGood?: boolean; compact?: boolean }) {
   const chg = pctChange(curr, prev);
   if (chg === null) return <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>no prev data</span>;
   const delta = curr - prev;
@@ -39,18 +43,18 @@ function DeltaBadge({ curr, prev, invertGood = false }: { curr: number; prev: nu
   const color = isGood ? 'var(--green)' : 'var(--red)';
   const arrow = chg > 0 ? '▲' : '▼';
   const abs = Math.abs(chg).toFixed(0);
+  const deltaStr = compact ? fmtLAKShort(Math.abs(delta)) : Math.abs(Math.round(delta)).toLocaleString();
+  const sign = delta > 0 ? '+' : '−';
   return (
     <span style={{ fontSize: '10px', fontWeight: 700, color }}>
       {arrow} {abs}% vs prev&nbsp;
-      <span style={{ opacity: 0.75 }}>
-        ({delta > 0 ? '+' : ''}{Math.round(delta).toLocaleString()})
-      </span>
+      <span style={{ opacity: 0.75 }}>({sign}{deltaStr})</span>
     </span>
   );
 }
 
 // ── Utility: vs-target badge ───────────────────────────────────────────────
-function TargetBadge({ curr, target, invertGood = false, label }: { curr: number; target: number; invertGood?: boolean; label?: string }) {
+function TargetBadge({ curr, target, invertGood = false }: { curr: number; target: number; invertGood?: boolean }) {
   const diff = curr - target;
   const pct = target > 0 ? (diff / target) * 100 : 0;
   const isOver = diff > 0;
@@ -60,8 +64,7 @@ function TargetBadge({ curr, target, invertGood = false, label }: { curr: number
   return (
     <span style={{ fontSize: '10px', fontWeight: 700, color }}>
       {icon} vs target: {isOver ? '+' : ''}{Math.round(pct)}%&nbsp;
-      <span style={{ opacity: 0.75 }}>({isOver ? '+' : ''}{Math.round(diff).toLocaleString()})</span>
-      {label && <span style={{ color: 'var(--txt-dim)', fontWeight: 400 }}> · {label}</span>}
+      <span style={{ opacity: 0.75 }}>({isOver ? '+' : ''}{fmtLAKShort(Math.abs(Math.round(diff)))})</span>
     </span>
   );
 }
@@ -69,14 +72,12 @@ function TargetBadge({ curr, target, invertGood = false, label }: { curr: number
 // ── Utility: split row (NC/EC or KPV/Agency) ──────────────────────────────
 function SplitRow({ items }: { items: { label: string; val: string; pct: number; color: string }[] }) {
   return (
-    <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '5px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+    <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
       {items.map(({ label, val, pct, color }) => (
-        <span key={label}>
-          <span style={{ fontWeight: 700, color }}>{label}:</span>{' '}
-          {val}{' '}
-          <span style={{ background: color + '22', color, borderRadius: '4px', padding: '0 4px', fontWeight: 700 }}>
-            {pct}%
-          </span>
+        <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+          <span style={{ fontWeight: 700, color }}>{label}:</span>
+          <span>{val}</span>
+          <span style={{ background: color + '22', color, borderRadius: '4px', padding: '0 4px', fontWeight: 700 }}>{pct}%</span>
         </span>
       ))}
     </div>
@@ -257,15 +258,15 @@ export default function Dashboard() {
       {
         label: 'New Customers (NC)',
         data: trendData.nc,
-        borderColor: '#1B56C8',
-        backgroundColor: 'rgba(27,86,200,0.08)',
+        borderColor: C_NC,
+        backgroundColor: 'rgba(245,158,11,0.09)',
         fill: true, tension: 0.4, borderWidth: 2, pointRadius: 3,
       },
       {
         label: 'Existing (EC)',
         data: trendData.ec,
-        borderColor: '#4DA6FF',
-        backgroundColor: 'rgba(77,166,255,0.06)',
+        borderColor: C_EC,
+        backgroundColor: 'rgba(16,185,129,0.07)',
         fill: true, tension: 0.4, borderWidth: 2, pointRadius: 3,
       },
     ],
@@ -284,15 +285,15 @@ export default function Dashboard() {
   const donutOp: any = { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { display: false } } };
   const donutAcqData = {
     labels: ['New Customer', 'Existing'],
-    datasets: [{ data: [pctNC, pctEC], backgroundColor: ['#1B56C8', '#4DA6FF'], borderWidth: 0, hoverOffset: 4 }],
+    datasets: [{ data: [pctNC, pctEC], backgroundColor: [C_NC, C_EC], borderWidth: 0, hoverOffset: 4 }],
   };
   const donutTeamData = {
     labels: ['KPV Team', 'Agency Team'],
-    datasets: [{ data: [pctKPV, pctAgency], backgroundColor: ['#1B56C8', '#4DA6FF'], borderWidth: 0, hoverOffset: 4 }],
+    datasets: [{ data: [pctKPV, pctAgency], backgroundColor: [C_NC, C_EC], borderWidth: 0, hoverOffset: 4 }],
   };
   const donutSpendData = {
     labels: ['Team Cost', 'Merch'],
-    datasets: [{ data: [spendKPV, spendAgency], backgroundColor: ['#1B56C8', '#4DA6FF'], borderWidth: 0, hoverOffset: 4 }],
+    datasets: [{ data: [spendKPV, spendAgency], backgroundColor: [C_NC, C_EC], borderWidth: 0, hoverOffset: 4 }],
   };
 
   // ── KPI card style helpers ────────────────────────────────────────────────
@@ -355,17 +356,14 @@ export default function Dashboard() {
 
           {/* NC/EC split */}
           <SplitRow items={[
-            { label: 'NC', val: kpi.nc.toLocaleString(), pct: pctNC, color: 'var(--accent)' },
-            { label: 'EC', val: kpi.ec.toLocaleString(), pct: pctEC, color: 'var(--blue)' },
+            { label: 'NC', val: kpi.nc.toLocaleString(), pct: pctNC, color: C_NC },
+            { label: 'EC', val: kpi.ec.toLocaleString(), pct: pctEC, color: C_EC },
           ]} />
 
-          {/* % change vs prev */}
-          <div style={{ marginTop: '6px' }}>
+          <div style={{ marginTop: '4px' }}>
             <DeltaBadge curr={kpi.totalAcq} prev={prevKpi.totalAcq} />
           </div>
-
-          {/* Footfall */}
-          <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--txt-dim)' }}>
+          <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
             Footfall: <strong style={{ color: 'var(--txt-sub)' }}>{kpi.footfall.toLocaleString()}</strong>
           </div>
         </div>
@@ -380,15 +378,14 @@ export default function Dashboard() {
           <div className="kpi-val">{fmtLAKShort(kpi.totalBuy)}</div>
 
           <SplitRow items={[
-            { label: 'NC', val: fmtLAKShort(kpi.buyNew), pct: pctBuyNC, color: 'var(--accent)' },
-            { label: 'EC', val: fmtLAKShort(kpi.buyExisting), pct: pctBuyEC, color: 'var(--blue)' },
+            { label: 'NC', val: fmtLAKShort(kpi.buyNew), pct: pctBuyNC, color: C_NC },
+            { label: 'EC', val: fmtLAKShort(kpi.buyExisting), pct: pctBuyEC, color: C_EC },
           ]} />
 
-          <div style={{ marginTop: '6px' }}>
-            <DeltaBadge curr={kpi.totalBuy} prev={prevKpi.totalBuy} />
+          <div style={{ marginTop: '4px' }}>
+            <DeltaBadge curr={kpi.totalBuy} prev={prevKpi.totalBuy} compact />
           </div>
-
-          <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--txt-dim)' }}>
+          <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
             Avg/Acq: <strong style={{ color: 'var(--green)' }}>{fmtLAK(Math.round(kpi.avgBuyPerAcq))}</strong>
           </div>
         </div>
@@ -404,11 +401,10 @@ export default function Dashboard() {
             { label: 'Svc', val: fmtLAKShort(kpi.teamCost), pct: pctSpendTeam, color: 'var(--red)' },
           ]} />
 
-          <div style={{ marginTop: '6px' }}>
-            <DeltaBadge curr={kpi.totalCost} prev={prevKpi.totalCost} invertGood />
+          <div style={{ marginTop: '4px' }}>
+            <DeltaBadge curr={kpi.totalCost} prev={prevKpi.totalCost} invertGood compact />
           </div>
-
-          <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--txt-dim)' }}>
+          <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
             KPV: <strong style={{ color: 'var(--txt-sub)' }}>{fmtLAKShort(kpi.kpv.cost)}</strong>
             &nbsp;·&nbsp;Agency: <strong style={{ color: 'var(--txt-sub)' }}>{fmtLAKShort(kpi.agency.cost)}</strong>
           </div>
@@ -422,13 +418,13 @@ export default function Dashboard() {
 
           {/* KPV vs Agency split */}
           <SplitRow items={[
-            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: 'var(--accent)' },
-            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: 'var(--blue)' },
+            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: C_NC },
+            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: C_EC },
           ]} />
 
-          <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <DeltaBadge curr={kpi.cpa} prev={prevKpi.cpa} invertGood />
-            <TargetBadge curr={kpi.cpa} target={TARGETS.cpa} invertGood label="Under" />
+            <TargetBadge curr={kpi.cpa} target={TARGETS.cpa} invertGood />
           </div>
         </div>
 
@@ -439,13 +435,13 @@ export default function Dashboard() {
           <div className="kpi-val">{fmtLAK(Math.round(kpi.cpo))}</div>
 
           <SplitRow items={[
-            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: 'var(--accent)' },
-            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: 'var(--blue)' },
+            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: C_NC },
+            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: C_EC },
           ]} />
 
-          <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <DeltaBadge curr={kpi.cpo} prev={prevKpi.cpo} invertGood />
-            <TargetBadge curr={kpi.cpo} target={TARGETS.cpo} invertGood label="Under" />
+            <TargetBadge curr={kpi.cpo} target={TARGETS.cpo} invertGood />
           </div>
         </div>
 
@@ -456,13 +452,13 @@ export default function Dashboard() {
           <div className="kpi-val">{fmtLAK(Math.round(kpi.cpao))}</div>
 
           <SplitRow items={[
-            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: 'var(--accent)' },
-            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: 'var(--blue)' },
+            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: C_NC },
+            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: C_EC },
           ]} />
 
-          <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <DeltaBadge curr={kpi.cpao} prev={prevKpi.cpao} invertGood />
-            <TargetBadge curr={kpi.cpao} target={TARGETS.cpao} invertGood label="Under" />
+            <TargetBadge curr={kpi.cpao} target={TARGETS.cpao} invertGood />
           </div>
         </div>
       </div>
@@ -475,8 +471,8 @@ export default function Dashboard() {
           <div className="kpi-val" style={{ color: 'var(--accent)' }}>{fmtLAK(Math.round(kpi.avgBuyPerAcq))}</div>
 
           <SplitRow items={[
-            { label: 'NC', val: fmtLAK(kpi.nc > 0 ? Math.round(kpi.buyNew / kpi.nc) : 0), pct: pctBuyNC, color: 'var(--accent)' },
-            { label: 'EC', val: fmtLAK(kpi.ec > 0 ? Math.round(kpi.buyExisting / kpi.ec) : 0), pct: pctBuyEC, color: 'var(--blue)' },
+            { label: 'NC', val: fmtLAK(kpi.nc > 0 ? Math.round(kpi.buyNew / kpi.nc) : 0), pct: pctBuyNC, color: C_NC },
+            { label: 'EC', val: fmtLAK(kpi.ec > 0 ? Math.round(kpi.buyExisting / kpi.ec) : 0), pct: pctBuyEC, color: C_EC },
           ]} />
 
           <div style={{ marginTop: '5px', fontSize: '10px', color: 'var(--txt-dim)' }}>Total Buy Value ÷ Total Acquisition</div>
@@ -488,8 +484,8 @@ export default function Dashboard() {
           <div className="kpi-val" style={{ color: 'var(--blue)' }}>{kpi.avgAcqPerDay.toFixed(1)}</div>
 
           <SplitRow items={[
-            { label: 'NC', val: (kpi.nc / kpi.activeDays).toFixed(1), pct: pctNC, color: 'var(--accent)' },
-            { label: 'EC', val: (kpi.ec / kpi.activeDays).toFixed(1), pct: pctEC, color: 'var(--blue)' },
+            { label: 'NC', val: (kpi.nc / kpi.activeDays).toFixed(1), pct: pctNC, color: C_NC },
+            { label: 'EC', val: (kpi.ec / kpi.activeDays).toFixed(1), pct: pctEC, color: C_EC },
           ]} />
 
           <div style={{ marginTop: '5px', fontSize: '10px', color: 'var(--txt-dim)' }}>
@@ -532,14 +528,14 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', height: '160px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '140px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#1B56C8', flexShrink: 0 }}></span>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: C_NC, flexShrink: 0 }}></span>
                 <span style={{ fontSize: '12px' }}>New Customer</span>
-                <strong style={{ color: 'var(--accent)', marginLeft: 'auto' }}>{pctNC}%</strong>
+                <strong style={{ color: C_NC, marginLeft: 'auto' }}>{pctNC}%</strong>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#4DA6FF', flexShrink: 0 }}></span>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: C_EC, flexShrink: 0 }}></span>
                 <span style={{ fontSize: '12px' }}>Existing</span>
-                <strong style={{ color: 'var(--blue)', marginLeft: 'auto' }}>{pctEC}%</strong>
+                <strong style={{ color: C_EC, marginLeft: 'auto' }}>{pctEC}%</strong>
               </div>
             </div>
             <div style={{ width: '150px', height: '150px', flexShrink: 0, marginLeft: 'auto' }}>
@@ -557,14 +553,14 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', height: '160px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '140px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#1B56C8', flexShrink: 0 }}></span>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: C_NC, flexShrink: 0 }}></span>
                 <span style={{ fontSize: '12px' }}>KPV Team</span>
-                <strong style={{ color: 'var(--accent)', marginLeft: 'auto' }}>{pctKPV}%</strong>
+                <strong style={{ color: C_NC, marginLeft: 'auto' }}>{pctKPV}%</strong>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#4DA6FF', flexShrink: 0 }}></span>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: C_EC, flexShrink: 0 }}></span>
                 <span style={{ fontSize: '12px' }}>Agency Team</span>
-                <strong style={{ color: 'var(--blue)', marginLeft: 'auto' }}>{pctAgency}%</strong>
+                <strong style={{ color: C_EC, marginLeft: 'auto' }}>{pctAgency}%</strong>
               </div>
             </div>
             <div style={{ width: '150px', height: '150px', flexShrink: 0, marginLeft: 'auto' }}>
@@ -579,14 +575,14 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', height: '160px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: '140px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#1B56C8', flexShrink: 0 }}></span>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: C_NC, flexShrink: 0 }}></span>
                 <span style={{ fontSize: '12px' }}>KPV Team</span>
-                <strong style={{ color: 'var(--accent)', marginLeft: 'auto' }}>{spendKPV}%</strong>
+                <strong style={{ color: C_NC, marginLeft: 'auto' }}>{spendKPV}%</strong>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: '#4DA6FF', flexShrink: 0 }}></span>
+                <span style={{ width: '11px', height: '11px', borderRadius: '3px', background: C_EC, flexShrink: 0 }}></span>
                 <span style={{ fontSize: '12px' }}>Agency Team</span>
-                <strong style={{ color: 'var(--blue)', marginLeft: 'auto' }}>{spendAgency}%</strong>
+                <strong style={{ color: C_EC, marginLeft: 'auto' }}>{spendAgency}%</strong>
               </div>
             </div>
             <div style={{ width: '150px', height: '150px', flexShrink: 0, marginLeft: 'auto' }}>
