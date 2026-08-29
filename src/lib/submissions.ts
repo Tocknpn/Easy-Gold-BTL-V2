@@ -232,7 +232,11 @@ export async function fetchSubmissions(): Promise<FetchResult> {
     if (error) {
       // Supabase replied with an error — serve cache if available
       const cached = getCachedSubmissions();
-      return { data: cached.data, error, stale: cached.data.length > 0, cachedAt: cached.cachedAt };
+      const local = getLocalSubmissions();
+      const combined = [...local, ...cached.data].filter(
+        (v, i, a) => a.findIndex(x => x.id === v.id) === i
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
     }
 
     const mapped: Submission[] = (data || []).map((r: any, i: number) => ({
