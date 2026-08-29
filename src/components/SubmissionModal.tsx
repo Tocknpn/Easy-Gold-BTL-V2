@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES } from '../lib/submissions';
@@ -56,6 +56,28 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
       setIsEditing(false);
     }
   }, [open, submission]);
+
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Focus management + Escape-to-close (WCAG 2.4.3, 2.1.1)
+  useEffect(() => {
+    if (!open) return;
+    const prevActive = document.activeElement as HTMLElement | null;
+    const dlg = dialogRef.current;
+    if (dlg) {
+      dlg.focus();
+      const focusables = dlg.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusables.length) focusables[0].focus();
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      prevActive?.focus?.();
+    };
+  }, [open]);
 
   if (!open || !editData) return null;
 
@@ -137,11 +159,11 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-            <div className="card" style={{ width: '100%', maxWidth: '720px', maxHeight: '90vh', overflow: 'auto', padding: '28px' }}>
+            <div className="card" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="submission-dialog-title" tabIndex={-1} style={{ width: '100%', maxWidth: '720px', maxHeight: '90vh', overflow: 'auto', padding: '28px' }}>
         {/* ── Header ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
           <div>
-            <h2 style={{ fontSize: '16px', margin: '0', fontWeight: 700 }}>Submission Detail</h2>
+            <h2 id="submission-dialog-title" style={{ fontSize: '16px', margin: '0', fontWeight: 700 }}>Submission Detail</h2>
             <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginTop: '4px' }}>{editData.branch} · {editData.date}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

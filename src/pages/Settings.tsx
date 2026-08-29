@@ -835,8 +835,8 @@ return (
         </div>
 
         {merchMsg && (
-          <div className={`alert ${merchMsg.type === 'ok' ? 'alert-ok' : 'alert-info'}`} style={{ marginBottom: '14px' }}>
-            <i className={`fa-solid ${merchMsg.type === 'ok' ? 'fa-check' : 'fa-triangle-exclamation'}`}></i> {merchMsg.text}
+          <div role="status" className={`alert ${merchMsg.type === 'ok' ? 'alert-ok' : 'alert-info'}`} style={{ marginBottom: '14px' }}>
+            <i className={`fa-solid ${merchMsg.type === 'ok' ? 'fa-check' : 'fa-triangle-exclamation'}`} aria-hidden="true"></i> {merchMsg.text}
           </div>
         )}
 

@@ -8,7 +8,7 @@
   --border: #D4DDF0;
   --txt-main: #0F1E3C;     /* deep navy text */
   --txt-sub: #5A6E92;
-  --txt-dim: #8FA0BE;
+  --txt-dim: #43587F;      /* darkened for WCAG AA 4.5:1 on light bg */
 
   --accent: #1B56C8;       /* primary action blue */
   --accent-hover: #1647AA;
@@ -17,13 +17,13 @@
   /* kept as semantic aliases — maps accent → blue, removes yellow gold */
   --gold: #1B56C8;
   --gold-dim: rgba(27, 86, 200, 0.12);
-  --green: #22C58B;
+  --green: #0E8A5E;        /* darkened for AA */
   --green-dim: rgba(34, 197, 139, 0.14);
-  --red: #E05252;
+  --red: #C3382B;          /* darkened for AA */
   --red-dim: rgba(224, 82, 82, 0.13);
-  --blue: #4DA6FF;
+  --blue: #1F6FD6;         /* darkened for AA */
   --blue-dim: rgba(77, 166, 255, 0.14);
-  --orange: #F4943A;
+  --orange: #B45A0D;       /* darkened for AA */
   --orange-dim: rgba(244, 148, 58, 0.13);
 
   --input-bg: #F4F7FD;
@@ -50,7 +50,7 @@
   --border: #1E2D4A;
   --txt-main: #E8EEF8;
   --txt-sub: #7A90B8;
-  --txt-dim: #4A5F82;
+  --txt-dim: #9FB0D0;      /* lightened for WCAG AA on dark bg */
 
   --accent: #4DA6FF;
   --accent-hover: #3A94F0;
@@ -90,8 +90,55 @@ h1,h2,h3,h4 { font-weight: 600; color: var(--txt-main); }
 .form-field { margin-bottom: 20px; }
 .form-field label { display: block; font-size: 11px; font-weight: 700; color: var(--txt-dim); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em; }
 input, select { width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--txt-main); padding: 10px 14px; border-radius: 8px; font-family: var(--font-sans); font-size: 14px; font-weight: 500; transition: background 0.3s, color 0.3s, border 0.3s; }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
-::placeholder { color: var(--txt-dim); }
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+::-moz-focus-inner { border: 0; }
+::placeholder { color: var(--txt-dim); opacity: 1; }
+
+/* Visible keyboard focus indicators — WCAG 2.4.7 AA */
+.btn:focus-visible,
+.nav-item:focus-visible,
+.pill:focus-visible,
+.cal-ticket:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+a:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+.toggle-switch input:focus-visible + .slider {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+
+/* Visually-hidden utility (skip links, screen-reader-only labels) — WCAG 1.3.1/2.4.1 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10000;
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 0 0 8px 0;
+  font-weight: 700;
+  text-decoration: none;
+}
+.skip-link:focus {
+  left: 0;
+}
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 20px; font-family: var(--font-sans); font-size: 13px; font-weight: 600; border-radius: 8px; cursor: pointer; border: none; transition: all 0.2s; }
 .btn-primary { background: var(--accent); color: #fff; }

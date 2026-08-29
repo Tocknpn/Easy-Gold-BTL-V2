@@ -178,9 +178,9 @@ export default function Report() {
       {/* Filters + Export */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-          <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
+          <input type="date" aria-label="Start date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+          <input type="date" aria-label="End date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+          <select aria-label="Filter by team" value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
             <option>All Teams</option>
             <option>KPV Team</option>
             <option>Agency Team</option>
@@ -213,6 +213,10 @@ export default function Report() {
                 <th
                   key={col.key}
                   onClick={() => toggleSort(col.key)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(col.key); } }}
+                  role="button"
+                  tabIndex={0}
+                  aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   title={`Sort by ${col.label.toLowerCase()}`}
                   style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                 >
@@ -230,6 +234,9 @@ export default function Report() {
               <tr
                 key={r.s.id}
                 onClick={() => openModal(r.s)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(r.s); } }}
+                role="button"
+                tabIndex={0}
                 title="Click to view details"
                 style={{ cursor: 'pointer' }}
               >

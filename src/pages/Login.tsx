@@ -91,14 +91,14 @@ export default function Login() {
 
         {/* Normal error */}
         {error && (
-          <div className="alert" style={{ background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(224,82,82,0.2)', marginBottom: '20px' }}>
-            <i className="fa-solid fa-circle-exclamation"></i> {error}
+          <div role="alert" className="alert" style={{ background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(224,82,82,0.2)', marginBottom: '20px' }}>
+            <i className="fa-solid fa-circle-exclamation" aria-hidden="true"></i> {error}
           </div>
         )}
 
         {/* Timeout — special message with retry hint */}
         {isTimeout && (
-          <div style={{
+          <div role="alert" style={{
             background: 'rgba(244,148,58,0.1)',
             border: '1px solid rgba(244,148,58,0.35)',
             borderRadius: '10px',

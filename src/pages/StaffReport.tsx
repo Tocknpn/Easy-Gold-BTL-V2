@@ -291,8 +291,11 @@ export default function StaffReport() {
               {staffSummary.map(s => (
                 <tr
                   key={s.name}
-                  onClick={() => setStaffName(s.name)}
-                  title="Click to view attendance detail"
+                  onClick={() => s.days > 0 && setStaffName(s.name)}
+                  onKeyDown={(e) => { if (s.days > 0 && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setStaffName(s.name); } }}
+                  role={s.days > 0 ? 'button' : undefined}
+                  tabIndex={s.days > 0 ? 0 : undefined}
+                  title={s.days > 0 ? 'Click to view attendance detail' : 'No working days in range'}
                   style={{ cursor: s.days > 0 ? 'pointer' : undefined }}
                 >
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{s.staffId}</td>

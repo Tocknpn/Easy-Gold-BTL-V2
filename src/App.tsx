@@ -81,6 +81,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <a className="skip-link" href="#main">Skip to main content</a>
       <Sidebar
         user={user}
         onLogout={handleLogout}
@@ -88,7 +89,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         collapsed={collapsed}
         onToggleCollapse={handleToggleCollapse}
       />
-      <div id="main">
+      <main id="main">
         <header className="topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {/* Mini expand button in topbar when sidebar is collapsed */}
@@ -126,7 +127,7 @@ function Layout({ children }: { children: React.ReactNode }) {
             {children}
           </div>
         </div>
-      </div>
+      </main>
     </>
   );
 }

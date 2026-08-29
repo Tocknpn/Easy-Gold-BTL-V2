@@ -56,6 +56,14 @@ export default function CalendarRoute() {
     load();
   }, []);
 
+  // Escape closes the day-summary modal (WCAG 2.1.1)
+  useEffect(() => {
+    if (!dayModal) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDayModal(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [dayModal]);
+
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -187,6 +195,8 @@ export default function CalendarRoute() {
                             <div
                               key={`p${i}-${j}`}
                               className="cal-ticket plan"
+                              role="button"
+                              tabIndex={0}
                               onClick={() => {
                                 if (checkedIn) {
                                   if (daySubs.length === 1) openModal(daySubs[0]);
@@ -196,6 +206,19 @@ export default function CalendarRoute() {
                                   navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`);
                                 }
                               }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  if (checkedIn) {
+                                    if (daySubs.length === 1) openModal(daySubs[0]);
+                                    else if (daySubs.length > 1) setDayModal({ date: r.date, subs: daySubs });
+                                    else alert('No submission recorded yet for this location.');
+                                  } else {
+                                    navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`);
+                                  }
+                                }
+                              }}
+                              aria-label={checkedIn ? `Checked in at ${loc} — view submission` : `Check in at ${loc} on ${r.date}`}
                               title={checkedIn ? `Checked in at ${loc} — click to view submission` : `Click to Check-In at ${loc} on ${r.date}`}
                               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                             >
@@ -213,10 +236,20 @@ export default function CalendarRoute() {
                     {daySubs.length > 0 && (
                       <div
                         className="cal-ticket result"
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
                           if (daySubs.length === 1) openModal(daySubs[0]);
                           else setDayModal({ date: dateStr, subs: daySubs });
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            if (daySubs.length === 1) openModal(daySubs[0]);
+                            else setDayModal({ date: dateStr, subs: daySubs });
+                          }
+                        }}
+                        aria-label={`${totalAcq(daySubs)} acquisitions on ${dateStr} — view details`}
                         title={daySubs.length === 1
                           ? `${totalAcq(daySubs)} Acquisition ✓ · ${daySubs[0].branch} · Buy ${fmtLAK(totalBuy(daySubs))} — click to view details`
                           : `${totalAcq(daySubs)} Acquisitions total (sum of ${daySubs.length} records) · Buy ${fmtLAK(totalBuy(daySubs))} — click to choose a record`}
@@ -246,18 +279,21 @@ export default function CalendarRoute() {
             {/* Day Summary modal — big picture first, then pick a record for details */}
       {dayModal && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="day-modal-title"
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
           onClick={(e) => { if (e.target === e.currentTarget) setDayModal(null); }}
         >
           <div className="card" style={{ width: '100%', maxWidth: '540px', maxHeight: '90vh', overflow: 'auto', padding: '28px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
               <div>
-                <h2 style={{ fontSize: '16px', margin: 0, fontWeight: 700 }}>Submissions — {new Date(dayModal.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</h2>
+                <h2 id="day-modal-title" style={{ fontSize: '16px', margin: 0, fontWeight: 700 }}>Submissions — {new Date(dayModal.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}</h2>
                 <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginTop: '4px' }}>
                   {dayModal.subs.length} record{dayModal.subs.length > 1 ? 's' : ''} · select one to view details
                 </div>
               </div>
-              <button onClick={() => setDayModal(null)} className="btn btn-ghost" style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px', lineHeight: 1 }}>✕</button>
+              <button onClick={() => setDayModal(null)} aria-label="Close" className="btn btn-ghost" style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px', lineHeight: 1 }}>✕</button>
             </div>
 
             {/* Big picture */}

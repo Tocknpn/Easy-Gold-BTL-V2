@@ -34,6 +34,7 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
       to={to}
       className={navItemClass(to)}
       title={collapsed ? label : undefined}
+      aria-label={collapsed ? label : undefined}
       style={collapsed ? { justifyContent: 'center', padding: '10px 0' } : undefined}
     >
       <i className={icon} style={collapsed ? { margin: 0, width: 'auto' } : undefined}></i>
@@ -156,6 +157,7 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             <button
               onClick={() => setIsDark(d => !d)}
               title={isDark ? 'Light mode' : 'Dark mode'}
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               style={{
                 width: '100%',
                 background: 'none',
@@ -176,7 +178,7 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
                 <i className="fa-solid fa-moon" style={{ marginRight: '10px', opacity: 0.7 }}></i>Dark Mode
               </span>
               <label className="toggle-switch">
-                <input type="checkbox" checked={isDark} onChange={e => setIsDark(e.target.checked)} />
+                <input type="checkbox" checked={isDark} onChange={e => setIsDark(e.target.checked)} aria-label="Toggle dark mode" />
                 <span className="slider"></span>
               </label>
             </div>
@@ -195,12 +197,24 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             <span>{user.role === 'admin' ? 'Administrator' : user.role === 'manager' ? 'Event Manager' : `Staff · ${user.team || 'Field'}`}</span>
           </div>
         )}
-        <i
-          className="fa-solid fa-arrow-right-from-bracket"
-          style={{ color: 'var(--nav-txt)', cursor: 'pointer', flexShrink: 0 }}
+        <button
           onClick={onLogout}
           title="Logout"
-        ></i>
+          aria-label="Logout"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--nav-txt)',
+            cursor: 'pointer',
+            flexShrink: 0,
+            fontSize: '15px',
+            padding: '6px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <i className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+        </button>
       </div>
     </aside>
   );

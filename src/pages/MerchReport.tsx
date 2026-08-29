@@ -80,9 +80,9 @@ export default function MerchReport() {
       {/* Filter bar */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-          <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-          <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
+          <input type="date" aria-label="From date" value={from} onChange={e => setFrom(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+          <input type="date" aria-label="To date" value={to} onChange={e => setTo(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+          <select aria-label="Filter by team" value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
             <option>All Teams</option>
             <option>KPV Team</option>
             <option>Agency Team</option>

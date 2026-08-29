@@ -7,8 +7,8 @@ export default function RouteMap() {
       </div>
       <div className="card" style={{ padding: 0, overflow: 'hidden', height: '600px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '15px' }}>
-          <select style={{ width: '200px' }}><option>All Teams</option></select>
-          <input type="date" style={{ width: '150px' }} />
+          <select aria-label="Filter by team" style={{ width: '200px' }}><option>All Teams</option></select>
+          <input type="date" aria-label="Filter by date" style={{ width: '150px' }} />
         </div>
         <div style={{ flex: 1, background: '#e5e3df', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {/* Placeholder for actual Map integration like Google Maps or Leaflet */}

@@ -31,6 +31,7 @@ const CostInput = ({ value, onChange, style, title }: any) => {
       inputMode="numeric"
       value={str}
       title={title}
+      aria-label={title}
       style={style}
       onChange={e => {
         const raw = e.target.value.replace(/,/g, '');
@@ -178,8 +179,8 @@ export default function CostManager() {
         <h2 style={{ fontSize: '18px', margin: 0 }}>Cost Manager</h2>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {flash && (
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--green)' }}>
-              <i className="fa-solid fa-circle-check"></i> {flash}
+            <span role="status" style={{ fontSize: '12px', fontWeight: 700, color: 'var(--green)' }}>
+              <i className="fa-solid fa-circle-check" aria-hidden="true"></i> {flash}
             </span>
           )}
           <button
@@ -229,9 +230,9 @@ export default function CostManager() {
       {/* Filters */}
       <div className="card" style={{ marginBottom: '20px', padding: '14px 20px' }}>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
-          <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
+          <input type="date" aria-label="Start date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+          <input type="date" aria-label="End date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }} />
+          <select aria-label="Filter by team" value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={{ padding: '7px', fontSize: '12px', width: 'auto' }}>
             <option>All Teams</option>
             <option>KPV Team</option>
             <option>Agency Team</option>
@@ -264,6 +265,10 @@ export default function CostManager() {
                 <th
                   key={col.key}
                   onClick={() => toggleSort(col.key)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(col.key); } }}
+                  role="button"
+                  tabIndex={0}
+                  aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
                   title={`Sort by ${col.label}`}
                   style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: col.key === 'service_cost' ? 'var(--gold)' : undefined }}
                 >

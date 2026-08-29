@@ -10,6 +10,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
+import { Link } from 'react-router-dom';
 import type { ModalState, Submission } from '../lib/submissions';
 import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
@@ -631,7 +632,7 @@ export default function Dashboard() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
           <h3 style={{ fontSize: '15px' }}>Recent Submissions</h3>
-          <button className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: '12px' }}>View All →</button>
+          <Link className="btn btn-ghost" to="/report" style={{ padding: '5px 12px', fontSize: '12px', textDecoration: 'none' }}>View All →</Link>
         </div>
         <table className="data-table">
           <thead>

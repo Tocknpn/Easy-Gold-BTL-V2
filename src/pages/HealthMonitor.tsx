@@ -56,6 +56,8 @@ function UptimeBar({ log }: { log: PingRecord[] }) {
         <div
           key={i}
           title={`${new Date(p.ts).toLocaleTimeString()} — ${p.ok ? `${p.ms}ms` : `Error: ${p.error}`}`}
+          aria-label={`${new Date(p.ts).toLocaleTimeString()} — ${p.ok ? `OK, ${p.ms} ms` : `Error: ${p.error || 'network error'}`}`}
+          role="img"
           style={{
             flex: 1,
             height: p.ok ? `${Math.min(100, Math.max(20, 100 - p.ms / 20))}%` : '100%',

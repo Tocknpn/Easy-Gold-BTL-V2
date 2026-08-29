@@ -120,8 +120,8 @@ export default function PlanSetting() {
         <h2 style={{ fontSize: '18px', margin: 0 }}>Monthly Route Plan Setting</h2>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {flash && (
-            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--green)' }}>
-              <i className="fa-solid fa-circle-check"></i> {flash}
+            <span role="status" style={{ fontSize: '12px', fontWeight: 700, color: 'var(--green)' }}>
+              <i className="fa-solid fa-circle-check" aria-hidden="true"></i> {flash}
             </span>
           )}
           <button className="btn btn-ghost" onClick={() => setDrafts({})} disabled={pendingCount === 0} style={{ opacity: pendingCount === 0 ? 0.45 : 1 }}>

@@ -297,8 +297,8 @@ export default function SubmitResults() {
             </button>
           </div>
           {done && (
-            <div className="alert alert-ok" style={{ marginTop: '16px', background: 'var(--green)', color: '#fff', border: 'none', textAlign: 'center', justifyContent: 'center' }}>
-              <i className="fa-solid fa-circle-check"></i> {done}
+            <div role="status" className="alert alert-ok" style={{ marginTop: '16px', background: 'var(--green)', color: '#fff', border: 'none', textAlign: 'center', justifyContent: 'center' }}>
+              <i className="fa-solid fa-circle-check" aria-hidden="true"></i> {done}
             </div>
           )}
         </form>
