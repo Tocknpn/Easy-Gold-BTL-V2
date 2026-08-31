@@ -35,9 +35,9 @@ export interface ModalState {
 // ── Helpers ──────────────────────────────────────────────────────────────
 export const fmtLAK = (n: number) => `₭${n.toLocaleString('en-US')}`;
 export const fmtLAKShort = (n: number) => {
-  if (n >= 1_000_000) return `₭${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `₭${(n / 1_000).toFixed(0)}K`;
-  return `₭${n}`;
+  if (n >= 1_000_000) return `₭${(n / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+  if (n >= 1_000) return `₭${(n / 1_000).toLocaleString('en-US', { maximumFractionDigits: 0 })}K`;
+  return `₭${n.toLocaleString('en-US')}`;
 };
 
 export const getCurrentDateHelpers = () => {

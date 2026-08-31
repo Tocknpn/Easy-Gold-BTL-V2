@@ -71,14 +71,14 @@ function TargetBadge({ curr, target, invertGood = false }: { curr: number; targe
 }
 
 // ── Utility: split row (NC/EC or KPV/Agency) ──────────────────────────────
-function SplitRow({ items }: { items: { label: string; val: string; pct: number; color: string }[] }) {
+function SplitRow({ items }: { items: { label: string; val: string; pct?: number; color: string }[] }) {
   return (
     <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
       {items.map(({ label, val, pct, color }) => (
         <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
           <span style={{ fontWeight: 700, color }}>{label}:</span>
           <span>{val}</span>
-          <span style={{ background: color + '22', color, borderRadius: '4px', padding: '0 4px', fontWeight: 700 }}>{pct}%</span>
+          {pct !== undefined && <span style={{ background: color + '22', color, borderRadius: '4px', padding: '0 4px', fontWeight: 700 }}>{pct}%</span>}
         </span>
       ))}
     </div>
@@ -123,13 +123,19 @@ export default function Dashboard() {
   // ── Previous period filter (mirror the selected range length back in time) ──
   const prevFiltered = useMemo(() => {
     if (!startDate || !endDate) return [] as Submission[];
-    const start = new Date(startDate + 'T00:00:00');
-    const end = new Date(endDate + 'T00:00:00');
-    const rangeMs = end.getTime() - start.getTime();
-    const prevEnd = new Date(start.getTime() - 86400000); // day before start
-    const prevStart = new Date(prevEnd.getTime() - rangeMs);
-    const ps = prevStart.toISOString().slice(0, 10);
-    const pe = prevEnd.toISOString().slice(0, 10);
+    const d1 = new Date(startDate + 'T00:00:00');
+    const d2 = new Date(endDate + 'T00:00:00');
+    const diffTime = Math.abs(d2.getTime() - d1.getTime());
+    const diffDays = Math.ceil(diffTime / 86400000) + 1;
+
+    const prevEndD = new Date(d1.getTime());
+    prevEndD.setDate(prevEndD.getDate() - 1);
+    
+    const prevStartD = new Date(prevEndD.getTime());
+    prevStartD.setDate(prevStartD.getDate() - (diffDays - 1));
+
+    const ps = prevStartD.toISOString().slice(0, 10);
+    const pe = prevEndD.toISOString().slice(0, 10);
     return submissions.filter(s => {
       const inRange = s.date >= ps && s.date <= pe;
       const inTeam = teamFilter === 'All Teams' || s.team === teamFilter || s.team === teamFilter.replace(' Team', '');
@@ -143,7 +149,7 @@ export default function Dashboard() {
   const aggregateKPI = (rows: Submission[]) => {
     let nc = 0, ec = 0, buyNew = 0, buyExisting = 0, teamCost = 0, merchCost = 0, nrp = 0, footfall = 0, stepIn = 0;
     const days = new Set<string>();
-    const byTeam: Record<string, { nc: number; cost: number }> = {};
+    const byTeam: Record<string, { nc: number; ec: number; nrp: number; cost: number }> = {};
     for (const s of rows) {
       nc += s.new_register;
       ec += s.existing_users;
@@ -156,8 +162,10 @@ export default function Dashboard() {
       stepIn += s.step_in || 0;
       days.add(s.date);
       const t = s.team || 'KPV';
-      if (!byTeam[t]) byTeam[t] = { nc: 0, cost: 0 };
+      if (!byTeam[t]) byTeam[t] = { nc: 0, ec: 0, nrp: 0, cost: 0 };
       byTeam[t].nc += s.new_register;
+      byTeam[t].ec += s.existing_users;
+      byTeam[t].nrp += s.new_reg_purchased || 0;
       byTeam[t].cost += (s.team_cost || 0) + (s.merch_cost || 0);
     }
     const totalBuy = buyNew + buyExisting;
@@ -169,12 +177,12 @@ export default function Dashboard() {
       activeDays,
       cpa: nc > 0 ? totalCost / nc : 0,
       cpo: (nrp + ec) > 0 ? totalCost / (nrp + ec) : 0,
-      cpao: totalAcq > 0 ? totalCost / totalAcq : 0,
+      cpao: nrp > 0 ? totalCost / nrp : 0,
       avgBuyPerAcq: totalAcq > 0 ? totalBuy / totalAcq : 0,
       avgAcqPerDay: totalAcq / activeDays,
       footfall, stepIn, buyNew, buyExisting,
-      kpv: byTeam['KPV'] || { nc: 0, cost: 0 },
-      agency: byTeam['Agency'] || { nc: 0, cost: 0 },
+      kpv: byTeam['KPV'] || { nc: 0, ec: 0, nrp: 0, cost: 0 },
+      agency: byTeam['Agency'] || { nc: 0, ec: 0, nrp: 0, cost: 0 },
     };
   };
 
@@ -204,6 +212,44 @@ export default function Dashboard() {
   // ── Trend chart data ─────────────────────────────────────────────────────
   const trendData = useMemo(() => {
     const sorted = [...filtered].sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (sorted.length === 0) return { labels: [], nc: [], ec: [] };
+
+    if (trendMode === 'M') {
+      const byMonth: Record<string, { nc: number; ec: number }> = {};
+      for (const s of sorted) {
+        const m = s.date.slice(0, 7); // YYYY-MM
+        if (!byMonth[m]) byMonth[m] = { nc: 0, ec: 0 };
+        byMonth[m].nc += s.new_register;
+        byMonth[m].ec += s.existing_users;
+      }
+      const keys = Object.keys(byMonth).sort();
+      return {
+        labels: keys.map(m => new Date(m + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })),
+        nc: keys.map(m => byMonth[m].nc),
+        ec: keys.map(m => byMonth[m].ec),
+      };
+    }
+    if (trendMode === 'W') {
+      const byWeek: Record<string, { nc: number; ec: number }> = {};
+      for (const s of sorted) {
+        const d = new Date(s.date + 'T00:00:00');
+        const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
+        const pastDaysOfYear = (d.getTime() - firstDayOfYear.getTime()) / 86400000;
+        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+        const wk = `${d.getFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
+        if (!byWeek[wk]) byWeek[wk] = { nc: 0, ec: 0 };
+        byWeek[wk].nc += s.new_register;
+        byWeek[wk].ec += s.existing_users;
+      }
+      const keys = Object.keys(byWeek).sort();
+      return {
+        labels: keys.map(wk => wk),
+        nc: keys.map(k => byWeek[k].nc),
+        ec: keys.map(k => byWeek[k].ec),
+      };
+    }
+    
+    // 'D' mode
     const ncByDay: Record<string, number> = {};
     const ecByDay: Record<string, number> = {};
     for (const s of sorted) {
@@ -211,30 +257,6 @@ export default function Dashboard() {
       ecByDay[s.date] = (ecByDay[s.date] || 0) + s.existing_users;
     }
     const dayKeys = Object.keys(ncByDay).sort();
-
-    let marchNC = 0, marchEC = 0;
-    dayKeys.forEach(k => { marchNC += ncByDay[k]; marchEC += ecByDay[k]; });
-    const monthLabels = ['2024-10', '2024-11', '2024-12', '2025-01', '2025-02', '2025-03'];
-    const monthNC = [820, 930, 1040, 980, 1120, marchNC];
-    const monthEC = [410, 470, 520, 490, 540, marchEC];
-
-    if (trendMode === 'M') {
-      return {
-        labels: monthLabels.map(m => new Date(m + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' })),
-        nc: monthNC, ec: monthEC,
-      };
-    }
-    if (trendMode === 'W') {
-      const weekLabels = ['W1', 'W2', 'W3', 'W4', 'W5'];
-      const wnc = [0, 0, 0, 0, 0];
-      const wec = [0, 0, 0, 0, 0];
-      dayKeys.forEach(k => {
-        const day = Number(k.slice(-2));
-        const w = Math.min(4, Math.floor((day - 1) / 7));
-        wnc[w] += ncByDay[k]; wec[w] += ecByDay[k];
-      });
-      return { labels: weekLabels, nc: wnc, ec: wec };
-    }
     return {
       labels: dayKeys.map(labelDate),
       nc: dayKeys.map(k => ncByDay[k]),
@@ -449,8 +471,8 @@ export default function Dashboard() {
 
           {/* KPV vs Agency split */}
           <SplitRow items={[
-            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: C_NC },
-            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: C_EC },
+            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), color: C_NC },
+            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), color: C_EC },
           ]} />
 
           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -466,8 +488,8 @@ export default function Dashboard() {
           <div className="kpi-val">{fmtLAK(Math.round(kpi.cpo))}</div>
 
           <SplitRow items={[
-            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: C_NC },
-            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: C_EC },
+            { label: 'KPV', val: fmtLAK((kpi.kpv.nrp + kpi.kpv.ec) > 0 ? Math.round(kpi.kpv.cost / (kpi.kpv.nrp + kpi.kpv.ec)) : 0), color: C_NC },
+            { label: 'Agency', val: fmtLAK((kpi.agency.nrp + kpi.agency.ec) > 0 ? Math.round(kpi.agency.cost / (kpi.agency.nrp + kpi.agency.ec)) : 0), color: C_EC },
           ]} />
 
           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -483,8 +505,8 @@ export default function Dashboard() {
           <div className="kpi-val">{fmtLAK(Math.round(kpi.cpao))}</div>
 
           <SplitRow items={[
-            { label: 'KPV', val: fmtLAK(kpi.kpv.nc > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nc) : 0), pct: pctKPV, color: C_NC },
-            { label: 'Agency', val: fmtLAK(kpi.agency.nc > 0 ? Math.round(kpi.agency.cost / kpi.agency.nc) : 0), pct: pctAgency, color: C_EC },
+            { label: 'KPV', val: fmtLAK(kpi.kpv.nrp > 0 ? Math.round(kpi.kpv.cost / kpi.kpv.nrp) : 0), color: C_NC },
+            { label: 'Agency', val: fmtLAK(kpi.agency.nrp > 0 ? Math.round(kpi.agency.cost / kpi.agency.nrp) : 0), color: C_EC },
           ]} />
 
           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
