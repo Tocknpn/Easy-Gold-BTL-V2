@@ -30,15 +30,27 @@ function Layout({ children }: { children: React.ReactNode }) {
     if (storedUser) {
       const u = JSON.parse(storedUser);
       setUser(u);
-      const ADMIN_ONLY = ['/', '/report', '/staff-report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health'];
+      const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health'];
       const privileged = u.role === 'admin' || u.role === 'manager';
       if (!privileged && ADMIN_ONLY.includes(location.pathname)) {
+        navigate('/calendar', { replace: true });
+      } else if (!privileged && location.pathname === '/staff-report' && u.team !== 'KPV') {
         navigate('/calendar', { replace: true });
       }
     } else {
       navigate('/login');
     }
   }, [navigate, location.pathname]);
+
+  useEffect(() => {
+    const handleWheel = () => {
+      if (document.activeElement?.tagName === 'INPUT' && (document.activeElement as HTMLInputElement).type === 'number') {
+        (document.activeElement as HTMLElement).blur();
+      }
+    };
+    document.addEventListener('wheel', handleWheel);
+    return () => document.removeEventListener('wheel', handleWheel);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('easygold_user');

@@ -117,10 +117,10 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
           <NavLink to="/checkin" icon="fa-solid fa-location-dot" label="Check-In" />
           <NavLink to="/submit" icon="fa-solid fa-file-invoice" label="Submit Results" />
           {user.role !== 'staff' && (
-            <>
-              <NavLink to="/targets" icon="fa-solid fa-bullseye" label="My Targets" />
-              <NavLink to="/staff-report" icon="fa-solid fa-users" label="Staff Report" />
-            </>
+            <NavLink to="/targets" icon="fa-solid fa-bullseye" label="My Targets" />
+          )}
+          {(user.role !== 'staff' || user.team === 'KPV') && (
+            <NavLink to="/staff-report" icon="fa-solid fa-users" label="Staff Report" />
           )}
         </div>
 
