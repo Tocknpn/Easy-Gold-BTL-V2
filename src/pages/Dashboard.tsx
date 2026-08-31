@@ -8,6 +8,7 @@ import {
   ArcElement,
   Tooltip,
   Legend,
+  Filler,
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
@@ -19,7 +20,7 @@ import SubmissionModal from '../components/SubmissionModal';
 const C_NC = '#F59E0B'; // amber  — warm, high contrast
 const C_EC = '#10B981'; // emerald — cool, very distinct from amber
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend, Filler);
 
 // ── KPI targets (absolute values) ─────────────────────────────────────────
 const TARGETS = {
