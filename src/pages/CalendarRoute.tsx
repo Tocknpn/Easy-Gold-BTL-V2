@@ -190,7 +190,7 @@ export default function CalendarRoute() {
                         .map(loc => loc.trim())
                         .filter(Boolean)
                         .map((loc, j) => {
-                          const checkedIn = checkinsForMonth.some(c => c.date === r.date && c.team === r.team);
+                          const checkedIn = checkinsForMonth.some(c => c.date === r.date && c.team === r.team && c.location.trim() === loc);
                           return (
                             <div
                               key={`p${i}-${j}`}
@@ -229,6 +229,42 @@ export default function CalendarRoute() {
                           );
                         })
                     )}
+
+                    {/* ①.b ADHOC CHECK-INS — checkins that were not planned */}
+                    {checkinsForMonth
+                      .filter(c => c.date === dateStr)
+                      .filter(c => {
+                        const teamRoutes = dayRoutes.filter(r => r.team === c.team);
+                        const plannedLocs = teamRoutes.flatMap(r => (r.location_name || '').split(',').map(s => s.trim()));
+                        return !plannedLocs.includes(c.location.trim());
+                      })
+                      .map((c, i) => (
+                        <div
+                          key={`adhoc-${i}`}
+                          className="cal-ticket"
+                          style={{
+                            background: 'var(--orange-dim)',
+                            color: 'var(--orange)',
+                            border: '1px solid rgba(244,148,58,0.3)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            if (daySubs.length === 1) openModal(daySubs[0]);
+                            else if (daySubs.length > 1) setDayModal({ date: c.date, subs: daySubs });
+                          }}
+                          title={`Adhoc Check-In at ${c.location} by ${c.team}`}
+                        >
+                          <i className="fa-solid fa-map-pin" style={{ fontSize: 8 }}></i>
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.location}</span>
+                          <span className="plan-check" style={{ color: 'var(--orange)' }} title="Adhoc Check-in">✓</span>
+                        </div>
+                      ))
+                    }
 
                                         {/* ② RESULTS — summed acquisition of ALL submissions that day.
                         Single place/day → open the submission modal directly;
