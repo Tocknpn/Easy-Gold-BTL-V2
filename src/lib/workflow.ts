@@ -108,6 +108,25 @@ export async function addCheckIn(rec: CheckInRecord): Promise<void> {
   }
 }
 
+export async function deleteCheckIn(id: string): Promise<boolean> {
+  try {
+    const all = getLocalCheckIns();
+    const filtered = all.filter(c => c.id !== id);
+    if (filtered.length !== all.length) {
+      localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(filtered));
+    }
+    const { error } = await supabase.from('checkins').delete().eq('id', id);
+    if (error) {
+      console.error('Error deleting checkin:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Network error deleting checkin:', err);
+    return false;
+  }
+}
+
 // ── Staff directory (managed by Admin in Upload & Settings) ──────────────
 export interface StaffMember {
   id: string;

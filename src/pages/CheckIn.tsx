@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { addCheckIn, fetchCheckIns, getCurrentUser } from '../lib/workflow';
+import { addCheckIn, fetchCheckIns, getCurrentUser, deleteCheckIn } from '../lib/workflow';
 import type { CheckInRecord } from '../lib/workflow';
 import { labelDate } from '../lib/submissions';
 
@@ -42,6 +42,16 @@ export default function CheckIn() {
     setHistory(newHistory);
     setLastCapture(rec);
     setNotice(note);
+  };
+
+  const handleRemoveCheckIn = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this check-in?')) return;
+    const ok = await deleteCheckIn(id);
+    if (ok) {
+      setHistory(prev => prev.filter(c => c.id !== id));
+    } else {
+      alert('Failed to delete check-in.');
+    }
   };
 
   // "Capture My Location Now" — records GPS so the staff is marked on standby at the spot
@@ -133,7 +143,7 @@ export default function CheckIn() {
           ) : (
             <table className="data-table">
               <thead>
-                <tr><th>Date &amp; Time</th><th>Team</th><th>Branch / Place</th><th>Coords</th></tr>
+                <tr><th>Date &amp; Time</th><th>Team</th><th>Branch / Place</th><th>Coords</th><th style={{ width: 40 }}></th></tr>
               </thead>
               <tbody>
                 {history.slice(0, 12).map(c => (
@@ -143,6 +153,11 @@ export default function CheckIn() {
                     <td>{c.location}</td>
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--txt-dim)' }}>
                       {c.lat.toFixed(3)}, {c.lng.toFixed(3)}
+                    </td>
+                    <td>
+                      <button className="btn btn-ghost" style={{ padding: '4px 8px', color: 'var(--red)' }} onClick={() => handleRemoveCheckIn(c.id)} title="Delete check-in">
+                        <i className="fa-solid fa-trash-can"></i>
+                      </button>
                     </td>
                   </tr>
                 ))}

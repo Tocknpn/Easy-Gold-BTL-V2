@@ -93,6 +93,7 @@ export default function CalendarRoute() {
   
   const checkinsForMonth = checkins.filter(c => 
     c.date.startsWith(currentMonthStr) &&
+    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (c.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
     (teamFilter === 'All' || (c.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
   
