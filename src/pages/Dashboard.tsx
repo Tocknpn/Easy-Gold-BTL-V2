@@ -94,7 +94,7 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState(startOfMonth);
   const [endDate, setEndDate] = useState(endOfMonth);
   const [teamFilter, setTeamFilter] = useState('All Teams');
-  const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('M');
+  const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('D');
   const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });
 
   useEffect(() => {
@@ -285,14 +285,30 @@ export default function Dashboard() {
         label: 'New Customers (NC)',
         data: trendData.nc,
         borderColor: C_NC,
-        backgroundColor: 'rgba(245,158,11,0.09)',
+        backgroundColor: (context: any) => {
+          const chart = context.chart;
+          const { ctx, chartArea } = chart;
+          if (!chartArea) return 'rgba(245,158,11,0.09)'; // fallback before render
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(245, 158, 11, 0.45)');
+          gradient.addColorStop(1, 'rgba(245, 158, 11, 0.0)');
+          return gradient;
+        },
         fill: true, tension: 0.4, borderWidth: 2, pointRadius: 3,
       },
       {
         label: 'Existing (EC)',
         data: trendData.ec,
         borderColor: C_EC,
-        backgroundColor: 'rgba(16,185,129,0.07)',
+        backgroundColor: (context: any) => {
+          const chart = context.chart;
+          const { ctx, chartArea } = chart;
+          if (!chartArea) return 'rgba(16,185,129,0.07)';
+          const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(16, 185, 129, 0.45)');
+          gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+          return gradient;
+        },
         fill: true, tension: 0.4, borderWidth: 2, pointRadius: 3,
       },
     ],
