@@ -137,7 +137,7 @@ export default function StaffReport() {
       </tr>`).join('');
 
     return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><title>Staff Report ${range}</title>
+<html><head><meta charset="utf-8"/><title></title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Noto Sans Lao', 'Phetsarath OT', 'Saysettha OT', Tahoma, sans-serif; color: #111; padding: 0; font-size: 10.5px; }
@@ -157,8 +157,8 @@ export default function StaffReport() {
   .sign-label { font-weight: 700; margin-bottom: 28px; }
   .sign-line { border-top: 1px solid #333; margin-bottom: 4px; }
   .sign-date { color: #555; font-size: 8.5px; }
-  @page { size: A4 portrait; margin: 14mm 16mm; }
-  @media print { body { padding: 0; } }
+  @page { size: A4 portrait; margin: 0; }
+  @media print { body { padding: 14mm 16mm; } }
 </style></head>
 <body>
   <div class="title">ສະຫລຸບ ລາຍຊື່ອອກບູສໜ້າຮ້ານຄຳພູວົງ ປະຈຳເດືອນ ${monthLabel} ( ${range} )</div>

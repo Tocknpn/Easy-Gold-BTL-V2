@@ -1,10 +1,7 @@
 export default function RouteMap() {
   return (
     <div>
-      <div className="demo-banner">
-        <i className="fa-solid fa-map-location-dot"></i> 
-        Interactive route map visualization. Plotted from `lat` and `lng` coordinates in the database.
-      </div>
+
       <div className="card" style={{ padding: 0, overflow: 'hidden', height: '600px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '15px' }}>
           <select aria-label="Filter by team" style={{ width: '200px' }}><option>All Teams</option></select>

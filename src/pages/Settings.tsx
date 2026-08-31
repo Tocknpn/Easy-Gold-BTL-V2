@@ -555,7 +555,7 @@ export default function Settings() {
 
 return (
     <div>
-      <div className="demo-banner"><i className="fa-solid fa-circle-info"></i> Admin-only page. Managers can set targets; only admins can change the Merch catalog.</div>
+
 
       <div className="grid-2" style={{ alignItems: 'start', marginBottom: '24px' }}>
         {/* ═══ ROUTE PLAN UPLOAD ═══ */}

@@ -171,9 +171,7 @@ export default function Report() {
 
   return (
     <div>
-      <div className="demo-banner">
-        <i className="fa-solid fa-circle-info"></i> {loading ? 'Loading submissions…' : 'Full submission log — click any row to view details, sort by any column, or export to CSV.'}
-      </div>
+      {loading && <div style={{ padding: '10px' }}>Loading submissions…</div>}
 
       {/* Filters + Export */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>

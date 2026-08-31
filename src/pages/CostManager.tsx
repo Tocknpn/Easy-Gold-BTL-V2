@@ -202,11 +202,7 @@ export default function CostManager() {
           </button>
         </div>
       </div>
-      <div className="demo-banner">
-                <i className="fa-solid fa-circle-info"></i> {loading
-          ? 'Loading submission records…'
-          : 'Admin only — new submissions arrive with Service Cost ₭0 (filled here 1–2 days after the record date). It combines with Merch Cost to drive CPA / CPO / CPAO. Edit many boxes, then press Save Changes once.'}
-      </div>
+      {loading && <div style={{ padding: '10px' }}>Loading submission records…</div>}
 
       {/* Summary cards */}
       <div className="grid-3" style={{ marginBottom: '20px' }}>

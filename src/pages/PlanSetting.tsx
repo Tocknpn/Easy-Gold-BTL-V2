@@ -133,11 +133,7 @@ export default function PlanSetting() {
         </div>
       </div>
 
-      <div className="demo-banner">
-        <i className="fa-solid fa-circle-info"></i> {loading
-          ? 'Loading records…'
-          : `Every day of ${MONTHS[month]} ${year} is listed — type the location plan for each day. Multiple places allowed, separated by commas (e.g. "Talat Sao, Parkson Mall"). Days with submitted data are locked.`}
-      </div>
+      {loading && <div style={{ padding: '10px' }}>Loading records…</div>}
 
       {/* Blocked-edit warning */}
       {blocked && (

@@ -167,11 +167,8 @@ export default function HealthMonitor() {
   return (
     <div>
       {/* Header status bar */}
-      <div className="demo-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>
-          <i className="fa-solid fa-heart-pulse"></i>&nbsp;
-          <strong>Health Monitor</strong> — auto-pinging Supabase every {interval}s. Logs stored locally (last {MAX_RECORDS}).
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <h3 style={{ margin: 0 }}>Health Monitor</h3>
         <span style={{ fontWeight: 800, color: statusColor }}>{statusText}</span>
       </div>
 

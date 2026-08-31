@@ -340,12 +340,7 @@ export default function Dashboard() {
             <i className="fa-solid fa-rotate-right"></i> Retry
           </button>
         </div>
-      ) : (
-        <div className="demo-banner">
-          <i className="fa-solid fa-circle-check" style={{ color: 'var(--green)' }}></i>{' '}
-          Live data · KPIs recalculated on every filter change.
-        </div>
-      )}
+      ) : null}
 
       {/* Filters */}
       <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
