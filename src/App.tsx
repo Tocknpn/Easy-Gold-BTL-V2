@@ -1,6 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import { sendClientHeartbeat } from './lib/keepalive';
 import './index.css';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -145,6 +146,11 @@ function Layout({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  useEffect(() => {
+    // Fire-and-forget keepalive: counts as Supabase API activity.
+    sendClientHeartbeat();
+  }, []);
+
   return (
     <Router>
       <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--ink)' }}><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '28px', color: 'var(--accent)' }}></i></div>}>

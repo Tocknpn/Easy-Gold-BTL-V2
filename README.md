@@ -35,3 +35,9 @@ and set `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`.
 ## Deploying to production
 See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full walkthrough: GitHub →
 Supabase (schema + Excel data import) → Cloudflare Pages.
+
+## Keeping Supabase alive (free plan)
+The free tier pauses a project after 7 days without API activity. To prevent
+that, this repo writes a heartbeat row every ~3 days — see
+**[KEEPALIVE.md](KEEPALIVE.md)** for the 5-minute setup (GitHub Actions +
+`heartbeats` table + optional pg_cron fallback).

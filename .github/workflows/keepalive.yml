@@ -1,0 +1,59 @@
+# ============================================================================
+# Supabase Keepalive
+# ----------------------------------------------------------------------------
+# Free-tier Supabase projects are paused after 7 days of no API activity.
+# This workflow runs every 3 days and inserts ONE row into the `heartbeats`
+# table through the Supabase REST API. A REST API request = project activity,
+# so this keeps the project from being paused.
+#
+# One-time setup (see KEEPALIVE.md):
+#   GitHub → Settings → Secrets and variables → Actions → New repository secret:
+#     SUPABASE_URL      = your project URL,  e.g. https://abc123.supabase.co
+#     SUPABASE_ANON_KEY = your "anon / public" key (Project Settings → API)
+# ============================================================================
+name: Supabase Keepalive
+
+on:
+  schedule:
+    # Every 3 days at 00:00 UTC (days 1,4,7,...,28 — max gap ~3 days).
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: read
+
+jobs:
+  keepalive:
+    name: Write heartbeat
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+    steps:
+      - name: Check secrets are configured
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Missing GitHub secrets SUPABASE_URL / SUPABASE_ANON_KEY."
+            echo "Add them in GitHub > Settings > Secrets and variables > Actions,"
+            echo "using the values from Supabase Dashboard > Project Settings > API."
+            exit 1
+          fi
+
+      - name: Insert heartbeat row
+        run: |
+          BODY='{"source":"github-actions","note":"keepalive every 3 days"}'
+          STATUS=$(curl -sS -o /tmp/heartbeat_response.json -w '%{http_code}' \
+            -X POST \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            -d "$BODY" \
+            "$SUPABASE_URL/rest/v1/heartbeats")
+          echo "Supabase REST API returned HTTP $STATUS"
+          if [ "$STATUS" != "201" ]; then
+            echo "::error::Heartbeat insert failed (HTTP $STATUS)."
+            cat /tmp/heartbeat_response.json 2>/dev/null || true
+            exit 1
+          fi
+          echo "OK: heartbeat row written to the heartbeats table."
