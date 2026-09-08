@@ -4,7 +4,7 @@ import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } 
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
-type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'new_reg_purchased' | 'existing_users' | 'cost' | 'cpa' | 'cpo';
+type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'new_reg_purchased' | 'existing_users' | 'merch_cost' | 'cost' | 'cpa' | 'cpo';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'date', label: 'DATE' },
@@ -13,7 +13,8 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'new_register', label: 'NEW REG' },
   { key: 'new_reg_purchased', label: 'PURCHASED' },
   { key: 'existing_users', label: 'EXISTING' },
-  { key: 'cost', label: 'COST' },
+  { key: 'merch_cost', label: 'MERCH COST' },
+  { key: 'cost', label: 'TOTAL COST' },
   { key: 'cpa', label: 'CPA' },
   { key: 'cpo', label: 'CPO' },
 ];
@@ -77,6 +78,7 @@ export default function Report() {
         case 'new_register': return r.s.new_register;
         case 'new_reg_purchased': return r.s.new_reg_purchased;
         case 'existing_users': return r.s.existing_users;
+        case 'merch_cost': return r.s.merch_cost || 0;
         case 'cost': return r.cost;
         case 'cpa': return Number.isFinite(r.cpa) ? r.cpa : -Infinity;
         case 'cpo': return Number.isFinite(r.cpo) ? r.cpo : -Infinity;
@@ -244,6 +246,7 @@ export default function Report() {
                 <td>{(r.s.new_register || 0).toLocaleString()}</td>
                 <td>{(r.s.new_reg_purchased || 0).toLocaleString()}</td>
                 <td>{(r.s.existing_users || 0).toLocaleString()}</td>
+                <td>{fmtLAK(r.s.merch_cost)}</td>
                 <td>{fmtLAKShort(r.cost)}</td>
                 <td>{Number.isFinite(r.cpa) ? fmtLAK(Math.round(r.cpa)) : '—'}</td>
                 <td>{Number.isFinite(r.cpo) ? fmtLAK(Math.round(r.cpo)) : '—'}</td>

@@ -18,6 +18,72 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'cpa', label: 'CPA (preview)' },
 ];
 
+// ── Export to CSV function ──────────────────────────────────────────────
+const exportToCSV = (data: Submission[], filename: string) => {
+  // CSV Header
+  const headers = [
+    'Date',
+    'Team',
+    'Branch',
+    'New Customers',
+    'Buy Value New',
+    'Buy Value Existing',
+    'Buy Value Total',
+    'Merch Cost',
+    'Service Cost',
+    'Total Cost',
+    'CPA',
+    'Merch Items',
+  ];
+
+  // CSV Rows
+  const rows = data.map(s => {
+    const buyTotal = (s.buy_value_new || 0) + (s.buy_value_existing || 0);
+    const totalCost = (s.merch_cost || 0) + (Number(s.team_cost) || 0);
+    const cpa = s.new_register > 0 ? Math.round(totalCost / s.new_register) : 0;
+    
+    // Parse merch items for detail
+    let merchItemsDetail = '';
+    try {
+      const items = typeof s.merch_items === 'string' ? JSON.parse(s.merch_items) : s.merch_items;
+      if (Array.isArray(items)) {
+        merchItemsDetail = items.map((i: any) => `${i.name || 'Item'} x${i.qty || 0} @ ${(i.cpu || 0).toLocaleString()}LAK`).join('; ');
+      }
+    } catch {
+      merchItemsDetail = '';
+    }
+
+    return [
+      s.date,
+      s.team || 'KPV',
+      s.branch,
+      s.new_register || 0,
+      s.buy_value_new || 0,
+      s.buy_value_existing || 0,
+      buyTotal,
+      s.merch_cost || 0,
+      s.team_cost || 0,
+      totalCost,
+      cpa,
+      merchItemsDetail,
+    ].map(v => `"${v}"`).join(',');
+  });
+
+  // Combine header and rows
+  const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows].join('\n');
+
+  // Create download link
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 const CostInput = ({ value, onChange, style, title }: any) => {
   const [str, setStr] = useState(value ? Number(value).toLocaleString() : '');
   useEffect(() => {
@@ -240,6 +306,18 @@ export default function CostManager() {
           >
                         <i className="fa-solid fa-xmark"></i> Clear
           </button>
+          <button
+            className="btn btn-ghost"
+            onClick={() => {
+              const now = new Date();
+              const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+              exportToCSV(sorted, `CostManager_Export_${dateStr}.csv`);
+            }}
+            style={{ padding: '7px 12px', fontSize: '12px' }}
+            title="Export filtered records to Excel (full numbers)"
+          >
+            <i className="fa-solid fa-file-excel"></i> Export Excel
+          </button>
         </div>
       </div>
 
@@ -289,7 +367,7 @@ export default function CostManager() {
                   <td>{s.branch}</td>
                   <td style={{ color: 'var(--gold)', fontWeight: 700 }}>{(s.new_register || 0).toLocaleString()}</td>
                   <td>{fmtLAKShort(buyTotal(s))}</td>
-                  <td>{fmtLAKShort(s.merch_cost)}</td>
+                  <td>{fmtLAK(s.merch_cost)}</td>
                   <td>
                     <CostInput
                       value={getDraftValue(s)}
