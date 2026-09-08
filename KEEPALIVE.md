@@ -39,9 +39,17 @@ Layer 3 is a fallback for the rare case that the GitHub repo goes quiet for
 
 1. Supabase Dashboard → **Project Settings → API**.
 2. Copy the **Project URL** (e.g. `https://abc123.supabase.co`) and the **anon / public** key.
-3. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**:
-   - `SUPABASE_URL` = Project URL
-   - `SUPABASE_ANON_KEY` = anon key
+3. GitHub repo → **Settings → Secrets and variables → Actions** (⚠️ read this first):
+   - Click the **Secrets** tab at the top, then the white **"New repository secret"** button.
+   - ⚠️ This must be a **Repository secret** — NOT an "Environment secret".
+     If you see an **Environment** column with a value next to the secret's name,
+     it was saved as an *environment* secret and the workflow **cannot read it**.
+     Create the secret via **"New repository secret"** and leave the
+     **"Environment"** picker alone (it protects secrets like production
+     database passwords, not this).
+   - Add both secrets:
+     - `SUPABASE_URL` = Project URL
+     - `SUPABASE_ANON_KEY` = anon key
    - (Safe: the anon key is already visible in your public frontend bundle and is
      restricted by RLS — it is *not* the `service_role` key.)
 4. Commit and push this repo. The workflow lives at
@@ -89,7 +97,7 @@ select cron.unschedule('keepalive-heartbeat');
 
 | Symptom | Fix |
 |---------|-----|
-| Workflow run is red | Secrets not set, or have trailing spaces. Re-add them in Settings → Secrets, then re-run. |
+| Workflow run is red with `Missing GitHub secrets` | The secrets were added as **Environment secrets**, not **Repository secrets**. Re-add them with the **"New repository secret"** button (Settings → Secrets and variables → Actions → Secrets tab), then re-run. |
 | HTTP 401 / 403 from the workflow | `heartbeats` table SQL wasn't run yet, or RLS is enabled without the anon insert policy. |
 | Row still older than 7 days | All layers missed. Check Actions run history first; if the repo has been quiet 60+ days, GitHub stopped the schedule — enable Layer 3 (pg_cron) so Supabase protects itself. |
 | Project already paused | Restore from the Supabase dashboard (pause banner → restore), then finish the setup so the *next* 7-day window never starts. |

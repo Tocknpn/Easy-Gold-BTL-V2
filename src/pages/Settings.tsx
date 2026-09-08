@@ -494,6 +494,85 @@ export default function Settings() {
   };
 
   // ── Merch handlers (Supabase) ────────────────────────────────────────
+
+  /**
+   * Recalculates merch_cost for all submissions containing a specific item.
+   * Called after CPU is changed in the catalog to update historical submissions.
+   *
+   * @param oldItemName - The original item name (to find in submissions)
+   * @param newItemName - The new item name (in case it was renamed)
+   * @param newCpu - The new CPU value to apply
+   * @returns Number of submissions updated
+   */
+  const recalcMerchCostForItem = async (oldItemName: string, newItemName: string, newCpu: number): Promise<number> => {
+    try {
+      // Fetch all submissions that might contain this item
+      const { data: submissions, error } = await supabase
+        .from('submissions')
+        .select('id, merch_items, merch_cost');
+
+      if (error) {
+        console.error('Failed to fetch submissions for recalculation:', error);
+        return 0;
+      }
+
+      if (!submissions || submissions.length === 0) return 0;
+
+      let updatedCount = 0;
+
+      for (const sub of submissions) {
+        // Parse merch_items (could be string or array depending on how it was stored)
+        let items: any[] = [];
+        try {
+          const raw = sub.merch_items;
+          items = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
+        } catch {
+          // Skip submissions with invalid JSON
+          continue;
+        }
+
+        if (!Array.isArray(items) || items.length === 0) continue;
+
+        // Check if this submission contains the item and update it
+        let hasItem = false;
+        let newMerchCost = 0;
+
+        for (const item of items) {
+          // Match by old name - update to new name and CPU
+          if (item.name === oldItemName) {
+            item.name = newItemName;
+            item.cpu = newCpu;
+            hasItem = true;
+          }
+          // Recalculate total cost using (qty * cpu) for all items
+          newMerchCost += (Number(item.qty) || 0) * (Number(item.cpu) || 0);
+        }
+
+        // Only update if the item was found in this submission
+        if (hasItem) {
+          const { error: updateError } = await supabase
+            .from('submissions')
+            .update({
+              merch_items: JSON.stringify(items),
+              merch_cost: newMerchCost
+            })
+            .eq('id', sub.id);
+
+          if (!updateError) {
+            updatedCount++;
+          } else {
+            console.error(`Failed to update submission ${sub.id}:`, updateError);
+          }
+        }
+      }
+
+      return updatedCount;
+    } catch (err) {
+      console.error('Error during merch cost recalculation:', err);
+      return 0;
+    }
+  };
+
   const startMerchEdit = (m: MerchItem) => {
     setEditingId(m.id);
     setEditForm({ itemName: m.itemName, cpu: String(m.cpu) });
@@ -507,17 +586,30 @@ export default function Settings() {
     setMerchSaving(true);
     const newName = editForm.itemName.trim();
     const newCpu = Number(editForm.cpu) || 0;
-    // If name changed: delete old row & insert new one (itemname is PK)
-    if (newName !== id) {
-      await supabase.from('merch').delete().eq('itemname', id);
-      await supabase.from('merch').insert({ itemname: newName, cpu: newCpu });
-    } else {
-      await supabase.from('merch').update({ cpu: newCpu }).eq('itemname', id);
+
+    try {
+      // If name changed: delete old row & insert new one (itemname is PK)
+      if (newName !== id) {
+        await supabase.from('merch').delete().eq('itemname', id);
+        await supabase.from('merch').insert({ itemname: newName, cpu: newCpu });
+      } else {
+        await supabase.from('merch').update({ cpu: newCpu }).eq('itemname', id);
+      }
+
+      // Recalculate merch cost in all submissions containing this item
+      const updatedCount = await recalcMerchCostForItem(id, newName, newCpu);
+
+      setMerch(prev => prev.map(m => (m.id === id ? { id: newName, itemName: newName, cpu: newCpu } : m)));
+      setEditingId(null);
+      setMerchMsg({
+        type: 'ok',
+        text: `Item updated. ${updatedCount} submission(s) recalculated with new CPU.`
+      });
+    } catch (err: any) {
+      setMerchMsg({ type: 'err', text: 'Failed to update: ' + err.message });
+    } finally {
+      setMerchSaving(false);
     }
-    setMerch(prev => prev.map(m => (m.id === id ? { id: newName, itemName: newName, cpu: newCpu } : m)));
-    setEditingId(null);
-    setMerchMsg({ type: 'ok', text: 'Item updated in Supabase.' });
-    setMerchSaving(false);
   };
 
   const deleteMerch = async (id: string) => {
