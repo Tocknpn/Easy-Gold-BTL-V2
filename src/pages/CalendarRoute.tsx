@@ -204,7 +204,7 @@ export default function CalendarRoute() {
                                   else if (daySubs.length > 1) setDayModal({ date: r.date, subs: daySubs });
                                   else alert('No submission recorded yet for this location.');
                                 } else {
-                                  navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`);
+                                  navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}&team=${encodeURIComponent(r.team)}`);
                                 }
                               }}
                               onKeyDown={(e) => {
@@ -215,7 +215,7 @@ export default function CalendarRoute() {
                                     else if (daySubs.length > 1) setDayModal({ date: r.date, subs: daySubs });
                                     else alert('No submission recorded yet for this location.');
                                   } else {
-                                    navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}`);
+                                    navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}&team=${encodeURIComponent(r.team)}`);
                                   }
                                 }
                               }}

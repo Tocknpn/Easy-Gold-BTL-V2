@@ -11,12 +11,15 @@ export default function CheckIn() {
   const [params] = useSearchParams();
   const user = getCurrentUser();
 
-  // Prefilled when arriving from a Calendar plan ticket (?date=…&location=…)
+  // Prefilled when arriving from a Calendar plan ticket (?date=…&location=…&team=…)
   const plannedDate = params.get('date') || new Date().toISOString().slice(0, 10);
   const plannedLocation = params.get('location') || '';
+  // Use team from URL parameter (for admin clicking on a plan), fallback to user's team
+  const plannedTeam = params.get('team') || user?.team || 'KPV';
 
   const [date, setDate] = useState(plannedDate);
   const [location, setLocation] = useState(plannedLocation);
+  const [team, setTeam] = useState(plannedTeam);
   const [capturing, setCapturing] = useState(false);
   const [lastCapture, setLastCapture] = useState<CheckInRecord | null>(null);
   const [notice, setNotice] = useState('');
@@ -32,7 +35,7 @@ export default function CheckIn() {
       date,
       time: new Date().toTimeString().slice(0, 5),
       location: location.trim() || 'Unspecified location',
-      team: user?.team || 'KPV',
+      team: team,
       user: user?.name || 'Unknown',
       lat,
       lng,
@@ -100,7 +103,14 @@ export default function CheckIn() {
               <input type="date" value={date} onChange={e => setDate(e.target.value)} />
             </div>
             <div className="form-field" style={{ margin: 0 }}><label>Team</label>
-              <select disabled><option>{user?.team || 'KPV'} Team</option></select>
+              <select
+                value={team}
+                onChange={e => setTeam(e.target.value)}
+                disabled={user?.role !== 'admin' && !!user?.team}
+              >
+                <option value="KPV">KPV Team</option>
+                <option value="Agency">Agency Team</option>
+              </select>
             </div>
             <div className="form-field" style={{ margin: 0 }}><label>Branch / Place</label>
               <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. That Luang" />
