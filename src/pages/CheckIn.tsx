@@ -25,6 +25,10 @@ export default function CheckIn() {
   const [notice, setNotice] = useState('');
   const [history, setHistory] = useState<CheckInRecord[]>([]);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   React.useEffect(() => {
     fetchCheckIns().then(setHistory);
   }, []);
@@ -151,28 +155,59 @@ export default function CheckIn() {
               No check-ins captured yet — capture your location above.
             </div>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr><th>Date &amp; Time</th><th>Team</th><th>Branch / Place</th><th>Coords</th><th style={{ width: 40 }}></th></tr>
-              </thead>
-              <tbody>
-                {history.slice(0, 12).map(c => (
-                  <tr key={c.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}>{labelDate(c.date)} · {c.time}</td>
-                    <td><span className={`pill ${c.team === 'Agency' ? 'pill-blue' : 'pill-gold'}`}>{c.team}</span></td>
-                    <td>{c.location}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--txt-dim)' }}>
-                      {c.lat.toFixed(3)}, {c.lng.toFixed(3)}
-                    </td>
-                    <td>
-                      <button className="btn btn-ghost" style={{ padding: '4px 8px', color: 'var(--red)' }} onClick={() => handleRemoveCheckIn(c.id)} title="Delete check-in">
-                        <i className="fa-solid fa-trash-can"></i>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Date &amp; Time</th><th>Team</th><th>Branch / Place</th><th>Coords</th><th style={{ width: 40 }}></th></tr>
+                </thead>
+                <tbody>
+                  {history.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map(c => (
+                    <tr key={c.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{labelDate(c.date)} · {c.time}</td>
+                      <td><span className={`pill ${c.team === 'Agency' ? 'pill-blue' : 'pill-gold'}`}>{c.team}</span></td>
+                      <td>{c.location}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--txt-dim)' }}>
+                        {c.lat.toFixed(3)}, {c.lng.toFixed(3)}
+                      </td>
+                      <td>
+                        <button className="btn btn-ghost" style={{ padding: '4px 8px', color: 'var(--red)' }} onClick={() => handleRemoveCheckIn(c.id)} title="Delete check-in">
+                          <i className="fa-solid fa-trash-can"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Pagination controls */}
+              {history.length > itemsPerPage && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <i className="fa-solid fa-chevron-left"></i> Prev
+                  </button>
+                  <span style={{ fontSize: '12px', color: 'var(--txt-sub)' }}>
+                    Page {currentPage} of {Math.ceil(history.length / itemsPerPage)}
+                  </span>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(history.length / itemsPerPage), p + 1))}
+                    disabled={currentPage === Math.ceil(history.length / itemsPerPage)}
+                  >
+                    Next <i className="fa-solid fa-chevron-right"></i>
+                  </button>
+                </div>
+              )}
+
+              <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--txt-dim)', marginTop: '8px' }}>
+                Showing {Math.min(history.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(history.length, currentPage * itemsPerPage)} of {history.length} check-ins
+              </div>
+            </>
           )}
         </div>
       </div>
