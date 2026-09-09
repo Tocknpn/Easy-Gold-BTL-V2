@@ -157,7 +157,7 @@ export default function CopyPaste() {
 
   const numericCols = ['new_register', 'new_reg_purchased', 'existing_users', 'buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'total_cost', 'footfall', 'step_in'];
   return (
-    <div onMouseUp={handleMouseUp} style={{ userSelect: "none" }}>
+    <div onMouseUp={handleMouseUp}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h2 style={{ fontSize: "18px", margin: 0 }}>Copy &amp; Paste</h2>
@@ -183,12 +183,12 @@ export default function CopyPaste() {
       </div>
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
-          <table className="data-table" style={{ fontSize: "12px", borderCollapse: "collapse", tableLayout: "fixed" }}>
+          <table className="data-table" style={{ fontSize: "12px", borderCollapse: "collapse", minWidth: "1560px", width: "100%", tableLayout: "auto" }}>
             <thead style={{ position: "sticky", top: 0, zIndex: 10 }}>
               <tr>
                 <th style={{ background: "var(--surface-hover)", padding: "8px 12px", border: "1px solid var(--border)", textAlign: "center", fontWeight: 600, color: "var(--txt-dim)", fontSize: "10px", width: "40px" }}>#</th>
                 {COLUMNS.map((col, _colIdx) => (
-                  <th key={col.key} onClick={() => toggleSort(col.key)} style={{ background: "var(--surface-hover)", padding: "8px 12px", border: "1px solid var(--border)", textAlign: "left", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", minWidth: col.width, color: sortKey === col.key ? "var(--gold)" : "var(--txt-dim)", fontSize: "11px" }}>
+                  <th key={col.key} onClick={() => toggleSort(col.key)} style={{ background: "var(--surface-hover)", padding: "8px 12px", border: "1px solid var(--border)", textAlign: "left", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", minWidth: col.width, overflow: "hidden", textOverflow: "ellipsis", color: sortKey === col.key ? "var(--gold)" : "var(--txt-dim)", fontSize: "11px" }}>
                     {col.label} <i className={`fa-solid ${sortKey === col.key ? (sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down') : 'fa-sort'}`} style={{ marginLeft: "4px", fontSize: "9px", opacity: sortKey === col.key ? 1 : 0.4 }}></i>
                   </th>
                 ))}
@@ -210,6 +210,8 @@ export default function CopyPaste() {
                           padding: "6px 12px",
                           border: "1px solid var(--border)",
                           whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
                           fontFamily: numericCols.includes(col.key) ? "var(--font-mono)" : "inherit",
                           textAlign: numericCols.includes(col.key) ? "right" : "left",
                           color: col.key === "merch_cost" ? "var(--gold)" : col.key === "total_cost" ? "var(--red)" : undefined,
