@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getCurrentDateHelpers } from '../lib/submissions';
-import { fetchStaff, addStaffRecord, updateStaffRecord, deleteStaffRecord, suggestStaffId } from '../lib/workflow';
+import { fetchStaff, addStaffRecord, updateStaffRecord, deleteStaffRecord, suggestStaffId, writeAuditLog } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
+import UserSettings from './UserSettings';
+import AuditLog from './AuditLog';
 
 const NumberInput = ({ value, onChange, placeholder, style }: any) => {
   const [str, setStr] = useState(value ? Number(value).toLocaleString() : '');
@@ -61,6 +63,7 @@ function StaffDirectory() {
     setNewId(suggestStaffId([...list, newStaff], newTeam));
 
     await addStaffRecord(newStaff);
+    await writeAuditLog('staff.create', { staffId: newStaff.staffId, name: newStaff.name, team: newStaff.team });
     await loadStaff();
   };
 
@@ -68,6 +71,7 @@ function StaffDirectory() {
     if (!window.confirm("Are you sure you want to remove this staff member?")) return;
     setList(list.filter(s => s.id !== id));
     await deleteStaffRecord(id);
+    await writeAuditLog('staff.delete', { id });
     await loadStaff();
   };
 
@@ -88,6 +92,7 @@ function StaffDirectory() {
     setEditName('');
 
     await updateStaffRecord(updated);
+    await writeAuditLog('staff.update', { id, staffId: updated.staffId, name: updated.name, team: updated.team });
     await loadStaff();
   };
 
@@ -297,6 +302,7 @@ const emptyTargetForm = (): TargetForm => ({
 });
 export default function Settings() {
   const { currentMonthStr } = getCurrentDateHelpers();
+  const [activeTab, setActiveTab] = useState('targets');
   const [routes, setRoutes] = useState<RouteRow[]>(loadRoutes);
   const [routeTeam, setRouteTeam] = useState('KPV Team');
   const [routeMonth, setRouteMonth] = useState(currentMonthStr);
@@ -395,6 +401,7 @@ export default function Settings() {
       setRouteFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setRouteMsg({ type: 'ok', text: `Uploaded ${parsed.length} route(s) for ${normalizeTeam(routeTeam)} (${routeMonth}).` });
+      void writeAuditLog('route.upload', { month: routeMonth, team: normalizeTeam(routeTeam), count: parsed.length });
     };
     reader.readAsText(routeFile);
   };
@@ -417,6 +424,7 @@ export default function Settings() {
   const deleteRoute = (id: string) => {
     setRoutes(prev => prev.filter(r => r.id !== id));
     setRouteMsg({ type: 'ok', text: 'Route removed.' });
+    void writeAuditLog('route.delete', { id });
   };
 
   const previewRoutes = routes.filter(r => r.date.startsWith(routeMonth) && r.team === normalizeTeam(routeTeam));
@@ -473,12 +481,14 @@ export default function Settings() {
       })));
     }
     setTargetMsg({ type: 'ok', text: `Targets saved for ${team} (${targetMonth}).` });
+    await writeAuditLog('targets.save', { team, month: targetMonth, payload });
     setTargetSaving(false);
   };
 
   const deleteTarget = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this target?")) return;
     await supabase.from('targets').delete().eq('id', id);
+    await writeAuditLog('targets.delete', { id });
     setTargets(prev => prev.filter(t => t.id !== id));
     setTargetMsg({ type: 'ok', text: 'Target entry removed.' });
   };
@@ -601,6 +611,7 @@ export default function Settings() {
 
       setMerch(prev => prev.map(m => (m.id === id ? { id: newName, itemName: newName, cpu: newCpu } : m)));
       setEditingId(null);
+      await writeAuditLog('merch.update', { oldItemName: id, newItemName: newName, cpu: newCpu, submissions_updated: updatedCount });
       setMerchMsg({
         type: 'ok',
         text: `Item updated. ${updatedCount} submission(s) recalculated with new CPU.`
@@ -616,6 +627,7 @@ export default function Settings() {
     if (!window.confirm("Are you sure you want to remove this merchandise?")) return;
     setMerchSaving(true);
     await supabase.from('merch').delete().eq('itemname', id);
+    await writeAuditLog('merch.delete', { itemName: id });
     setMerch(prev => prev.filter(m => m.id !== id));
     setMerchMsg({ type: 'ok', text: 'Item removed from Supabase.' });
     setMerchSaving(false);
@@ -637,6 +649,7 @@ export default function Settings() {
     }
     setMerch(prev => [...prev, { id: name, itemName: name, cpu }]);
     setNewItem({ itemName: '', cpu: '' });
+    await writeAuditLog('merch.create', { itemName: name, cpu });
     setMerchMsg({ type: 'ok', text: 'New item saved to Supabase.' });
     setMerchSaving(false);
   };
@@ -648,9 +661,24 @@ export default function Settings() {
 return (
     <div>
 
+      <div className="settings-tabs" role="tablist" aria-label="Upload & Settings sections">
+        {([
+          ['targets', 'fa-bullseye', 'Set Monthly Targets'],
+          ['routes', 'fa-calendar-days', 'Upload Monthly Route Plan'],
+          ['staff', 'fa-id-card-clip', 'Staff Directory (KPV & Agency)'],
+          ['merch', 'fa-box', 'Merch Catalog (Admin — Set CPU)'],
+          ['users', 'fa-user-gear', 'User Setting'],
+          ['audit', 'fa-clipboard-list', 'Audit Log'],
+        ] as [string, string, string][]).map(([key, icon, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={activeTab === key}
+            className={`settings-tab${activeTab === key ? ' active' : ''}`}
+            onClick={() => setActiveTab(key)}>
+            <i className={`fa-solid ${icon}`} aria-hidden="true"></i><span>{label}</span>
+          </button>
+        ))}
+      </div>
 
-      <div className="grid-2" style={{ alignItems: 'start', marginBottom: '24px' }}>
-        {/* ═══ ROUTE PLAN UPLOAD ═══ */}
+      {activeTab === 'routes' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
             <span style={{ color: 'var(--blue)', fontSize: '18px' }}><i className="fa-solid fa-calendar-days"></i></span>
@@ -745,7 +773,10 @@ return (
             )}
           </div>
         </div>
-{/* ═══ SET MONTHLY TARGETS ═══ */}
+      )}
+
+      {/* ═══ SET MONTHLY TARGETS ═══ */}
+      {activeTab === 'targets' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
             <span style={{ color: 'var(--red)', fontSize: '18px' }}><i className="fa-solid fa-bullseye"></i></span>
@@ -847,16 +878,20 @@ return (
             )}
           </div>
         </div>
-      </div>
-            {/* ═══ STAFF DIRECTORY ═══ */}
-      <StaffDirectory />
+      )}
+
+      {/* ═══ STAFF DIRECTORY ═══ */}
+      {activeTab === 'staff' && (
+        <StaffDirectory />
+      )}
 
       {/* ═══ MERCH CATALOG ═══ */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-          <span style={{ color: 'var(--gold)', fontSize: '18px' }}><i className="fa-solid fa-box"></i></span>
-          <h2 style={{ margin: 0, fontSize: '15px' }}>Merch Catalog (Admin — Set CPU)</h2>
-        </div>
+      {activeTab === 'merch' && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+            <span style={{ color: 'var(--gold)', fontSize: '18px' }}><i className="fa-solid fa-box"></i></span>
+            <h2 style={{ margin: 0, fontSize: '15px' }}>Merch Catalog (Admin — Set CPU)</h2>
+          </div>
 
         <table className="data-table" style={{ marginBottom: '20px' }}>
           <thead>
@@ -935,7 +970,11 @@ return (
         <button className="btn btn-primary" onClick={saveMerchConfig}>
           <i className="fa-solid fa-save"></i> Save Merch Configuration
         </button>
-      </div>
+        </div>
+      )}
+
+      {activeTab === 'users' && <UserSettings />}
+      {activeTab === 'audit' && <AuditLog />}
     </div>
   );
 }

@@ -9,7 +9,8 @@ CREATE TABLE users (
   name text NOT NULL,
   role text CHECK (role IN ('admin', 'manager', 'team_member')) NOT NULL,
   team text NOT NULL,
-  token text
+  token text,
+  is_active boolean DEFAULT true
 );
 
 -- 2. submissions table
@@ -95,6 +96,14 @@ CREATE TABLE audit_log (
 );
 
 -- Initial Data
-INSERT INTO users (username, password, name, role, team) VALUES
-('admin@easygold.la', 'admin123', 'Admin', 'admin', 'Admin Team'),
-('manager@easygold.la', 'manager123', 'Souphaxay K.', 'manager', 'Manager Team');
+INSERT INTO users (username, password, name, role, team, is_active) VALUES
+('admin@easygold.la', 'admin123', 'Admin', 'admin', 'Admin Team', true),
+('manager@easygold.la', 'manager123', 'Souphaxay K.', 'manager', 'Manager Team', true);
+
+-- Migration for databases created before is_active was added (safe to re-run):
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+
+-- Note: the web app writes to audit_log (Upload & Settings → Audit Log) for
+-- user / staff / target / route / merch actions. The anon key needs INSERT +
+-- SELECT on audit_log, and full CRUD on users, staff, merch, targets,
+-- route_plan to manage the system from the UI.

@@ -239,3 +239,125 @@ export async function updateRoutePlan(date: string, team: string, location_name:
     await supabase.from('route_plan').insert([{ date, team, location_name }]);
   }
 }
+
+// ── User accounts (managed by Admin in Upload & Settings → User Setting) ──
+export interface AppUserRow {
+  id: string;
+  username: string;
+  name: string;
+  role: string; // 'admin' | 'manager' | 'team_member'
+  team: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchUsers(): Promise<AppUserRow[]> {
+  try {
+    const { data, error } = await supabase.from('users').select('*').order('name');
+    if (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+    return (data || []).map((u: any) => ({
+      id: String(u.id ?? ''),
+      username: u.username ?? '',
+      name: u.name ?? u.username ?? '',
+      role: u.role ?? 'team_member',
+      team: u.team ?? '',
+      is_active: u.is_active !== false, // older DBs without the column → treated as active
+      created_at: u.created_at,
+      updated_at: u.updated_at,
+    }));
+  } catch (err) {
+    console.error('Error in fetchUsers:', err);
+    return [];
+  }
+}
+
+/** Returns { message } on failure, or null on success. */
+export async function addUserRecord(u: { username: string; password: string; name: string; role: string; team: string }): Promise<{ message: string } | null> {
+  const { error } = await supabase.from('users').insert({
+    username: u.username,
+    password: u.password,
+    name: u.name,
+    role: u.role,
+    team: u.team,
+    is_active: true,
+  });
+  return error ? { message: error.message } : null;
+}
+
+export async function updateUserRecord(id: string, fields: Record<string, any>): Promise<{ message: string } | null> {
+  const { error } = await supabase.from('users').update(fields).eq('id', id);
+  return error ? { message: error.message } : null;
+}
+
+export async function setUserActive(id: string, is_active: boolean): Promise<{ message: string } | null> {
+  const { error } = await supabase.from('users').update({ is_active }).eq('id', id);
+  return error ? { message: error.message } : null;
+}
+
+export async function deleteUserRecord(id: string): Promise<{ message: string } | null> {
+  const { error } = await supabase.from('users').delete().eq('id', id);
+  return error ? { message: error.message } : null;
+}
+
+export function roleLabel(role: string): string {
+  if (role === 'admin') return 'Admin';
+  if (role === 'manager') return 'Manager';
+  return 'Team Member';
+}
+
+// ── Audit log (viewed in Upload & Settings → Audit Log) ──────────────────
+export interface AuditLogRow {
+  id: string;
+  timestamp: string;
+  action: string;
+  user_name: string;
+  team: string;
+  payload: any;
+  status: string;
+}
+
+export async function fetchAuditLogs(limit = 1000): Promise<AuditLogRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from('audit_log')
+      .select('*')
+      .order('timestamp', { ascending: false })
+      .limit(limit);
+    if (error) {
+      console.error('Error fetching audit logs:', error);
+      return [];
+    }
+    return (data || []).map((r: any) => ({
+      id: String(r.id ?? ''),
+      timestamp: r.timestamp ?? '',
+      action: r.action ?? '',
+      user_name: r.user_name ?? '',
+      team: r.team ?? '',
+      payload: r.payload ?? null,
+      status: r.status ?? '',
+    }));
+  } catch (err) {
+    console.error('Error in fetchAuditLogs:', err);
+    return [];
+  }
+}
+
+/** Fire-and-forget audit trail entry. Never throws — logging must not block the UI. */
+export async function writeAuditLog(action: string, payload: any = {}, status = 'success', team = ''): Promise<void> {
+  try {
+    const user = getCurrentUser();
+    await supabase.from('audit_log').insert({
+      action,
+      user_name: user?.name || user?.username || 'system',
+      team: team || user?.team || '',
+      payload: payload ?? {},
+      status,
+    });
+  } catch (err) {
+    console.error('Error writing audit log:', err);
+  }
+}

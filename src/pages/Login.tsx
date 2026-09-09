@@ -46,6 +46,8 @@ export default function Login() {
 
         if (fetchError || !data) {
           setError('Invalid username or password.');
+        } else if (data.is_active === false) {
+          setError('This account has been deactivated. Please contact an administrator.');
         } else {
           const role = data.role === 'admin' || data.role === 'manager' ? 'admin' : 'staff';
           localStorage.setItem('easygold_user', JSON.stringify({
