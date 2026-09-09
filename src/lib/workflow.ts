@@ -275,26 +275,43 @@ export async function fetchUsers(): Promise<AppUserRow[]> {
   }
 }
 
+/** Detect PostgREST "column not in schema cache" errors (schema hasn't caught up / column missing). */
+function isMissingColumnError(err: any, column: string): boolean {
+  if (!err) return false;
+  const msg = `${err.message || ''} ${err.hint || ''}`;
+  return msg.includes(`'${column}'`) && (msg.includes('schema cache') || msg.includes('column'));
+}
+
+const MISSING_COLUMN_HINT =
+  "Your Supabase 'users' table doesn't have the 'is_active' column yet. Run this once in the Supabase SQL Editor: " +
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;";
+
 /** Returns { message } on failure, or null on success. */
 export async function addUserRecord(u: { username: string; password: string; name: string; role: string; team: string }): Promise<{ message: string } | null> {
-  const { error } = await supabase.from('users').insert({
-    username: u.username,
-    password: u.password,
-    name: u.name,
-    role: u.role,
-    team: u.team,
-    is_active: true,
-  });
+  const base = { username: u.username, password: u.password, name: u.name, role: u.role, team: u.team };
+  let { error } = await supabase.from('users').insert({ ...base, is_active: true });
+  // Databases that predate the is_active migration → retry without the column so adding users still works.
+  if (error && isMissingColumnError(error, 'is_active')) {
+    const retry = await supabase.from('users').insert(base);
+    error = retry.error;
+  }
   return error ? { message: error.message } : null;
 }
 
 export async function updateUserRecord(id: string, fields: Record<string, any>): Promise<{ message: string } | null> {
-  const { error } = await supabase.from('users').update(fields).eq('id', id);
+  let { error } = await supabase.from('users').update(fields).eq('id', id);
+  if (error && isMissingColumnError(error, 'is_active')) {
+    return { message: MISSING_COLUMN_HINT };
+  }
   return error ? { message: error.message } : null;
 }
 
 export async function setUserActive(id: string, is_active: boolean): Promise<{ message: string } | null> {
-  const { error } = await supabase.from('users').update({ is_active }).eq('id', id);
+  let { error } = await supabase.from('users').update({ is_active }).eq('id', id);
+  if (error && isMissingColumnError(error, 'is_active')) {
+    // Column doesn't exist yet — tell the admin how to enable activate/deactivate.
+    return { message: MISSING_COLUMN_HINT };
+  }
   return error ? { message: error.message } : null;
 }
 
