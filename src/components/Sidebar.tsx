@@ -146,6 +146,7 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             {!collapsed && <div className="nav-label">Admin Panel</div>}
             <NavLink to="/settings" icon="fa-solid fa-upload" label="Upload & Settings" />
             <NavLink to="/cost-manager" icon="fa-solid fa-sack-dollar" label="Cost Manager" />
+            <NavLink to="/copy-paste" icon="fa-solid fa-copy" label="Copy & Paste" />
             <NavLink to="/plan-setting" icon="fa-solid fa-table-list" label="Monthly Route Plan" />
             <NavLink to="/health" icon="fa-solid fa-heart-pulse" label="Health Monitor" />
           </div>
