@@ -516,7 +516,7 @@ export default function Settings() {
    * @param newCpu - The new CPU value to apply to the renamed item
    * @returns Number of submissions updated
    */
-  const recalcMerchCostForItem = async (oldItemName: string, newItemName: string, newCpu: number): Promise<number> => {
+  const recalcMerchCostForItem = async (oldItemName: string, newItemName: string, _newCpu: number): Promise<number> => {
     try {
       // Fetch the current catalog so every item is re-priced from the source of truth.
       const { data: catalogRows, error: catError } = await supabase
