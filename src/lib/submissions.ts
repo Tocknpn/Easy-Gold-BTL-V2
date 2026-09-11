@@ -171,6 +171,29 @@ const LOCAL_SUBS_KEY = 'easygold_submissions';
 const CACHE_KEY = 'easygold_cache';          // last successful full fetch
 const CACHE_TS_KEY = 'easygold_cache_ts';    // when it was cached
 
+// ── In-memory cache with TTL (reduces Supabase egress across page navigations) ──
+const MEMO_TTL_MS = 60_000; // 1 minute — all pages share one fetch within this window
+let memoCache: { data: Submission[]; ts: number } | = { data: [], ts: 0 };
+let memoInFlight: Promise<FetchResult> | null = null;
+
+/** Returns cached data if within TTL, otherwise null */
+function getMemoCache(): Submission[] {
+  if (memoCache.data.length && Date.now() - memoCache.ts < MEMO_TTL_MS) {
+    return memoCache.data;
+  }
+  return [];
+}
+
+function setMemoCache(data: Submission[]) {
+  memoCache = { data, ts: Date.now() };
+}
+
+/** Force-clear the memo cache (call after writes if needed) */
+export function clearSubmissionsCache(): void {
+  memoCache = { data: [], ts: 0 };
+  memoInFlight = null;
+}
+
 export function getLocalSubmissions(): Submission[] {
   try {
     const arr = JSON.parse(localStorage.getItem(LOCAL_SUBS_KEY) || '[]');
@@ -217,15 +240,25 @@ export interface FetchResult {
 
 // ── Supabase fetch: timeout → real cached data, NOT mock/demo data ─────────
 export async function fetchSubmissions(): Promise<FetchResult> {
-  try {
-    // 10-second timeout — if Supabase is slow, return cached real data
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('__timeout__')), 10000)
-    );
-    const query = supabase
-      .from('submissions')
-      .select('*')
-      .order('date', { ascending: false });
+  // Serve from in-memory cache if fresh (prevents duplicate fetches across pages)
+  const memo = getMemoCache();
+  if (memo.length > 0) {
+    return { data: memo, error: null, stale: false, cachedAt: null };
+  }
+
+  // Deduplicate concurrent in-flight requests
+  if (memoInFlight) return memoInFlight;
+
+  memoInFlight = (async (): Promise<FetchResult> => {
+    try {
+      // 10-second timeout — if Supabase is slow, return cached real data
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('__timeout__')), 10000)
+      );
+      const query = supabase
+        .from('submissions')
+        .select('*')
+        .order('date', { ascending: false });
 
     const { data, error } = await Promise.race([query, timeoutPromise]);
 
@@ -272,6 +305,7 @@ export async function fetchSubmissions(): Promise<FetchResult> {
 
     // Save to cache so next timeout can use this real data
     setCachedSubmissions(merged);
+    setMemoCache(merged);
 
     return { data: merged, error: null, stale: false, cachedAt: null };
 
@@ -283,5 +317,10 @@ export async function fetchSubmissions(): Promise<FetchResult> {
       (v, i, a) => a.findIndex(x => x.id === v.id) === i
     ).sort((a, b) => b.date.localeCompare(a.date));
     return { data: combined, error: err, stale: true, cachedAt: cached.cachedAt };
+  } finally {
+    memoInFlight = null;
   }
+})());
+
+  return memoInFlight;
 }
