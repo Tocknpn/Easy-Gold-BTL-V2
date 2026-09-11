@@ -173,7 +173,7 @@ const CACHE_TS_KEY = 'easygold_cache_ts';    // when it was cached
 
 // ── In-memory cache with TTL (reduces Supabase egress across page navigations) ──
 const MEMO_TTL_MS = 60_000; // 1 minute — all pages share one fetch within this window
-let memoCache: { data: Submission[]; ts: number } | = { data: [], ts: 0 };
+let memoCache: { data: Submission[]; ts: number } = { data: [], ts: 0 };
 let memoInFlight: Promise<FetchResult> | null = null;
 
 /** Returns cached data if within TTL, otherwise null */
@@ -320,7 +320,7 @@ export async function fetchSubmissions(): Promise<FetchResult> {
   } finally {
     memoInFlight = null;
   }
-})());
+})();
 
   return memoInFlight;
 }
