@@ -506,16 +506,26 @@ export default function Settings() {
   // ── Merch handlers (Supabase) ────────────────────────────────────────
 
   /**
-   * Recalculates merch_cost for all submissions containing a specific item.
-   * Called after CPU is changed in the catalog to update historical submissions.
+   * Recalculates merch_cost for all submissions, re-deriving every item's cpu
+   * from the live merch catalog by name. This repairs records where the stored
+   * cpu snapshot has gone stale (e.g. item renamed, or cpu edited after the
+   * submission was created).
    *
-   * @param oldItemName - The original item name (to find in submissions)
+   * @param oldItemName - The original item name (to find & rename in submissions)
    * @param newItemName - The new item name (in case it was renamed)
-   * @param newCpu - The new CPU value to apply
+   * @param newCpu - The new CPU value to apply to the renamed item
    * @returns Number of submissions updated
    */
   const recalcMerchCostForItem = async (oldItemName: string, newItemName: string, newCpu: number): Promise<number> => {
     try {
+      // Fetch the current catalog so every item is re-priced from the source of truth.
+      const { data: catalogRows, error: catError } = await supabase
+        .from('merch')
+        .select('itemname, cpu');
+      if (catError) throw catError;
+      const catalog: Record<string, number> = {};
+      for (const r of catalogRows || []) catalog[r.itemname] = Number(r.cpu) || 0;
+
       // Fetch all submissions that might contain this item
       const { data: submissions, error } = await supabase
         .from('submissions')
@@ -543,23 +553,23 @@ export default function Settings() {
 
         if (!Array.isArray(items) || items.length === 0) continue;
 
-        // Check if this submission contains the item and update it
-        let hasItem = false;
+        // Re-derive every item's cpu from the live catalog; apply rename to the edited item.
+        let changed = false;
         let newMerchCost = 0;
 
         for (const item of items) {
-          // Match by old name - update to new name and CPU
-          if (item.name === oldItemName) {
+          if (item.name === oldItemName && newItemName !== oldItemName) {
             item.name = newItemName;
-            item.cpu = newCpu;
-            hasItem = true;
+            changed = true;
           }
-          // Recalculate total cost using (qty * cpu) for all items
-          newMerchCost += (Number(item.qty) || 0) * (Number(item.cpu) || 0);
+          const liveCpu = catalog[item.name];
+          const resolvedCpu = liveCpu !== undefined ? liveCpu : (Number(item.cpu) || 0);
+          if (resolvedCpu !== Number(item.cpu)) changed = true;
+          item.cpu = resolvedCpu;
+          newMerchCost += (Number(item.qty) || 0) * resolvedCpu;
         }
 
-        // Only update if the item was found in this submission
-        if (hasItem) {
+        if (changed) {
           const { error: updateError } = await supabase
             .from('submissions')
             .update({
@@ -579,6 +589,60 @@ export default function Settings() {
       return updatedCount;
     } catch (err) {
       console.error('Error during merch cost recalculation:', err);
+      return 0;
+    }
+  };
+
+  /**
+   * Repairs ALL submissions regardless of which item changed — re-derives every
+   * item's cpu from the live catalog. Useful as a one-time fix for existing
+   * records whose stored cpu snapshots have gone stale.
+   */
+  const recalcAllSubmissions = async (): Promise<number> => {
+    try {
+      const { data: catalogRows, error: catError } = await supabase
+        .from('merch')
+        .select('itemname, cpu');
+      if (catError) throw catError;
+      const catalog: Record<string, number> = {};
+      for (const r of catalogRows || []) catalog[r.itemname] = Number(r.cpu) || 0;
+
+      const { data: submissions, error } = await supabase
+        .from('submissions')
+        .select('id, merch_items, merch_cost');
+      if (error) throw error;
+      if (!submissions || submissions.length === 0) return 0;
+
+      let updatedCount = 0;
+      for (const sub of submissions) {
+        let items: any[] = [];
+        try {
+          const raw = sub.merch_items;
+          items = typeof raw === 'string' ? JSON.parse(raw) : (raw || []);
+        } catch { continue; }
+        if (!Array.isArray(items) || items.length === 0) continue;
+
+        let changed = false;
+        let newMerchCost = 0;
+        for (const item of items) {
+          const liveCpu = catalog[item.name];
+          const resolvedCpu = liveCpu !== undefined ? liveCpu : (Number(item.cpu) || 0);
+          if (resolvedCpu !== Number(item.cpu)) changed = true;
+          item.cpu = resolvedCpu;
+          newMerchCost += (Number(item.qty) || 0) * resolvedCpu;
+        }
+        if (changed) {
+          const { error: updateError } = await supabase
+            .from('submissions')
+            .update({ merch_items: JSON.stringify(items), merch_cost: newMerchCost })
+            .eq('id', sub.id);
+          if (!updateError) updatedCount++;
+          else console.error(`Failed to update submission ${sub.id}:`, updateError);
+        }
+      }
+      return updatedCount;
+    } catch (err) {
+      console.error('Error during full merch recalculation:', err);
       return 0;
     }
   };
@@ -891,6 +955,20 @@ return (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
             <span style={{ color: 'var(--gold)', fontSize: '18px' }}><i className="fa-solid fa-box"></i></span>
             <h2 style={{ margin: 0, fontSize: '15px' }}>Merch Catalog (Admin — Set CPU)</h2>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost" disabled={merchSaving} onClick={async () => {
+              if (!window.confirm('Recalculate merch cost for ALL submissions using the current catalog CPU? This repairs any records with stale costs.')) return;
+              setMerchSaving(true);
+              const n = await recalcAllSubmissions();
+              setMerchSaving(false);
+              setMerchMsg({ type: 'ok', text: `Recalculated ${n} submission(s) using current catalog CPU values.` });
+            }} style={{ fontSize: '12px', padding: '6px 14px' }}>
+              <i className="fa-solid fa-rotate"></i> Recalculate All Submissions
+            </button>
+            {merchMsg && <div className={`alert ${merchMsg.type === 'ok' ? 'alert-ok' : 'alert-info'}`} style={{ margin: 0, padding: '6px 12px', fontSize: '12px' }}>
+              <i className={`fa-solid ${merchMsg.type === 'ok' ? 'fa-check' : 'fa-triangle-exclamation'}`}></i> {merchMsg.text}
+            </div>}
           </div>
 
         <table className="data-table" style={{ marginBottom: '20px' }}>

@@ -243,7 +243,11 @@ export default function SubmitResults() {
               const cpu = merchCatalog.find(m => m.name === row.name)?.cpu || 0;
               return (
                 <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.5fr 0.7fr 0.4fr', gap: '10px', alignItems: 'end', marginBottom: '8px' }}>
-                  <select value={row.name} onChange={e => updateMerch(idx, { name: e.target.value })} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
+                  <select value={row.name} onChange={e => {
+                    const name = e.target.value;
+                    const cpu = merchCatalog.find(m => m.name === name)?.cpu || 0;
+                    updateMerch(idx, { name, cpu });
+                  }} style={{ width: '100%', padding: '8px 12px', fontSize: '13px' }}>
                     {merchCatalog.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                   </select>
                   <input type="number" min={0} placeholder="Qty" value={row.qty === 0 ? '' : row.qty} onChange={e => updateMerch(idx, { qty: e.target.value === '' ? 0 : Number(e.target.value) })} style={{ width: '100%', fontFamily: 'var(--font-mono)', fontSize: '13px', padding: '8px 12px' }} />

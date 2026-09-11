@@ -31,8 +31,12 @@ function DetailRow({ label, value, color }: { label: string; value: any; color?:
   );
 }
 
-const merchTotalCost = (items: MerchItem[] | undefined) =>
-  (items || []).reduce((a, i) => a + Number(i.qty) * Number(i.cpu), 0);
+// Resolve cpu from the live catalog by name; fall back to the stored cpu snapshot.
+const resolveCpu = (name: string, storedCpu: number, catalog: MerchItem[]) =>
+  catalog.find(m => m.name === name)?.cpu ?? storedCpu ?? 0;
+
+const merchTotalCost = (items: MerchItem[] | undefined, catalog: MerchItem[]) =>
+  (items || []).reduce((a, i) => a + Number(i.qty) * resolveCpu(i.name, i.cpu, catalog), 0);
 
 export default function SubmissionModal({ open, submission, onClose, onSave, onDelete }: Props) {
   const [isEditing, setIsEditing] = useState(false);
@@ -81,7 +85,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
 
   if (!open || !editData) return null;
 
-  const merchTotal = merchTotalCost(editData.merch_items);
+  const merchTotal = merchTotalCost(editData.merch_items, merchCatalog);
 
   const updateMerch = (idx: number, patch: Partial<MerchItem>) => {
     const items = [...(editData.merch_items || [])];
@@ -233,8 +237,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
                 <span>Item</span><span>Qty</span><span>Cost</span><span></span>
               </div>
               {(editData.merch_items || []).map((item, idx) => {
-                const def = merchCatalog.find(m => m.name === item.name) || merchCatalog[0];
-                const cpu = item.cpu || def?.cpu || 0;
+                const cpu = resolveCpu(item.name, item.cpu, merchCatalog);
                 const lineTotal = Number(item.qty) * cpu;
                 return (
                   <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.6fr 0.85fr 0.45fr', gap: '10px', alignItems: 'end', marginBottom: '8px' }}>
@@ -327,7 +330,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
               {(editData.merch_items || []).map(i => (
                 <div key={`m-${i.name}-${i.qty}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px 8px 28px', borderBottom: '1px solid var(--border)', fontSize: '12px' }}>
                   <span style={{ color: 'var(--txt-sub)' }}>{i.name} × {i.qty}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--txt-sub)' }}>{fmtLAK(Number(i.qty) * i.cpu)}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--txt-sub)' }}>{fmtLAK(Number(i.qty) * resolveCpu(i.name, i.cpu, merchCatalog))}</span>
                 </div>
               ))}
               <DetailRow label="Service Cost" value={fmtLAK(editData.team_cost)} />
