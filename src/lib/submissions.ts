@@ -172,7 +172,7 @@ const CACHE_KEY = 'easygold_cache';          // last successful full fetch
 const CACHE_TS_KEY = 'easygold_cache_ts';    // when it was cached
 
 // ── In-memory cache with TTL (reduces Supabase egress across page navigations) ──
-const MEMO_TTL_MS = 60_000; // 1 minute — all pages share one fetch within this window
+const MEMO_TTL_MS = 120_000; // 2 minutes — all pages share one fetch within this window
 let memoCache: { data: Submission[]; ts: number } = { data: [], ts: 0 };
 let memoInFlight: Promise<FetchResult> | null = null;
 
@@ -323,4 +323,64 @@ export async function fetchSubmissions(): Promise<FetchResult> {
 })();
 
   return memoInFlight;
+}
+
+/**
+ * Lightweight fetch that excludes the heavy JSON columns (merch_items, staff_in_charge).
+ * Use this for pages that only need scalar KPIs (Dashboard, Targets) — reduces
+ * payload size by ~60-80% compared to select('*'). Falls back to the full
+ * in-memory cache if available, otherwise fetches only the needed columns.
+ */
+export async function fetchSubmissionsSummary(): Promise<FetchResult> {
+  // If we already have full data in memo cache, derive summaries from it (zero egress)
+  const memo = getMemoCache();
+  if (memo.length > 0) {
+    const light = memo.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[] }));
+    return { data: light, error: null, stale: false, cachedAt: null };
+  }
+
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('__timeout__')), 10000)
+    );
+    const query = supabase
+      .from('submissions')
+      .select('id,date,team,branch,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status')
+      .order('date', { ascending: false });
+
+    const { data, error } = await Promise.race([query, timeoutPromise]);
+
+    if (error) {
+      const cached = getCachedSubmissions();
+      const local = getLocalSubmissions();
+      const combined = [...local, ...cached.data].filter(
+        (v, i, a) => a.findIndex(x => x.id === v.id) === i
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
+    }
+
+    const mapped: Submission[] = (data || []).map((r: any) => ({
+      id: String(r.id),
+      date: r.date || '',
+      team: r.team || 'KPV',
+      branch: r.branch || '—',
+      new_register: Number(r.new_register) || 0,
+      new_reg_purchased: Number(r.new_reg_purchased) || 0,
+      buy_value_new: Number(r.buy_value_new) || 0,
+      existing_users: Number(r.existing_users) || 0,
+      buy_value_existing: Number(r.buy_value_existing) || 0,
+      team_cost: Number(r.team_cost) || 0,
+      merch_cost: Number(r.merch_cost) || 0,
+      merch_items: [],
+      staff_in_charge: [],
+      footfall: Number(r.footfall) || 0,
+      step_in: Number(r.step_in) || 0,
+      status: r.status || 'active',
+    }));
+
+    return { data: mapped, error: null, stale: false, cachedAt: null };
+  } catch (err: any) {
+    const cached = getCachedSubmissions();
+    return { data: cached.data, error: err, stale: true, cachedAt: cached.cachedAt };
+  }
 }

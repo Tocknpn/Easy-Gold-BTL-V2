@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { fetchSubmissions } from '../lib/submissions';
+import { fetchSubmissionsSummary } from '../lib/submissions';
 
 interface TargetRow {
   id: string;
@@ -54,7 +54,7 @@ export default function Targets() {
     setLoading(true);
     Promise.all([
       supabase.from('targets').select('*'),
-      fetchSubmissions(),
+      fetchSubmissionsSummary(),
     ]).then(([{ data: tData }, { data: sData }]) => {
       if (tData) {
         setTargets(tData.map((r: any) => ({
