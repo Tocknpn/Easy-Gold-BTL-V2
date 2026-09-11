@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { getCurrentDateHelpers } from '../lib/submissions';
+import { getCurrentDateHelpers, clearSubmissionsCache } from '../lib/submissions';
 import { fetchStaff, addStaffRecord, updateStaffRecord, deleteStaffRecord, suggestStaffId, writeAuditLog } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 import UserSettings from './UserSettings';
@@ -675,6 +675,7 @@ export default function Settings() {
 
       setMerch(prev => prev.map(m => (m.id === id ? { id: newName, itemName: newName, cpu: newCpu } : m)));
       setEditingId(null);
+      clearSubmissionsCache();
       await writeAuditLog('merch.update', { oldItemName: id, newItemName: newName, cpu: newCpu, submissions_updated: updatedCount });
       setMerchMsg({
         type: 'ok',
@@ -693,6 +694,7 @@ export default function Settings() {
     await supabase.from('merch').delete().eq('itemname', id);
     await writeAuditLog('merch.delete', { itemName: id });
     setMerch(prev => prev.filter(m => m.id !== id));
+    clearSubmissionsCache();
     setMerchMsg({ type: 'ok', text: 'Item removed from Supabase.' });
     setMerchSaving(false);
   };
@@ -713,6 +715,7 @@ export default function Settings() {
     }
     setMerch(prev => [...prev, { id: name, itemName: name, cpu }]);
     setNewItem({ itemName: '', cpu: '' });
+    clearSubmissionsCache();
     await writeAuditLog('merch.create', { itemName: name, cpu });
     setMerchMsg({ type: 'ok', text: 'New item saved to Supabase.' });
     setMerchSaving(false);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES } from '../lib/submissions';
+import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES, clearSubmissionsCache } from '../lib/submissions';
 import { fetchStaff } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
@@ -131,6 +131,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
         .eq('id', updated.id);
 
       if (error) throw error;
+      clearSubmissionsCache();
       onSave(updated);
       setIsEditing(false);
     } catch (err: any) {
@@ -150,6 +151,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
         .eq('id', editData.id);
 
       if (error) throw error;
+      clearSubmissionsCache();
       onDelete(editData.id);
     } catch (err: any) {
       window.alert('Failed to delete: ' + err.message);

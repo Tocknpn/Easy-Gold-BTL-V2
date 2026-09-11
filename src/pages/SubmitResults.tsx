@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort } from '../lib/submissions';
+import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort, clearSubmissionsCache } from '../lib/submissions';
 import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
 
@@ -157,6 +157,7 @@ export default function SubmitResults() {
         console.error('DB insert failed — saving locally:', error.message);
         saveLocalSubmission(record);
       }
+      clearSubmissionsCache();
     } catch (err) {
       console.error('DB unavailable — saving locally:', err);
       saveLocalSubmission(record);
