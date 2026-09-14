@@ -13,7 +13,7 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
 import type { ModalState, Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
@@ -104,7 +104,8 @@ export default function Dashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    const result = await fetchSubmissions();
+    // Light scalar-only fetch — full rows are hydrated per-row when the modal opens.
+    const result = await fetchSubmissionsSummary();
     if (result.error && !result.stale) console.error('Error fetching submissions:', result.error);
     if (result.data && result.data.length > 0) setSubmissions(result.data);
     setIsStale(result.stale);
@@ -265,7 +266,18 @@ export default function Dashboard() {
     };
   }, [filtered, trendMode]);
 
-  const openModal = (sub: Submission) => setModal({ open: true, submission: sub, isEditing: false });
+  const openModal = async (sub: Submission) => {
+    // Light rows (from the egress-saving summary fetch) carry no merch/staff JSON.
+    // Hydrate the single row (~0.5KB) so viewing AND editing stay correct — saving
+    // a light row as-is would wipe merch_items / staff_in_charge in the database.
+    let full = sub;
+    if (sub.light) {
+      const hydrated = await fetchSubmissionById(sub.id);
+      if (hydrated) full = hydrated;
+      else console.warn('[Dashboard] could not hydrate submission — merch/staff data may be missing in the modal');
+    }
+    setModal({ open: true, submission: full, isEditing: false });
+  };
   const closeModal = () => setModal({ open: false, submission: null, isEditing: false });
   const handleDelete = (id: string) => {
     setSubmissions(prev => prev.filter(s => s.id !== id));

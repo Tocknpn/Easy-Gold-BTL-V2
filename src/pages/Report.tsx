@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
@@ -44,7 +44,8 @@ export default function Report() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await fetchSubmissions();
+    // Light scalar-only fetch — full rows are hydrated per-row when the modal opens.
+    const { data, error } = await fetchSubmissionsSummary();
     if (error) console.error('Error fetching submissions:', error);
     if (data && data.length > 0) setSubmissions(data);
     setLoading(false);
@@ -117,7 +118,18 @@ export default function Report() {
   };
 
   // ── Row → shared submission detail modal ──────────────────────────────
-  const openModal = (sub: Submission) => setModal({ open: true, submission: sub });
+  const openModal = async (sub: Submission) => {
+    // Light rows (from the egress-saving summary fetch) carry no merch/staff JSON.
+    // Hydrate the single row (~0.5KB) so viewing AND editing stay correct — saving
+    // a light row as-is would wipe merch_items / staff_in_charge in the database.
+    let full = sub;
+    if (sub.light) {
+      const hydrated = await fetchSubmissionById(sub.id);
+      if (hydrated) full = hydrated;
+      else console.warn('[Report] could not hydrate submission — merch/staff data may be missing in the modal');
+    }
+    setModal({ open: true, submission: full });
+  };
   const closeModal = () => setModal({ open: false, submission: null });
   const handleSave = (saved: Submission) => {
     setSubmissions(prev => prev.map(s => (s.id === saved.id ? saved : s)));

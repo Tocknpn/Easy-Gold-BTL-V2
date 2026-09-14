@@ -37,7 +37,8 @@ export default function Login() {
         );
         const query = supabase
           .from('users')
-          .select('*')
+          // Only the columns the login flow reads — never ship password/token to the browser.
+          .select('username,name,role,team,is_active')
           .eq('username', username)
           .eq('password', password)
           .single();

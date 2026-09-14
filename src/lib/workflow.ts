@@ -51,10 +51,15 @@ export async function fetchCheckIns(): Promise<CheckInRecord[]> {
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('__timeout__')), 5000)
     );
+    // Egress guard: only pull the recent window (the calendar, check-in history
+    // and submit views never look further back) instead of the whole table.
+    const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
     const query = supabase
       .from('checkins')
       .select('*')
-      .order('timestamp', { ascending: false });
+      .gte('date', cutoff)
+      .order('timestamp', { ascending: false })
+      .limit(1000);
     
     const { data, error } = await Promise.race([query, timeoutPromise]);
     
@@ -209,10 +214,15 @@ export interface RoutePlanEntry {
 
 export async function fetchRoutePlans(): Promise<RoutePlanEntry[]> {
   try {
+    // Egress guard: only the recent window (90 days covers history + next-month
+    // planning) instead of the whole table, and cap the row count.
+    const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
     const { data, error } = await supabase
       .from('route_plan')
       .select('*')
-      .order('date', { ascending: false });
+      .gte('date', cutoff)
+      .order('date', { ascending: false })
+      .limit(500);
 
     if (error) {
       console.error('Error fetching route plans:', error);

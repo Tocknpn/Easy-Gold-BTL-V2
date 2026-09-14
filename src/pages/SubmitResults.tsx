@@ -133,6 +133,7 @@ export default function SubmitResults() {
     };
 
     // Best-effort database write. We only save locally if the DB fails to avoid duplicate row glitches.
+    let savedToDb = true;
     try {
       const { error } = await supabase
         .from('submissions')
@@ -156,15 +157,19 @@ export default function SubmitResults() {
       if (error) {
         console.error('DB insert failed — saving locally:', error.message);
         saveLocalSubmission(record);
+        savedToDb = false;
       }
       clearSubmissionsCache();
     } catch (err) {
       console.error('DB unavailable — saving locally:', err);
       saveLocalSubmission(record);
+      savedToDb = false;
     }
 
     setSubmitting(false);
-    setDone(`✓ Results submitted for ${branch} on ${labelDate(date)} — Admin will fill Service Cost in Cost Manager.`);
+    setDone(savedToDb
+      ? `✓ Results submitted for ${branch} on ${labelDate(date)} — saved to the database. Admin will fill Service Cost in Cost Manager.`
+      : `⚠️ No connection — results were saved on THIS DEVICE only, not in the database yet. They will still show on this phone, but Admin cannot see them yet. When internet is back, tell Admin to check Submission History (the record may need to be entered again).`);
     // Reset form
     setCheckInId(''); setDate(''); setBranch('');
     setNc(0); setNrp(0); setBuyNew(0); setEc(0); setBuyExisting(0);

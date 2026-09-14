@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, fmtLAK, labelDate } from '../lib/submissions';
+import { fetchSubmissions, genMockSubmissions, fmtLAK, labelDate, clearSubmissionsCache } from '../lib/submissions';
 
 const COLUMNS = [
   { key: 'date', label: 'Date', width: '100px' },
@@ -318,7 +318,7 @@ return (
           <button className="btn btn-ghost" onClick={handleCopyAll} title="Copy all filtered rows with header">
             <i className="fa-solid fa-table"></i> Copy All
           </button>
-          <button className="btn btn-ghost" onClick={fetchData}>
+          <button className="btn btn-ghost" onClick={() => { clearSubmissionsCache(); fetchData(); }}>
             <i className="fa-solid fa-rotate-right"></i> Refresh
           </button>
         </div>

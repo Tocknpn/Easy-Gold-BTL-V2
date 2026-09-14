@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } from '../lib/submissions';
+import { fetchSubmissionsSummary, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, clearSubmissionsCache } from '../lib/submissions';
 import { supabase } from '../lib/supabase';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
@@ -129,7 +129,8 @@ export default function CostManager() {
 
   const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await fetchSubmissions();
+    // Light scalar-only fetch — Cost Manager only reads cost/KPI columns.
+    const { data, error } = await fetchSubmissionsSummary();
     if (error) console.error('Error fetching submissions:', error);
     if (data && data.length > 0) setSubmissions(data);
     setLoading(false);
@@ -231,6 +232,9 @@ export default function CostManager() {
     setSubmissions(prev => prev.map(s => (costMap.has(s.id) ? { ...s, team_cost: costMap.get(s.id)! } : s)));
     setDrafts({});
     setSaving(false);
+    // Drop the egress caches so every other page refetches the new costs
+    // (otherwise the 5/10-minute cache would keep showing the old numbers).
+    if (realIds.length > 0) clearSubmissionsCache();
 
     if (dbFailures > 0 && realIds.length > 0) {
       window.alert(`Saved ${updates.length - dbFailures}/${updates.length} record(s). ${dbFailures} database update(s) failed — check your connection.`);

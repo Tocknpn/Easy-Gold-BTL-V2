@@ -77,7 +77,7 @@ function UptimeBar({ log }: { log: PingRecord[] }) {
 export default function HealthMonitor() {
   const [log, setLog] = useState<PingRecord[]>(loadLog);
   const [pinging, setPinging] = useState(false);
-  const [interval, setIntervalSec] = useState(30);
+  const [interval, setIntervalSec] = useState(300);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [webVitals, setWebVitals] = useState<Record<string, number | null>>({ lcp: null, fid: null, cls: null });
 
@@ -136,7 +136,11 @@ export default function HealthMonitor() {
   useEffect(() => {
     doPing(); // immediate on mount
     const schedule = () => {
-      timerRef.current = setTimeout(() => { doPing(); schedule(); }, interval * 1000);
+      timerRef.current = setTimeout(() => {
+        // Skip while the tab is hidden — an idle background tab must not burn egress.
+        if (!document.hidden) doPing();
+        schedule();
+      }, interval * 1000);
     };
     schedule();
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
@@ -208,7 +212,7 @@ export default function HealthMonitor() {
             <h3 style={{ fontSize: '14px', margin: 0 }}>Connection History</h3>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>Ping interval:</span>
-              {[15, 30, 60].map(s => (
+              {[60, 300, 900].map(s => (
                 <button
                   key={s}
                   className="btn btn-ghost"
@@ -219,7 +223,7 @@ export default function HealthMonitor() {
                     color: interval === s ? 'var(--blue)' : undefined,
                     borderColor: interval === s ? 'var(--blue)' : undefined,
                   }}
-                >{s}s</button>
+                >{s < 60 ? `${s}s` : `${s / 60}m`}</button>
               ))}
               <button
                 className="btn btn-ghost"

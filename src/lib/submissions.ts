@@ -24,6 +24,10 @@ export interface Submission {
   footfall: number;
   step_in: number;
   status: string;
+  /** true when this row came from the lightweight summary fetch (no merch/staff
+   *  JSON). Hydrate with fetchSubmissionById() before offering Edit — saving a
+   *  light row as-is would overwrite merch_items / staff_in_charge with empty. */
+  light?: boolean;
 }
 
 export interface ModalState {
@@ -100,17 +104,25 @@ export const MERCH_CATALOG: MerchItem[] = [
   { name: 'Tote Bag', qty: 0, cpu: 28000 },
 ];
 
+// 60s in-memory cache — the submission modal re-mounts fire this on every row
+// open; the catalog rarely changes, so skip the repeat request (free-plan egress).
+let merchCache: { data: MerchItem[]; ts: number } | null = null;
+const MERCH_TTL_MS = 60_000;
+
 export async function fetchMerchCatalog(): Promise<MerchItem[]> {
+  if (merchCache && Date.now() - merchCache.ts < MERCH_TTL_MS) return merchCache.data;
   try {
     const { data, error } = await supabase.from('merch').select('*').order('itemname');
-    if (error || !data || data.length === 0) return MERCH_CATALOG;
-    return data.map((row: any) => ({
+    if (error || !data || data.length === 0) return merchCache?.data ?? MERCH_CATALOG;
+    const mapped = data.map((row: any) => ({
       name: row.itemname,
       qty: 0,
       cpu: Number(row.cpu) || 0
     }));
+    merchCache = { data: mapped, ts: Date.now() };
+    return mapped;
   } catch {
-    return MERCH_CATALOG;
+    return merchCache?.data ?? MERCH_CATALOG;
   }
 }
 
@@ -168,30 +180,38 @@ export function genMockSubmissions(): Submission[] {
 
 // ── Locally submitted records (appear instantly even without a DB) ───────
 const LOCAL_SUBS_KEY = 'easygold_submissions';
-const CACHE_KEY = 'easygold_cache';          // last successful full fetch
-const CACHE_TS_KEY = 'easygold_cache_ts';    // when it was cached
+const CACHE_KEY = 'easygold_cache';        // last successful fetch — offline fallback ONLY
+const CACHE_TS_KEY = 'easygold_cache_ts';  // when it was cached
 
-// ── In-memory cache with TTL (reduces Supabase egress across page navigations) ──
-const MEMO_TTL_MS = 120_000; // 2 minutes — all pages share one fetch within this window
-let memoCache: { data: Submission[]; ts: number } = { data: [], ts: 0 };
+// ── Caches ────────────────────────────────────────────────────────────────
+// MEMO (in-memory, 5 min): reused ONLY while clicking between pages inside
+//   the open app (SPA navigation). A page reload (F5 / refresh button)
+//   destroys it — so REFRESH ALWAYS DOWNLOADS FRESH DATA. By design.
+// localStorage copy: NEVER used to skip a load. It is the offline fallback —
+//   if Supabase is unreachable, the last known data is shown (stale banner).
+const MEMO_TTL_MS = 5 * 60_000; // 5 minutes
+let memoCache: { data: Submission[]; ts: number; full: boolean } = { data: [], ts: 0, full: false };
 let memoInFlight: Promise<FetchResult> | null = null;
 
-/** Returns cached data if within TTL, otherwise null */
-function getMemoCache(): Submission[] {
-  if (memoCache.data.length && Date.now() - memoCache.ts < MEMO_TTL_MS) {
-    return memoCache.data;
-  }
-  return [];
+/** Memo data if within TTL. `full=true` demands rows incl. merch/staff JSON; force skips the memo. */
+function getMemoCache(full: boolean, force = false): Submission[] {
+  if (force) return [];
+  const fresh = memoCache.data.length > 0 && Date.now() - memoCache.ts < MEMO_TTL_MS;
+  return fresh && (memoCache.full || !full) ? memoCache.data : [];
 }
 
-function setMemoCache(data: Submission[]) {
-  memoCache = { data, ts: Date.now() };
+function setMemoCache(data: Submission[], full: boolean) {
+  memoCache = { data, ts: Date.now(), full };
 }
 
-/** Force-clear the memo cache (call after writes if needed) */
+/** Force-clear every cache layer (call after writes and on manual Refresh). */
 export function clearSubmissionsCache(): void {
-  memoCache = { data: [], ts: 0 };
+  memoCache = { data: [], ts: 0, full: false };
   memoInFlight = null;
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(CACHE_TS_KEY);
+  } catch { /* ignore */ }
 }
 
 export function getLocalSubmissions(): Submission[] {
@@ -238,10 +258,34 @@ export interface FetchResult {
   cachedAt: string | null;
 }
 
+/** One DB row → typed Submission (shared by full / by-id fetches). */
+function mapSubmissionRow(r: any, i: number): Submission {
+  return {
+    id: String(r.id ?? `sb-${i}`),
+    date: r.date || '',
+    team: r.team || 'KPV',
+    branch: r.branch || '—',
+    new_register: Number(r.new_register) || 0,
+    new_reg_purchased: Number(r.new_reg_purchased) || 0,
+    buy_value_new: Number(r.buy_value_new) || 0,
+    existing_users: Number(r.existing_users) || 0,
+    buy_value_existing: Number(r.buy_value_existing) || 0,
+    team_cost: Number(r.team_cost) || 0,
+    merch_cost: Number(r.merch_cost) || 0,
+    merch_items: parseMerch(r.merch_items),
+    staff_in_charge: parseStaff(r.staff_in_charge),
+    footfall: Number(r.footfall) || 0,
+    step_in: Number(r.step_in) || 0,
+    status: r.status || 'active',
+  };
+}
+
 // ── Supabase fetch: timeout → real cached data, NOT mock/demo data ─────────
-export async function fetchSubmissions(): Promise<FetchResult> {
-  // Serve from in-memory cache if fresh (prevents duplicate fetches across pages)
-  const memo = getMemoCache();
+export async function fetchSubmissions(force = false): Promise<FetchResult> {
+  // In-memory reuse ONLY for in-session page navigation (no reload happened).
+  // force=true (manual Refresh buttons) and any page reload skip it —
+  // so REFRESH ALWAYS BRINGS THE LATEST DATA.
+  const memo = getMemoCache(true, force);
   if (memo.length > 0) {
     return { data: memo, error: null, stale: false, cachedAt: null };
   }
@@ -272,24 +316,7 @@ export async function fetchSubmissions(): Promise<FetchResult> {
       return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
     }
 
-    const mapped: Submission[] = (data || []).map((r: any, i: number) => ({
-      id: String(r.id ?? `sb-${i}`),
-      date: r.date || '',
-      team: r.team || 'KPV',
-      branch: r.branch || '—',
-      new_register: Number(r.new_register) || 0,
-      new_reg_purchased: Number(r.new_reg_purchased) || 0,
-      buy_value_new: Number(r.buy_value_new) || 0,
-      existing_users: Number(r.existing_users) || 0,
-      buy_value_existing: Number(r.buy_value_existing) || 0,
-      team_cost: Number(r.team_cost) || 0,
-      merch_cost: Number(r.merch_cost) || 0,
-      merch_items: parseMerch(r.merch_items),
-      staff_in_charge: parseStaff(r.staff_in_charge),
-      footfall: Number(r.footfall) || 0,
-      step_in: Number(r.step_in) || 0,
-      status: r.status || 'active',
-    }));
+    const mapped: Submission[] = (data || []).map(mapSubmissionRow);
 
     // Clean up ghost local records (duplicate rows) that successfully made it to Supabase
     // Since IDs won't match (local is 'sub-123', DB is UUID), we match by signature
@@ -303,9 +330,9 @@ export async function fetchSubmissions(): Promise<FetchResult> {
     }
     const merged = [...local, ...mapped].sort((a, b) => b.date.localeCompare(a.date));
 
-    // Save to cache so next timeout can use this real data
+    // Save to the offline-fallback cache and the in-session memo
     setCachedSubmissions(merged);
-    setMemoCache(merged);
+    setMemoCache(merged, true);
 
     return { data: merged, error: null, stale: false, cachedAt: null };
 
@@ -329,13 +356,17 @@ export async function fetchSubmissions(): Promise<FetchResult> {
  * Lightweight fetch that excludes the heavy JSON columns (merch_items, staff_in_charge).
  * Use this for pages that only need scalar KPIs (Dashboard, Targets) — reduces
  * payload size by ~60-80% compared to select('*'). Falls back to the full
- * in-memory cache if available, otherwise fetches only the needed columns.
+ * in-memory cache, otherwise fetches only the needed columns. Rows come back
+ * flagged `light: true` — hydrate a row with
+ * fetchSubmissionById() before letting the edit modal save it.
  */
-export async function fetchSubmissionsSummary(): Promise<FetchResult> {
-  // If we already have full data in memo cache, derive summaries from it (zero egress)
-  const memo = getMemoCache();
+export async function fetchSubmissionsSummary(force = false): Promise<FetchResult> {
+  // In-memory reuse ONLY for in-session page navigation (no reload happened).
+  // force=true (manual Refresh buttons) and any page reload skip it —
+  // so REFRESH ALWAYS BRINGS THE LATEST DATA.
+  const memo = getMemoCache(false, force);
   if (memo.length > 0) {
-    const light = memo.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[] }));
+    const light = memo.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[], light: true }));
     return { data: light, error: null, stale: false, cachedAt: null };
   }
 
@@ -359,8 +390,8 @@ export async function fetchSubmissionsSummary(): Promise<FetchResult> {
       return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
     }
 
-    const mapped: Submission[] = (data || []).map((r: any) => ({
-      id: String(r.id),
+    const mapped: Submission[] = (data || []).map((r: any, i: number) => ({
+      id: String(r.id ?? `sb-${i}`),
       date: r.date || '',
       team: r.team || 'KPV',
       branch: r.branch || '—',
@@ -376,11 +407,36 @@ export async function fetchSubmissionsSummary(): Promise<FetchResult> {
       footfall: Number(r.footfall) || 0,
       step_in: Number(r.step_in) || 0,
       status: r.status || 'active',
+      light: true,
     }));
+
+    // Save to the offline-fallback cache and the in-session memo (light rows —
+    // a later full fetch, e.g. CopyPaste, still downloads complete rows).
+    setCachedSubmissions(mapped);
+    setMemoCache(mapped, false);
 
     return { data: mapped, error: null, stale: false, cachedAt: null };
   } catch (err: any) {
     const cached = getCachedSubmissions();
     return { data: cached.data, error: err, stale: true, cachedAt: cached.cachedAt };
+  }
+}
+
+/**
+ * Fetch ONE full submission row by id (~0.5KB of egress). Used to hydrate a
+ * light summary row before the view/edit modal opens, so the modal shows real
+ * merch/staff data and saving never wipes merch_items / staff_in_charge.
+ */
+export async function fetchSubmissionById(id: string): Promise<Submission | null> {
+  try {
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapSubmissionRow(data, 0);
+  } catch {
+    return null;
   }
 }
