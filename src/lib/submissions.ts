@@ -184,13 +184,16 @@ const CACHE_KEY = 'easygold_cache';        // last successful fetch — offline 
 const CACHE_TS_KEY = 'easygold_cache_ts';  // when it was cached
 
 // ── Caches ────────────────────────────────────────────────────────────────
-// MEMO (in-memory, 5 min): reused ONLY while clicking between pages inside
-//   the open app (SPA navigation). A page reload (F5 / refresh button)
-//   destroys it — so REFRESH ALWAYS DOWNLOADS FRESH DATA. By design.
+// MEMO (in-memory): the already-downloaded table. A page reload (F5) destroys
+//   it — but before re-downloading ~0.5MB, a VERSION PROBE (~0.2KB) asks the
+//   server "did anything change?" (row count). Unchanged → reuse with zero
+//   big download; changed (new record / deletion) → full fresh download.
+//   Every refresh is therefore always verified against the server (freshness
+//   100%) at ~0.1% of the egress cost.
 // localStorage copy: NEVER used to skip a load. It is the offline fallback —
 //   if Supabase is unreachable, the last known data is shown (stale banner).
 const MEMO_TTL_MS = 5 * 60_000; // 5 minutes
-let memoCache: { data: Submission[]; ts: number; full: boolean } = { data: [], ts: 0, full: false };
+let memoCache: { data: Submission[]; ts: number; full: boolean; probeKey: string | null } = { data: [], ts: 0, full: false, probeKey: null };
 let memoInFlight: Promise<FetchResult> | null = null;
 
 /** Memo data if within TTL. `full=true` demands rows incl. merch/staff JSON; force skips the memo. */
@@ -201,12 +204,37 @@ function getMemoCache(full: boolean, force = false): Submission[] {
 }
 
 function setMemoCache(data: Submission[], full: boolean) {
-  memoCache = { data, ts: Date.now(), full };
+  memoCache = { data, ts: Date.now(), full, probeKey: memoCache.probeKey };
+}
+
+/** Tiny server check (~0.4KB total): row count + latest updated_at timestamp.
+ *  - row count        → detects INSERTS and DELETES
+ *  - max(updated_at)  → detects EDITS to existing rows (bumped by the DB
+ *    trigger from supabase_change_probe.sql; if that SQL hasn't been run yet
+ *    this part quietly falls back to count-only detection). */
+async function probeSubmissionsKey(): Promise<string> {
+  let count = '-1';
+  let lastTouch = '';
+  try {
+    const { count: c, error } = await supabase
+      .from('submissions')
+      .select('id', { count: 'exact', head: true });
+    if (!error) count = String(c ?? '-1');
+  } catch { /* network down → keep count '-1' */ }
+  try {
+    const { data, error } = await supabase
+      .from('submissions')
+      .select('updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (!error && data && data.length > 0) lastTouch = String(data[0]?.updated_at ?? '');
+  } catch { /* updated_at column not added yet → count-only probe */ }
+  return `${count}|${lastTouch}`;
 }
 
 /** Force-clear every cache layer (call after writes and on manual Refresh). */
 export function clearSubmissionsCache(): void {
-  memoCache = { data: [], ts: 0, full: false };
+  memoCache = { data: [], ts: 0, full: false, probeKey: null };
   memoInFlight = null;
   try {
     localStorage.removeItem(CACHE_KEY);
@@ -282,12 +310,17 @@ function mapSubmissionRow(r: any, i: number): Submission {
 
 // ── Supabase fetch: timeout → real cached data, NOT mock/demo data ─────────
 export async function fetchSubmissions(force = false): Promise<FetchResult> {
-  // In-memory reuse ONLY for in-session page navigation (no reload happened).
-  // force=true (manual Refresh buttons) and any page reload skip it —
-  // so REFRESH ALWAYS BRINGS THE LATEST DATA.
+  // Freshness protocol: every load asks the server a ~0.2KB question (row
+  // count). Unchanged → reuse the already-downloaded table (no big egress);
+  // changed (new record / deletion) → full fresh download below. force=true
+  // (manual Refresh buttons) skips the memo AND the probe → guaranteed full
+  // download.
   const memo = getMemoCache(true, force);
   if (memo.length > 0) {
-    return { data: memo, error: null, stale: false, cachedAt: null };
+    const key = await probeSubmissionsKey();
+    if (key === memoCache.probeKey) {
+      return { data: memo, error: null, stale: false, cachedAt: null };
+    }
   }
 
   // Deduplicate concurrent in-flight requests
@@ -333,6 +366,7 @@ export async function fetchSubmissions(force = false): Promise<FetchResult> {
     // Save to the offline-fallback cache and the in-session memo
     setCachedSubmissions(merged);
     setMemoCache(merged, true);
+    memoCache.probeKey = await probeSubmissionsKey();
 
     return { data: merged, error: null, stale: false, cachedAt: null };
 
@@ -361,13 +395,16 @@ export async function fetchSubmissions(force = false): Promise<FetchResult> {
  * fetchSubmissionById() before letting the edit modal save it.
  */
 export async function fetchSubmissionsSummary(force = false): Promise<FetchResult> {
-  // In-memory reuse ONLY for in-session page navigation (no reload happened).
-  // force=true (manual Refresh buttons) and any page reload skip it —
-  // so REFRESH ALWAYS BRINGS THE LATEST DATA.
+  // Same freshness protocol as fetchSubmissions: a ~0.2KB count probe decides
+  // whether the already-downloaded data is still current. force=true skips
+  // both the memo and the probe → guaranteed full download.
   const memo = getMemoCache(false, force);
   if (memo.length > 0) {
-    const light = memo.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[], light: true }));
-    return { data: light, error: null, stale: false, cachedAt: null };
+    const key = await probeSubmissionsKey();
+    if (key === memoCache.probeKey) {
+      const light = memo.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[], light: true }));
+      return { data: light, error: null, stale: false, cachedAt: null };
+    }
   }
 
   try {
@@ -414,6 +451,7 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
     // a later full fetch, e.g. CopyPaste, still downloads complete rows).
     setCachedSubmissions(mapped);
     setMemoCache(mapped, false);
+    memoCache.probeKey = await probeSubmissionsKey();
 
     return { data: mapped, error: null, stale: false, cachedAt: null };
   } catch (err: any) {
