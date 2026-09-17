@@ -180,31 +180,31 @@ export function genMockSubmissions(): Submission[] {
 
 // ── Locally submitted records (appear instantly even without a DB) ───────
 const LOCAL_SUBS_KEY = 'easygold_submissions';
-const CACHE_KEY = 'easygold_cache';        // last successful fetch — offline fallback ONLY
-const CACHE_TS_KEY = 'easygold_cache_ts';  // when it was cached
+const CACHE_KEY = 'easygold_cache';             // last downloaded snapshot
+const CACHE_TS_KEY = 'easygold_cache_ts';       // when it was downloaded
+const CACHE_FULL_KEY = 'easygold_cache_full';   // '1' = snapshot rows include merch/staff JSON
+const CACHE_PROBE_KEY = 'easygold_cache_probe'; // server-state the snapshot was verified at
 
-// ── Caches ────────────────────────────────────────────────────────────────
-// MEMO (in-memory): the already-downloaded table. A page reload (F5) destroys
-//   it — but before re-downloading ~0.5MB, a VERSION PROBE (~0.2KB) asks the
-//   server "did anything change?" (row count). Unchanged → reuse with zero
-//   big download; changed (new record / deletion) → full fresh download.
-//   Every refresh is therefore always verified against the server (freshness
-//   100%) at ~0.1% of the egress cost.
-// localStorage copy: NEVER used to skip a load. It is the offline fallback —
-//   if Supabase is unreachable, the last known data is shown (stale banner).
-const MEMO_TTL_MS = 5 * 60_000; // 5 minutes
-let memoCache: { data: Submission[]; ts: number; full: boolean; probeKey: string | null } = { data: [], ts: 0, full: false, probeKey: null };
+// ── Freshness protocol (keeps 5GB egress safe) ───────────────────────────
+// Every page load / refresh asks the server one tiny question (~0.4KB):
+// "row count + newest updated_at". If the answer matches the snapshot we
+// already hold (in memory, or the last session's copy in localStorage —
+// it SURVIVES F5 / app restarts), we reuse it. The server is always
+// consulted, so data is NEVER shown stale; only the big re-download is
+// skipped. Any add / edit / delete changes the answer → full fresh download.
+// Manual Refresh buttons (force=true) skip the probe and always download.
+let memoCache: { data: Submission[]; full: boolean; probeKey: string | null } = { data: [], full: false, probeKey: null };
 let memoInFlight: Promise<FetchResult> | null = null;
 
-/** Memo data if within TTL. `full=true` demands rows incl. merch/staff JSON; force skips the memo. */
-function getMemoCache(full: boolean, force = false): Submission[] {
-  if (force) return [];
-  const fresh = memoCache.data.length > 0 && Date.now() - memoCache.ts < MEMO_TTL_MS;
-  return fresh && (memoCache.full || !full) ? memoCache.data : [];
-}
-
-function setMemoCache(data: Submission[], full: boolean) {
-  memoCache = { data, ts: Date.now(), full, probeKey: memoCache.probeKey };
+/** Race-free snapshot key: computed FROM the rows we actually received
+ *  (row count + newest updated_at) — never from a separate later request. */
+function keyFromRows(rows: any[]): string {
+  let maxTouch = '';
+  for (const r of rows) {
+    const t = String(r?.updated_at ?? '');
+    if (t > maxTouch) maxTouch = t;
+  }
+  return `${rows.length}|${maxTouch}`;
 }
 
 /** Tiny server check (~0.4KB total): row count + latest updated_at timestamp.
@@ -232,13 +232,46 @@ async function probeSubmissionsKey(): Promise<string> {
   return `${count}|${lastTouch}`;
 }
 
+/** Snapshot reuse: memory first, then the last session's localStorage copy —
+ *  but ONLY when the live probe key proves the server state is unchanged. */
+function takeSnapshot(full: boolean, key: string): { data: Submission[]; cachedAt: string | null } | null {
+  // 1) in-memory snapshot (from earlier page views in this session)
+  if (memoCache.data.length > 0 && memoCache.probeKey === key && (memoCache.full || !full)) {
+    return { data: memoCache.data, cachedAt: null };
+  }
+  // 2) localStorage snapshot (survives F5 / closing the browser)
+  try {
+    const storedKey = localStorage.getItem(CACHE_PROBE_KEY);
+    const storedFull = localStorage.getItem(CACHE_FULL_KEY) === '1';
+    if (storedKey !== null && storedKey === key && (storedFull || !full)) {
+      const cached = getCachedSubmissions();
+      if (cached.data.length > 0) {
+        memoCache = { data: cached.data, full: storedFull, probeKey: key };
+        return { data: cached.data, cachedAt: cached.cachedAt };
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** Merge the device's own locally-saved rows (offline submissions) on top. */
+function mergeLocal(rows: Submission[]): Submission[] {
+  const local = getLocalSubmissions();
+  if (local.length === 0) return rows;
+  return [...local, ...rows]
+    .filter((v, i, a) => a.findIndex(x => x.id === v.id) === i)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
 /** Force-clear every cache layer (call after writes and on manual Refresh). */
 export function clearSubmissionsCache(): void {
-  memoCache = { data: [], ts: 0, full: false, probeKey: null };
+  memoCache = { data: [], full: false, probeKey: null };
   memoInFlight = null;
   try {
     localStorage.removeItem(CACHE_KEY);
     localStorage.removeItem(CACHE_TS_KEY);
+    localStorage.removeItem(CACHE_FULL_KEY);
+    localStorage.removeItem(CACHE_PROBE_KEY);
   } catch { /* ignore */ }
 }
 
@@ -269,10 +302,12 @@ function getCachedSubmissions(): { data: Submission[]; cachedAt: string | null }
   }
 }
 
-function setCachedSubmissions(data: Submission[]) {
+function setCachedSubmissions(data: Submission[], full: boolean, probeKey: string) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
     localStorage.setItem(CACHE_TS_KEY, new Date().toISOString());
+    localStorage.setItem(CACHE_FULL_KEY, full ? '1' : '0');
+    localStorage.setItem(CACHE_PROBE_KEY, probeKey);
   } catch { /* storage full — ignore */ }
 }
 
@@ -310,16 +345,16 @@ function mapSubmissionRow(r: any, i: number): Submission {
 
 // ── Supabase fetch: timeout → real cached data, NOT mock/demo data ─────────
 export async function fetchSubmissions(force = false): Promise<FetchResult> {
-  // Freshness protocol: every load asks the server a ~0.2KB question (row
-  // count). Unchanged → reuse the already-downloaded table (no big egress);
-  // changed (new record / deletion) → full fresh download below. force=true
-  // (manual Refresh buttons) skips the memo AND the probe → guaranteed full
-  // download.
-  const memo = getMemoCache(true, force);
-  if (memo.length > 0) {
+  // Freshness protocol: every load asks the server a ~0.4KB question. If the
+  // answer matches the snapshot we already hold (this session or the last one
+  // — it survives reloads), we reuse it: server-verified fresh, ~0.1% of the
+  // egress. force=true (manual Refresh buttons) skips the probe → guaranteed
+  // full download.
+  if (!force) {
     const key = await probeSubmissionsKey();
-    if (key === memoCache.probeKey) {
-      return { data: memo, error: null, stale: false, cachedAt: null };
+    const snap = takeSnapshot(true, key);
+    if (snap) {
+      return { data: mergeLocal(snap.data), error: null, stale: false, cachedAt: snap.cachedAt };
     }
   }
 
@@ -328,28 +363,42 @@ export async function fetchSubmissions(force = false): Promise<FetchResult> {
 
   memoInFlight = (async (): Promise<FetchResult> => {
     try {
-      // 10-second timeout — if Supabase is slow, return cached real data
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('__timeout__')), 10000)
-      );
-      const query = supabase
-        .from('submissions')
-        .select('*')
-        .order('date', { ascending: false });
+      // Paginated download — the platform caps each query at 1000 rows, so
+      // loop pages until the table is exhausted (keeps working as data grows).
+      const raw: any[] = [];
+      let from = 0;
+      for (;;) {
+        const { data, error } = await Promise.race([
+          supabase
+            .from('submissions')
+            .select('*')
+            .order('date', { ascending: false })
+            .range(from, from + 999),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('__timeout__')), 10000)
+          ),
+        ]);
 
-    const { data, error } = await Promise.race([query, timeoutPromise]);
+        if (error) {
+          // Supabase replied with an error — serve cache if available
+          const cached = getCachedSubmissions();
+          const local = getLocalSubmissions();
+          const combined = [...local, ...cached.data].filter(
+            (v, i, a) => a.findIndex(x => x.id === v.id) === i
+          ).sort((a, b) => b.date.localeCompare(a.date));
+          return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
+        }
 
-    if (error) {
-      // Supabase replied with an error — serve cache if available
-      const cached = getCachedSubmissions();
-      const local = getLocalSubmissions();
-      const combined = [...local, ...cached.data].filter(
-        (v, i, a) => a.findIndex(x => x.id === v.id) === i
-      ).sort((a, b) => b.date.localeCompare(a.date));
-      return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
-    }
+        raw.push(...(data || []));
+        if (!data || data.length < 1000) break;
+        from += 1000;
+        if (from >= 20000) break; // hard safety cap
+      }
 
-    const mapped: Submission[] = (data || []).map(mapSubmissionRow);
+      // Snapshot key computed FROM the received rows (race-free):
+      // row count + newest updated_at.
+      const probeKey = keyFromRows(raw);
+      const mapped: Submission[] = raw.map(mapSubmissionRow);
 
     // Clean up ghost local records (duplicate rows) that successfully made it to Supabase
     // Since IDs won't match (local is 'sub-123', DB is UUID), we match by signature
@@ -363,10 +412,9 @@ export async function fetchSubmissions(force = false): Promise<FetchResult> {
     }
     const merged = [...local, ...mapped].sort((a, b) => b.date.localeCompare(a.date));
 
-    // Save to the offline-fallback cache and the in-session memo
-    setCachedSubmissions(merged);
-    setMemoCache(merged, true);
-    memoCache.probeKey = await probeSubmissionsKey();
+    // Save snapshot (offline fallback + cross-reload reuse) + in-session memo
+    setCachedSubmissions(mapped, true, probeKey);
+    memoCache = { data: merged, full: true, probeKey };
 
     return { data: merged, error: null, stale: false, cachedAt: null };
 
@@ -395,39 +443,49 @@ export async function fetchSubmissions(force = false): Promise<FetchResult> {
  * fetchSubmissionById() before letting the edit modal save it.
  */
 export async function fetchSubmissionsSummary(force = false): Promise<FetchResult> {
-  // Same freshness protocol as fetchSubmissions: a ~0.2KB count probe decides
-  // whether the already-downloaded data is still current. force=true skips
-  // both the memo and the probe → guaranteed full download.
-  const memo = getMemoCache(false, force);
-  if (memo.length > 0) {
+  // Same freshness protocol as fetchSubmissions (~0.4KB live probe; snapshot
+  // reuse only when the server confirms nothing changed).
+  if (!force) {
     const key = await probeSubmissionsKey();
-    if (key === memoCache.probeKey) {
-      const light = memo.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[], light: true }));
-      return { data: light, error: null, stale: false, cachedAt: null };
+    const snap = takeSnapshot(false, key);
+    if (snap) {
+      const light = snap.data.map(s => ({ ...s, merch_items: [] as MerchItem[], staff_in_charge: [] as string[], light: true }));
+      return { data: mergeLocal(light), error: null, stale: false, cachedAt: snap.cachedAt };
     }
   }
 
   try {
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('__timeout__')), 10000)
-    );
-    const query = supabase
-      .from('submissions')
-      .select('id,date,team,branch,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status')
-      .order('date', { ascending: false });
-
-    const { data, error } = await Promise.race([query, timeoutPromise]);
-
-    if (error) {
-      const cached = getCachedSubmissions();
-      const local = getLocalSubmissions();
-      const combined = [...local, ...cached.data].filter(
-        (v, i, a) => a.findIndex(x => x.id === v.id) === i
-      ).sort((a, b) => b.date.localeCompare(a.date));
-      return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
+    // Paginated download (the platform caps each query at 1000 rows).
+    // updated_at is included so the snapshot key can detect edits too.
+    const raw: any[] = [];
+    let from = 0;
+    for (;;) {
+      const { data, error } = await Promise.race([
+        supabase
+          .from('submissions')
+          .select('id,date,team,branch,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status,updated_at')
+          .order('date', { ascending: false })
+          .range(from, from + 999),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('__timeout__')), 10000)
+        ),
+      ]);
+      if (error) {
+        const cached = getCachedSubmissions();
+        const local = getLocalSubmissions();
+        const combined = [...local, ...cached.data].filter(
+          (v, i, a) => a.findIndex(x => x.id === v.id) === i
+        ).sort((a, b) => b.date.localeCompare(a.date));
+        return { data: combined, error, stale: true, cachedAt: cached.cachedAt };
+      }
+      raw.push(...(data || []));
+      if (!data || data.length < 1000) break;
+      from += 1000;
+      if (from >= 20000) break; // hard safety cap
     }
+    const probeKey = keyFromRows(raw);
 
-    const mapped: Submission[] = (data || []).map((r: any, i: number) => ({
+    const mapped: Submission[] = raw.map((r: any, i: number) => ({
       id: String(r.id ?? `sb-${i}`),
       date: r.date || '',
       team: r.team || 'KPV',
@@ -447,11 +505,10 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
       light: true,
     }));
 
-    // Save to the offline-fallback cache and the in-session memo (light rows —
-    // a later full fetch, e.g. CopyPaste, still downloads complete rows).
-    setCachedSubmissions(mapped);
-    setMemoCache(mapped, false);
-    memoCache.probeKey = await probeSubmissionsKey();
+    // Save snapshot (offline fallback + cross-reload reuse) + in-session memo
+    // (light rows — a later full fetch, e.g. CopyPaste, still downloads rows).
+    setCachedSubmissions(mapped, false, probeKey);
+    memoCache = { data: mapped, full: false, probeKey };
 
     return { data: mapped, error: null, stale: false, cachedAt: null };
   } catch (err: any) {

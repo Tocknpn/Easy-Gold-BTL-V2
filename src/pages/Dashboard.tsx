@@ -72,14 +72,15 @@ function TargetBadge({ curr, target, invertGood = false }: { curr: number; targe
 }
 
 // ── Utility: split row (NC/EC or KPV/Agency) ──────────────────────────────
-function SplitRow({ items }: { items: { label: string; val: string; pct?: number; color: string }[] }) {
+function SplitRow({ items }: { items: { label: string; val: string; pct?: number; sub?: string; color: string }[] }) {
   return (
     <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '4px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-      {items.map(({ label, val, pct, color }) => (
+      {items.map(({ label, val, pct, sub, color }) => (
         <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
           <span style={{ fontWeight: 700, color }}>{label}:</span>
           <span>{val}</span>
           {pct !== undefined && <span style={{ background: color + '22', color, borderRadius: '4px', padding: '0 4px', fontWeight: 700 }}>{pct}%</span>}
+          {sub && <span style={{ color: 'var(--txt-dim)' }}>({sub})</span>}
         </span>
       ))}
     </div>
@@ -438,7 +439,7 @@ export default function Dashboard() {
 
           {/* NC/EC split */}
           <SplitRow items={[
-            { label: 'NC', val: kpi.nc.toLocaleString(), pct: pctNC, color: C_NC },
+            { label: 'NC', val: kpi.nc.toLocaleString(), pct: pctNC, sub: `buy ${kpi.nrp.toLocaleString()}`, color: C_NC },
             { label: 'EC', val: kpi.ec.toLocaleString(), pct: pctEC, color: C_EC },
           ]} />
 
