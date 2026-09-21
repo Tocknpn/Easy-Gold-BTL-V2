@@ -13,7 +13,7 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
 import type { ModalState, Submission } from '../lib/submissions';
-import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
@@ -96,6 +96,8 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState(startOfMonth);
   const [endDate, setEndDate] = useState(endOfMonth);
   const [teamFilter, setTeamFilter] = useState('All Teams');
+  // 'All Types' | 'booth' | 'event' — filters by submissions.activity_type
+  const [activityFilter, setActivityFilter] = useState('All Types');
   const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('D');
   const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });
 
@@ -119,9 +121,10 @@ export default function Dashboard() {
     return submissions.filter(s => {
       const inRange = (!startDate || s.date >= startDate) && (!endDate || s.date <= endDate);
       const inTeam = teamFilter === 'All Teams' || s.team === teamFilter || s.team === teamFilter.replace(' Team', '');
-      return inRange && inTeam;
+      const inActivity = activityFilter === 'All Types' || normalizeActivityType(s.activity_type) === activityFilter;
+      return inRange && inTeam && inActivity;
     });
-  }, [submissions, startDate, endDate, teamFilter]);
+  }, [submissions, startDate, endDate, teamFilter, activityFilter]);
 
   // ── Previous period filter (mirror the selected range length back in time) ──
   const prevFiltered = useMemo(() => {
@@ -142,9 +145,10 @@ export default function Dashboard() {
     return submissions.filter(s => {
       const inRange = s.date >= ps && s.date <= pe;
       const inTeam = teamFilter === 'All Teams' || s.team === teamFilter || s.team === teamFilter.replace(' Team', '');
-      return inRange && inTeam;
+      const inActivity = activityFilter === 'All Types' || normalizeActivityType(s.activity_type) === activityFilter;
+      return inRange && inTeam && inActivity;
     });
-  }, [submissions, startDate, endDate, teamFilter]);
+  }, [submissions, startDate, endDate, teamFilter, activityFilter]);
 
 
 
@@ -412,7 +416,15 @@ export default function Dashboard() {
             <option>Agency Team</option>
           </select>
         </div>
-        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
+        <div className="form-field" style={{ margin: 0 }}>
+          <label>Activity</label>
+          <select value={activityFilter} onChange={e => setActivityFilter(e.target.value)} style={{ padding: '7px 12px', fontSize: '12px', width: 'auto' }}>
+            <option>All Types</option>
+            <option value="booth">Booth</option>
+            <option value="event">Event</option>
+          </select>
+        </div>
+        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); setActivityFilter('All Types'); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
           <i className="fa-solid fa-xmark"></i> Clear
         </button>
       </div>
@@ -684,7 +696,7 @@ export default function Dashboard() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Date</th><th>Team</th><th>Branch</th><th>Total Acq.</th><th>Buy Value</th><th>Cost</th><th>CPA</th><th>Status</th><th></th>
+              <th>Date</th><th>Team</th><th>Activity</th><th>Branch</th><th>Total Acq.</th><th>Buy Value</th><th>Cost</th><th>CPA</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -698,6 +710,11 @@ export default function Dashboard() {
                   <tr key={s.id}>
                     <td>{new Date(s.date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
                     <td><span className={`pill ${s.team === 'Agency' ? 'pill-blue' : 'pill-gold'}`}>{s.team || 'KPV'}</span></td>
+                    <td>
+                      <span className={`pill ${normalizeActivityType(s.activity_type) === 'event' ? 'pill-red' : 'pill-green'}`}>
+                        {activityLabel(s.activity_type)}
+                      </span>
+                    </td>
                     <td>{s.branch}</td>
                     <td>{(s.new_register || 0) + (s.existing_users || 0)}</td>
                     <td>{fmtLAKShort((s.buy_value_new || 0) + (s.buy_value_existing || 0))}</td>
@@ -713,7 +730,7 @@ export default function Dashboard() {
                 );
               })}
             {filtered.length === 0 && (
-              <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--txt-dim)', padding: '24px' }}>No submissions in this range — {loading ? 'loading…' : 'try clearing the filters.'}</td></tr>
+              <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--txt-dim)', padding: '24px' }}>No submissions in this range — {loading ? 'loading…' : 'try clearing the filters.'}</td></tr>
             )}
           </tbody>
         </table>

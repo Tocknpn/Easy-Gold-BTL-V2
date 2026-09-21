@@ -12,6 +12,8 @@ export interface Submission {
   date: string;
   team: string;
   branch: string;
+  /** How the activity was run: 'booth' | 'event'. Legacy/unknown rows = 'booth'. */
+  activity_type: string;
   new_register: number;
   new_reg_purchased: number;
   buy_value_new: number;
@@ -77,6 +79,35 @@ export const parseStaff = (v: any): string[] => {
     return [];
   }
 };
+
+// ── Activity type: Booth / Event ─────────────────────────────────────────
+// Stored lowercase in submissions.activity_type (default 'booth'). Anything
+// missing or unexpected (legacy rows, old cached snapshots) is treated as Booth.
+export const ACTIVITY_TYPES = ['booth', 'event'] as const;
+export const DEFAULT_ACTIVITY_TYPE = 'booth';
+
+/** Normalise any stored/typed value to 'booth' | 'event'. */
+export const normalizeActivityType = (v: any): string => {
+  const s = String(v ?? '').trim().toLowerCase();
+  return s === 'event' ? 'event' : DEFAULT_ACTIVITY_TYPE;
+};
+
+/** Display label for a stored value: 'booth' → "Booth", 'event' → "Event". */
+export const activityLabel = (v?: string): string =>
+  normalizeActivityType(v) === 'event' ? 'Event' : 'Booth';
+
+/** Detect PostgREST errors caused by the activity_type column not existing yet
+ *  (same rule used for users.is_active in workflow.ts). */
+export const isMissingColumnError = (err: any, column: string): boolean => {
+  if (!err) return false;
+  const msg = `${err.message || ''} ${err.hint || ''}`;
+  return msg.includes(`'${column}'`) && (msg.includes('schema cache') || msg.includes('column'));
+};
+
+export const MISSING_ACTIVITY_COLUMN_HINT =
+  "Your Supabase 'submissions' table doesn't have the 'activity_type' column yet, so the Activity Type was not saved. " +
+  'Run this once in the Supabase SQL Editor (file: supabase_activity_type.sql): ' +
+  "ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS activity_type text NOT NULL DEFAULT 'booth';";
 
 // ── Mock data generator (March 2025 sample set) ──────────────────────────
 const rand = (seed: number) => {
@@ -161,6 +192,7 @@ export function genMockSubmissions(): Submission[] {
       date: `2025-03-${String(d).padStart(2, '0')}`,
       team,
       branch,
+      activity_type: normalizeActivityType(d % 4 === 0 ? 'event' : 'booth'), // deterministic demo mix
       new_register: nc,
       new_reg_purchased: nrp,
       buy_value_new: Math.round(nc * 65000),
@@ -328,6 +360,7 @@ function mapSubmissionRow(r: any, i: number): Submission {
     date: r.date || '',
     team: r.team || 'KPV',
     branch: r.branch || '—',
+    activity_type: normalizeActivityType(r.activity_type),
     new_register: Number(r.new_register) || 0,
     new_reg_purchased: Number(r.new_reg_purchased) || 0,
     buy_value_new: Number(r.buy_value_new) || 0,
@@ -454,6 +487,16 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
     }
   }
 
+  // Column list for the light summary fetch. The activity_type column is
+  // included when available; databases that predate supabase_activity_type.sql
+  // retry once with LEGACY_SUMMARY_COLS below (rows then default to Booth)
+  // instead of falling back to a stale cache.
+  const SUMMARY_COLS =
+    'id,date,team,branch,activity_type,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status,updated_at';
+  const LEGACY_SUMMARY_COLS =
+    'id,date,team,branch,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status,updated_at';
+  let summaryCols = SUMMARY_COLS;
+
   try {
     // Paginated download (the platform caps each query at 1000 rows).
     // updated_at is included so the snapshot key can detect edits too.
@@ -463,7 +506,7 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
       const { data, error } = await Promise.race([
         supabase
           .from('submissions')
-          .select('id,date,team,branch,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status,updated_at')
+          .select(summaryCols)
           .order('date', { ascending: false })
           .range(from, from + 999),
         new Promise<never>((_, reject) =>
@@ -471,6 +514,12 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
         ),
       ]);
       if (error) {
+        // Pre-migration DB (no activity_type yet) → retry the SAME page once
+        // without the column; rows are mapped to the default type.
+        if (summaryCols === SUMMARY_COLS && isMissingColumnError(error, 'activity_type')) {
+          summaryCols = LEGACY_SUMMARY_COLS;
+          continue;
+        }
         const cached = getCachedSubmissions();
         const local = getLocalSubmissions();
         const combined = [...local, ...cached.data].filter(
@@ -490,6 +539,7 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
       date: r.date || '',
       team: r.team || 'KPV',
       branch: r.branch || '—',
+      activity_type: normalizeActivityType(r.activity_type),
       new_register: Number(r.new_register) || 0,
       new_reg_purchased: Number(r.new_reg_purchased) || 0,
       buy_value_new: Number(r.buy_value_new) || 0,

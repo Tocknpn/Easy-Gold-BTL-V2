@@ -20,6 +20,7 @@ CREATE TABLE submissions (
   date date NOT NULL,
   team text NOT NULL,
   branch text NOT NULL,
+  activity_type text NOT NULL DEFAULT 'booth', -- 'booth' | 'event'
   new_register int DEFAULT 0,
   new_reg_purchased int DEFAULT 0,
   buy_value_new numeric DEFAULT 0,
@@ -102,6 +103,11 @@ INSERT INTO users (username, password, name, role, team, is_active) VALUES
 
 -- Migration for databases created before is_active was added (safe to re-run):
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
+
+-- Migration for databases created before activity_type was added (safe to re-run).
+-- Booth / Event activity type — existing rows stay 'booth'.
+-- Full script with the check constraint + verification query: supabase_activity_type.sql
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS activity_type text NOT NULL DEFAULT 'booth';
 
 -- Note: the web app writes to audit_log (Upload & Settings → Audit Log) for
 -- user / staff / target / route / merch actions. The anon key needs INSERT +

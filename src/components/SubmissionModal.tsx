@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES, clearSubmissionsCache } from '../lib/submissions';
+import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES, clearSubmissionsCache, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT } from '../lib/submissions';
 import { fetchStaff } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
@@ -53,7 +53,8 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
   // Sync local edit copy whenever the modal opens or the record changes
   useEffect(() => {
     if (open && submission) {
-      setEditData({ ...submission });
+      // Normalise the activity type so legacy rows (no stored value) open as Booth.
+      setEditData({ ...submission, activity_type: normalizeActivityType(submission.activity_type) });
       setIsEditing(false);
     } else if (!open) {
       setEditData(null);
@@ -109,26 +110,43 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
   };
   const handleSave = async () => {
     setSubmitting(true);
-    const updated = { ...editData, merch_cost: merchTotal };
+    const updated = {
+      ...editData,
+      merch_cost: merchTotal,
+      activity_type: normalizeActivityType(editData.activity_type),
+    };
     try {
-      const { error } = await supabase
+      // Everything except activity_type — also the pre-migration fallback payload.
+      const baseFields = {
+        branch: updated.branch,
+        date: updated.date,
+        new_register: updated.new_register,
+        new_reg_purchased: updated.new_reg_purchased,
+        buy_value_new: updated.buy_value_new,
+        existing_users: updated.existing_users,
+        buy_value_existing: updated.buy_value_existing,
+        footfall: updated.footfall,
+        step_in: updated.step_in,
+        team_cost: updated.team_cost,
+        merch_cost: updated.merch_cost,
+        merch_items: JSON.stringify(updated.merch_items || []),
+        staff_in_charge: JSON.stringify(updated.staff_in_charge || [])
+      };
+      let { error } = await supabase
         .from('submissions')
-        .update({
-          branch: updated.branch,
-          date: updated.date,
-          new_register: updated.new_register,
-          new_reg_purchased: updated.new_reg_purchased,
-          buy_value_new: updated.buy_value_new,
-          existing_users: updated.existing_users,
-          buy_value_existing: updated.buy_value_existing,
-          footfall: updated.footfall,
-          step_in: updated.step_in,
-          team_cost: updated.team_cost,
-          merch_cost: updated.merch_cost,
-          merch_items: JSON.stringify(updated.merch_items || []),
-          staff_in_charge: JSON.stringify(updated.staff_in_charge || [])
-        })
+        .update({ ...baseFields, activity_type: updated.activity_type })
         .eq('id', updated.id);
+
+      // Databases that predate supabase_activity_type.sql → save the rest of the
+      // edit and tell the admin how to enable the Activity Type column.
+      if (error && isMissingColumnError(error, 'activity_type')) {
+        const retry = await supabase
+          .from('submissions')
+          .update(baseFields)
+          .eq('id', updated.id);
+        error = retry.error;
+        if (!error) window.alert(MISSING_ACTIVITY_COLUMN_HINT);
+      }
 
       if (error) throw error;
       clearSubmissionsCache();
@@ -182,7 +200,13 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
         {isEditing ? (
           /* ── Edit form (pic4–pic5) ── */
           <div>
-            <div className="grid-2" style={{ marginBottom: '16px', gap: '14px' }}>
+            <div className="grid-3" style={{ marginBottom: '16px', gap: '14px' }}>
+              <div className="form-field" style={{ margin: 0 }}><label>Activity Type</label>
+                <select value={normalizeActivityType(editData.activity_type)} onChange={e => setEditData(d => d ? { ...d, activity_type: e.target.value } : d)}>
+                  <option value="booth">Booth</option>
+                  <option value="event">Event</option>
+                </select>
+              </div>
               <div className="form-field" style={{ margin: 0 }}><label>Branch / Location</label>
                 <input type="text" value={editData.branch} onChange={e => setEditData(d => d ? { ...d, branch: e.target.value } : d)} />
               </div>
@@ -292,10 +316,19 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
         ) : (
           /* ── View mode (pic2–pic3) ── */
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px', flexWrap: 'wrap' }}>
               <span className={`pill ${editData.team === 'Agency' ? 'pill-blue' : 'pill-gold'}`}>{editData.team} Team</span>
+              <span className={`pill ${normalizeActivityType(editData.activity_type) === 'event' ? 'pill-red' : 'pill-green'}`}>
+                <i className={`fa-solid ${normalizeActivityType(editData.activity_type) === 'event' ? 'fa-calendar-day' : 'fa-store'}`} style={{ marginRight: '4px' }}></i>
+                {activityLabel(editData.activity_type)}
+              </span>
               <span style={{ fontSize: '13px', color: 'var(--txt-sub)' }}>{editData.date}</span>
             </div>
+
+            <DetailSection label="ACTIVITY">
+              <DetailRow label="Activity Type" value={activityLabel(editData.activity_type)} color={normalizeActivityType(editData.activity_type) === 'event' ? 'var(--red)' : 'var(--green)'} />
+              <DetailRow label="Branch / Location" value={editData.branch} />
+            </DetailSection>
 
             <DetailSection label="ACQUISITION">
               <DetailRow label="New Customers (NC)" value={editData.new_register} color="var(--gold)" />

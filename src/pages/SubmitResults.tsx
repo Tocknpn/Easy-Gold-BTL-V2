@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort, clearSubmissionsCache } from '../lib/submissions';
+import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort, clearSubmissionsCache, DEFAULT_ACTIVITY_TYPE, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT } from '../lib/submissions';
 import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
 
@@ -50,6 +50,8 @@ export default function SubmitResults() {
   }, [user]);
 
   const [checkInId, setCheckInId] = useState('');
+  // Booth (default) or Event — chosen next to the Activity Check-in selector.
+  const [activityType, setActivityType] = useState(DEFAULT_ACTIVITY_TYPE);
   const [date, setDate] = useState('');
   const [branch, setBranch] = useState('');
   const [nc, setNc] = useState(0);
@@ -118,6 +120,7 @@ export default function SubmitResults() {
       date,
       team: user?.team || 'KPV',
       branch,
+      activity_type: normalizeActivityType(activityType),
       new_register: nc,
       new_reg_purchased: nrp,
       buy_value_new: buyNew,
@@ -134,26 +137,37 @@ export default function SubmitResults() {
 
     // Best-effort database write. We only save locally if the DB fails to avoid duplicate row glitches.
     let savedToDb = true;
+    let activityColumnMissing = false;
     try {
-      const { error } = await supabase
+      // Everything except activity_type — also serves as the pre-migration fallback.
+      const basePayload = {
+        date: record.date,
+        team: record.team,
+        branch: record.branch,
+        new_register: record.new_register,
+        new_reg_purchased: record.new_reg_purchased,
+        buy_value_new: record.buy_value_new,
+        existing_users: record.existing_users,
+        buy_value_existing: record.buy_value_existing,
+        team_cost: record.team_cost,
+        merch_cost: record.merch_cost,
+        merch_items: JSON.stringify(record.merch_items),
+        staff_in_charge: JSON.stringify(record.staff_in_charge),
+        footfall: record.footfall,
+        step_in: record.step_in,
+        status: record.status,
+      };
+      let { error } = await supabase
         .from('submissions')
-        .insert([{
-          date: record.date,
-          team: record.team,
-          branch: record.branch,
-          new_register: record.new_register,
-          new_reg_purchased: record.new_reg_purchased,
-          buy_value_new: record.buy_value_new,
-          existing_users: record.existing_users,
-          buy_value_existing: record.buy_value_existing,
-          team_cost: record.team_cost,
-          merch_cost: record.merch_cost,
-          merch_items: JSON.stringify(record.merch_items),
-          staff_in_charge: JSON.stringify(record.staff_in_charge),
-          footfall: record.footfall,
-          step_in: record.step_in,
-          status: record.status,
-        }]);
+        .insert([{ ...basePayload, activity_type: record.activity_type }]);
+      // Databases that predate supabase_activity_type.sql have no activity_type
+      // column → retry without it so the results still save (row = Booth) and
+      // tell the admin how to enable the column.
+      if (error && isMissingColumnError(error, 'activity_type')) {
+        activityColumnMissing = true;
+        const retry = await supabase.from('submissions').insert([basePayload]);
+        error = retry.error;
+      }
       if (error) {
         console.error('DB insert failed — saving locally:', error.message);
         saveLocalSubmission(record);
@@ -167,11 +181,17 @@ export default function SubmitResults() {
     }
 
     setSubmitting(false);
-    setDone(savedToDb
-      ? `✓ Results submitted for ${branch} on ${labelDate(date)} — saved to the database. Admin will fill Service Cost in Cost Manager.`
-      : `⚠️ No connection — results were saved on THIS DEVICE only, not in the database yet. They will still show on this phone, but Admin cannot see them yet. When internet is back, tell Admin to check Submission History (the record may need to be entered again).`);
+    if (!savedToDb) {
+      setDone(`⚠️ No connection — results were saved on THIS DEVICE only, not in the database yet. They will still show on this phone, but Admin cannot see them yet. When internet is back, tell Admin to check Submission History (the record may need to be entered again).`);
+    } else if (activityColumnMissing) {
+      window.alert(MISSING_ACTIVITY_COLUMN_HINT);
+      setDone(`✓ Results submitted for ${branch} on ${labelDate(date)} — saved to the database, but the Activity Type (${activityLabel(record.activity_type)}) was NOT stored: Admin must run supabase_activity_type.sql.`);
+    } else {
+      setDone(`✓ ${activityLabel(record.activity_type)} results submitted for ${branch} on ${labelDate(date)} — saved to the database. Admin will fill Service Cost in Cost Manager.`);
+    }
     // Reset form
     setCheckInId(''); setDate(''); setBranch('');
+    setActivityType(DEFAULT_ACTIVITY_TYPE);
     setNc(0); setNrp(0); setBuyNew(0); setEc(0); setBuyExisting(0);
     setFootfall(0); setStepIn(0);
         setMerchRows([]); setStaffRows([]);
@@ -203,6 +223,20 @@ export default function SubmitResults() {
             ))}
           </select>
         )}
+
+        {/* Activity Type — Booth (default) or Event. Applies to KPV and Agency. */}
+        <span aria-hidden="true" style={{ width: '1px', height: '22px', background: 'rgba(46,194,122,0.35)' }}></span>
+        <strong style={{ fontSize: '13px', color: 'var(--txt-main)', whiteSpace: 'nowrap' }}>Activity Type:</strong>
+        <select
+          value={activityType}
+          onChange={e => setActivityType(e.target.value)}
+          aria-label="Activity type"
+          title="Was this activity a Booth or an Event?"
+          style={{ background: 'transparent', border: '1px solid rgba(212,168,67,0.45)', color: 'var(--gold)', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: 600, width: 'auto', minWidth: '130px' }}
+        >
+          <option value="booth">Booth</option>
+          <option value="event">Event</option>
+        </select>
       </div>
 
       <div className="card">
