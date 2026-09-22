@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, totalCostOf } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
-type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'new_reg_purchased' | 'existing_users' | 'merch_cost' | 'cost' | 'cpa' | 'cpo';
+type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'new_reg_purchased' | 'existing_users' | 'merch_cost' | 'sponsorship_cost' | 'cost' | 'cpa' | 'cpo';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'date', label: 'DATE' },
@@ -14,6 +14,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'new_reg_purchased', label: 'PURCHASED' },
   { key: 'existing_users', label: 'EXISTING' },
   { key: 'merch_cost', label: 'MERCH COST' },
+  { key: 'sponsorship_cost', label: 'SPONSOR COST' },
   { key: 'cost', label: 'TOTAL COST' },
   { key: 'cpa', label: 'CPA' },
   { key: 'cpo', label: 'CPO' },
@@ -53,7 +54,9 @@ export default function Report() {
 
   // ── Derived rows with computed metrics ────────────────────────────────
   const rows = useMemo<Row[]>(() => submissions.map(s => {
-    const cost = (s.team_cost || 0) + (s.merch_cost || 0);
+    // Total Cost = Service + Merch + Sponsorship/Production (shared helper, so
+    // this page can never drift from the Dashboard / Cost Manager).
+    const cost = totalCostOf(s);
     const buyers = (s.new_reg_purchased || 0) + (s.existing_users || 0);
     return {
       s,
@@ -80,6 +83,7 @@ export default function Report() {
         case 'new_reg_purchased': return r.s.new_reg_purchased;
         case 'existing_users': return r.s.existing_users;
         case 'merch_cost': return r.s.merch_cost || 0;
+        case 'sponsorship_cost': return r.s.sponsorship_cost || 0;
         case 'cost': return r.cost;
         case 'cpa': return Number.isFinite(r.cpa) ? r.cpa : -Infinity;
         case 'cpo': return Number.isFinite(r.cpo) ? r.cpo : -Infinity;
@@ -146,7 +150,7 @@ export default function Report() {
       const str = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
     };
-    const header = ['Date', 'Team', 'Branch', 'New Reg (NC)', 'NC Purchased', 'Existing (EC)', 'Buy Value New', 'Buy Value Existing', 'Total Buy Value', 'Footfall', 'Step-in', 'Service Cost', 'Merch Cost', 'Total Cost', 'CPA', 'CPO'];
+    const header = ['Date', 'Team', 'Branch', 'New Reg (NC)', 'NC Purchased', 'Existing (EC)', 'Buy Value New', 'Buy Value Existing', 'Total Buy Value', 'Footfall', 'Step-in', 'Service Cost', 'Merch Cost', 'Sponsorship/Production Cost', 'Total Cost', 'CPA', 'CPO'];
     const lines = [header.join(',')];
     for (const r of sorted) {
       lines.push([
@@ -163,6 +167,7 @@ export default function Report() {
         r.s.step_in,
         r.s.team_cost,
         r.s.merch_cost,
+        r.s.sponsorship_cost,
         r.cost,
         Number.isFinite(r.cpa) ? Math.round(r.cpa) : '',
         Number.isFinite(r.cpo) ? Math.round(r.cpo) : '',
@@ -259,6 +264,7 @@ export default function Report() {
                 <td>{(r.s.new_reg_purchased || 0).toLocaleString()}</td>
                 <td>{(r.s.existing_users || 0).toLocaleString()}</td>
                 <td>{fmtLAK(r.s.merch_cost)}</td>
+                <td>{r.s.sponsorship_cost > 0 ? fmtLAK(r.s.sponsorship_cost) : <span style={{ color: 'var(--txt-dim)' }}>—</span>}</td>
                 <td>{fmtLAKShort(r.cost)}</td>
                 <td>{Number.isFinite(r.cpa) ? fmtLAK(Math.round(r.cpa)) : '—'}</td>
                 <td>{Number.isFinite(r.cpo) ? fmtLAK(Math.round(r.cpo)) : '—'}</td>

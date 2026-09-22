@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissions, genMockSubmissions, fmtLAK, labelDate, clearSubmissionsCache } from '../lib/submissions';
+import { fetchSubmissions, genMockSubmissions, fmtLAK, labelDate, clearSubmissionsCache, totalCostOf } from '../lib/submissions';
 
 const COLUMNS = [
   { key: 'date', label: 'Date', width: '100px' },
@@ -13,6 +13,7 @@ const COLUMNS = [
   { key: 'buy_value_existing', label: 'Buy Value Exist', width: '130px' },
   { key: 'team_cost', label: 'Service Cost', width: '120px' },
   { key: 'merch_cost', label: 'Merch Cost', width: '120px' },
+  { key: 'sponsorship_cost', label: 'Sponsorship Cost', width: '150px' },
   { key: 'total_cost', label: 'Total Cost', width: '120px' },
   { key: 'footfall', label: 'Footfall', width: '80px' },
   { key: 'step_in', label: 'Step-in', width: '80px' },
@@ -52,7 +53,7 @@ export default function CopyPaste() {
   };
 
   const rows = useMemo(
-    () => submissions.map(s => ({ ...s, total_cost: (s.team_cost || 0) + (s.merch_cost || 0) })),
+    () => submissions.map(s => ({ ...s, total_cost: totalCostOf(s) })),
     [submissions]
   );
 
@@ -98,6 +99,7 @@ export default function CopyPaste() {
       case 'buy_value_existing':
       case 'team_cost':
       case 'merch_cost':
+      case 'sponsorship_cost':
       case 'total_cost': return fmtLAK(Number(value) || 0);
       default: return String(value);
     }
@@ -106,7 +108,7 @@ export default function CopyPaste() {
   const fmtRaw = (val: any, key: string): string => {
     if (val === null || val === undefined || val === '') return '';
     if (key === 'date') return String(val);
-    if (['buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'total_cost'].includes(key)) return String(Number(val) || 0);
+    if (['buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'sponsorship_cost', 'total_cost'].includes(key)) return String(Number(val) || 0);
     return String(val);
   };
 
@@ -300,7 +302,7 @@ const toggleCell = (row: number, col: number) => {
     };
   });
 
-  const numericCols = ['new_register', 'new_reg_purchased', 'existing_users', 'buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'total_cost', 'footfall', 'step_in'];
+  const numericCols = ['new_register', 'new_reg_purchased', 'existing_users', 'buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'sponsorship_cost', 'total_cost', 'footfall', 'step_in'];
 return (
     <div onMouseUp={handleMouseUp}>
       {/* Header */}
@@ -393,7 +395,7 @@ return (
                             overflow: 'hidden', textOverflow: 'ellipsis',
                             fontFamily: numericCols.includes(col.key) ? 'var(--font-mono)' : 'inherit',
                             textAlign: numericCols.includes(col.key) ? 'right' : 'left',
-                            color: col.key === 'merch_cost' ? 'var(--gold)' : col.key === 'total_cost' ? 'var(--red)' : undefined,
+                            color: col.key === 'merch_cost' ? 'var(--gold)' : col.key === 'sponsorship_cost' ? 'var(--blue)' : col.key === 'total_cost' ? 'var(--red)' : undefined,
                             background: isSel ? 'rgba(77, 158, 255, 0.2)' : isHovered ? 'rgba(77, 158, 255, 0.08)' : undefined,
                             outline: isSel ? '2px solid var(--blue)' : 'none',
                             cursor: 'cell',

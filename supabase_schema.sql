@@ -30,6 +30,7 @@ CREATE TABLE submissions (
   step_in int DEFAULT 0,
   team_cost numeric DEFAULT 0,
   merch_cost numeric DEFAULT 0,
+  sponsorship_cost numeric DEFAULT 0, -- Sponsorship / Production Cost (0 = not recorded yet)
   merch_items jsonb DEFAULT '[]'::jsonb,
   lat numeric,
   lng numeric,
@@ -108,6 +109,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;
 -- Booth / Event activity type — existing rows stay 'booth'.
 -- Full script with the check constraint + verification query: supabase_activity_type.sql
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS activity_type text NOT NULL DEFAULT 'booth';
+
+-- Migration for databases created before sponsorship_cost was added (safe to re-run).
+-- Sponsorship / Production Cost — third cost component, included in Total Cost
+-- (and therefore in CPA / CPO / CPAO). Existing rows stay 0 = blank.
+-- Full script with the non-negative check + verification query: supabase_sponsorship_cost.sql
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS sponsorship_cost numeric NOT NULL DEFAULT 0;
 
 -- Note: the web app writes to audit_log (Upload & Settings → Audit Log) for
 -- user / staff / target / route / merch actions. The anon key needs INSERT +

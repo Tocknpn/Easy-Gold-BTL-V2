@@ -19,8 +19,13 @@ export interface Submission {
   buy_value_new: number;
   existing_users: number;
   buy_value_existing: number;
+  /** Service Cost — team operating cost for the day (filled in by Admin later). */
   team_cost: number;
+  /** Merchandise cost — derived from merch_items × catalog cost per unit. */
   merch_cost: number;
+  /** Sponsorship / Production Cost — third cost component (filled in by Admin in
+   *  the Cost Manager). 0 = not recorded yet (every pre-existing row starts as 0). */
+  sponsorship_cost: number;
   merch_items: MerchItem[];
   staff_in_charge: string[];
   footfall: number;
@@ -108,6 +113,58 @@ export const MISSING_ACTIVITY_COLUMN_HINT =
   "Your Supabase 'submissions' table doesn't have the 'activity_type' column yet, so the Activity Type was not saved. " +
   'Run this once in the Supabase SQL Editor (file: supabase_activity_type.sql): ' +
   "ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS activity_type text NOT NULL DEFAULT 'booth';";
+
+export const MISSING_SPONSORSHIP_COLUMN_HINT =
+  "Your Supabase 'submissions' table doesn't have the 'sponsorship_cost' column yet, so the Sponsorship / Production Cost was not saved. " +
+  'Run this once in the Supabase SQL Editor (file: supabase_sponsorship_cost.sql): ' +
+  'ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS sponsorship_cost numeric NOT NULL DEFAULT 0;';
+
+// ── Cost components: Merch / Service / Sponsorship-Production ──────────────
+// Total Cost = the sum of the cost components currently selected. The
+// Dashboard's "Cost Type" multi-select decides which components are summed, and
+// every CPA / CPO / CPAO / Total Spending figure is derived from that Total
+// Cost. A component amount of 0 simply means "not recorded yet".
+export const COST_TYPES = [
+  { key: 'merch', label: 'Merch', shortLabel: 'Merch' },
+  { key: 'service', label: 'Service Cost', shortLabel: 'Svc' },
+  { key: 'sponsorship', label: 'Sponsorship / Production Cost', shortLabel: 'Spon' },
+] as const;
+
+export type CostTypeKey = 'merch' | 'service' | 'sponsorship';
+
+export const ALL_COST_TYPES: CostTypeKey[] = COST_TYPES.map(c => c.key);
+
+/** Amount one cost component contributes to a submission. */
+export const costOfType = (
+  s: Pick<Submission, 'team_cost' | 'merch_cost' | 'sponsorship_cost'>,
+  key: CostTypeKey
+): number => {
+  switch (key) {
+    case 'merch': return Number(s.merch_cost) || 0;
+    case 'service': return Number(s.team_cost) || 0;
+    case 'sponsorship': return Number(s.sponsorship_cost) || 0;
+    default: return 0;
+  }
+};
+
+/** Keep only known cost-type keys; an empty / invalid selection falls back to
+ *  ALL types so cost metrics can never silently collapse to ₭0. */
+export const normalizeCostTypes = (v: any): CostTypeKey[] => {
+  const arr = Array.isArray(v) ? v.map(String) : [];
+  const picked = ALL_COST_TYPES.filter(k => arr.includes(k));
+  return picked.length > 0 ? picked : [...ALL_COST_TYPES];
+};
+
+/** Total Cost of one submission using every cost component (app-wide default). */
+export const totalCostOf = (
+  s: Pick<Submission, 'team_cost' | 'merch_cost' | 'sponsorship_cost'>
+): number => ALL_COST_TYPES.reduce((a, key) => a + costOfType(s, key), 0);
+
+/** Total Cost of one submission restricted to the selected cost types. */
+export const costForTypes = (
+  s: Pick<Submission, 'team_cost' | 'merch_cost' | 'sponsorship_cost'>,
+  types: CostTypeKey[]
+): number => normalizeCostTypes(types).reduce((a, key) => a + costOfType(s, key), 0);
 
 // ── Mock data generator (March 2025 sample set) ──────────────────────────
 const rand = (seed: number) => {
@@ -198,8 +255,10 @@ export function genMockSubmissions(): Submission[] {
       buy_value_new: Math.round(nc * 65000),
       existing_users: ec,
       buy_value_existing: Math.round(ec * 52000),
-            team_cost: d >= 29 ? 0 : 700000 + Math.round(rand(d + 2) * 400000),
+      team_cost: d >= 29 ? 0 : 700000 + Math.round(rand(d + 2) * 400000),
       merch_cost: merchCost,
+      // Sponsorship / Production cost — every 3rd day has none yet (blank = 0)
+      sponsorship_cost: d % 3 === 0 ? 0 : 250000 + Math.round(rand(d + 7) * 600000),
       merch_items: merchItems,
       staff_in_charge: staff,
       footfall: nc * 6 + Math.round(rand(d + 4) * 300),
@@ -269,7 +328,7 @@ async function probeSubmissionsKey(): Promise<string> {
 function takeSnapshot(full: boolean, key: string): { data: Submission[]; cachedAt: string | null } | null {
   // 1) in-memory snapshot (from earlier page views in this session)
   if (memoCache.data.length > 0 && memoCache.probeKey === key && (memoCache.full || !full)) {
-    return { data: memoCache.data, cachedAt: null };
+    return { data: normalizeCostFields(memoCache.data), cachedAt: null };
   }
   // 2) localStorage snapshot (survives F5 / closing the browser)
   try {
@@ -307,10 +366,23 @@ export function clearSubmissionsCache(): void {
   } catch { /* ignore */ }
 }
 
+/** Local / cached rows written BEFORE sponsorship_cost existed carry no value
+ *  for it. Adding a column does not bump updated_at, so such a snapshot can
+ *  still pass the freshness probe — coerce the cost fields on every read so the
+ *  cost maths never sees undefined / NaN. */
+function normalizeCostFields(rows: Submission[]): Submission[] {
+  return rows.map(r => ({
+    ...r,
+    team_cost: Number(r.team_cost) || 0,
+    merch_cost: Number(r.merch_cost) || 0,
+    sponsorship_cost: Number((r as any).sponsorship_cost) || 0,
+  }));
+}
+
 export function getLocalSubmissions(): Submission[] {
   try {
     const arr = JSON.parse(localStorage.getItem(LOCAL_SUBS_KEY) || '[]');
-    return Array.isArray(arr) ? arr : [];
+    return Array.isArray(arr) ? normalizeCostFields(arr) : [];
   } catch {
     return [];
   }
@@ -328,7 +400,7 @@ function getCachedSubmissions(): { data: Submission[]; cachedAt: string | null }
     const ts = localStorage.getItem(CACHE_TS_KEY);
     if (!raw) return { data: [], cachedAt: null };
     const arr = JSON.parse(raw);
-    return { data: Array.isArray(arr) ? arr : [], cachedAt: ts };
+    return { data: Array.isArray(arr) ? normalizeCostFields(arr) : [], cachedAt: ts };
   } catch {
     return { data: [], cachedAt: null };
   }
@@ -368,6 +440,7 @@ function mapSubmissionRow(r: any, i: number): Submission {
     buy_value_existing: Number(r.buy_value_existing) || 0,
     team_cost: Number(r.team_cost) || 0,
     merch_cost: Number(r.merch_cost) || 0,
+    sponsorship_cost: Number(r.sponsorship_cost) || 0,
     merch_items: parseMerch(r.merch_items),
     staff_in_charge: parseStaff(r.staff_in_charge),
     footfall: Number(r.footfall) || 0,
@@ -487,15 +560,18 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
     }
   }
 
-  // Column list for the light summary fetch. The activity_type column is
-  // included when available; databases that predate supabase_activity_type.sql
-  // retry once with LEGACY_SUMMARY_COLS below (rows then default to Booth)
-  // instead of falling back to a stale cache.
-  const SUMMARY_COLS =
-    'id,date,team,branch,activity_type,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status,updated_at';
-  const LEGACY_SUMMARY_COLS =
+  // Column list for the light summary fetch. The optional columns are included
+  // when available; a database that predates their migration (sponsorship_cost
+  // from supabase_sponsorship_cost.sql, activity_type from
+  // supabase_activity_type.sql) drops just the missing column below and retries
+  // the SAME page — rows then default to 0 / Booth instead of falling back to a
+  // stale cache.
+  const BASE_SUMMARY_COLS =
     'id,date,team,branch,new_register,new_reg_purchased,buy_value_new,existing_users,buy_value_existing,team_cost,merch_cost,footfall,step_in,status,updated_at';
-  let summaryCols = SUMMARY_COLS;
+  // Optional columns — checked / dropped one at a time on a schema error.
+  const OPTIONAL_SUMMARY_COLS = ['sponsorship_cost', 'activity_type'] as const;
+  let optionalCols: string[] = [...OPTIONAL_SUMMARY_COLS];
+  let summaryCols = [BASE_SUMMARY_COLS, ...optionalCols].join(',');
 
   try {
     // Paginated download (the platform caps each query at 1000 rows).
@@ -514,10 +590,12 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
         ),
       ]);
       if (error) {
-        // Pre-migration DB (no activity_type yet) → retry the SAME page once
-        // without the column; rows are mapped to the default type.
-        if (summaryCols === SUMMARY_COLS && isMissingColumnError(error, 'activity_type')) {
-          summaryCols = LEGACY_SUMMARY_COLS;
+        // Pre-migration DB (column not added yet) → drop just that column and
+        // retry the SAME page; the rows are mapped to its default (0 / Booth).
+        const missing = optionalCols.find(col => isMissingColumnError(error, col));
+        if (missing) {
+          optionalCols = optionalCols.filter(c => c !== missing);
+          summaryCols = [BASE_SUMMARY_COLS, ...optionalCols].join(',');
           continue;
         }
         const cached = getCachedSubmissions();
@@ -547,6 +625,7 @@ export async function fetchSubmissionsSummary(force = false): Promise<FetchResul
       buy_value_existing: Number(r.buy_value_existing) || 0,
       team_cost: Number(r.team_cost) || 0,
       merch_cost: Number(r.merch_cost) || 0,
+      sponsorship_cost: Number(r.sponsorship_cost) || 0,
       merch_items: [],
       staff_in_charge: [],
       footfall: Number(r.footfall) || 0,

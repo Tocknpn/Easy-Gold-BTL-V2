@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
-import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES, clearSubmissionsCache, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT } from '../lib/submissions';
+import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES, clearSubmissionsCache, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT, MISSING_SPONSORSHIP_COLUMN_HINT, totalCostOf } from '../lib/submissions';
 import { fetchStaff } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
@@ -113,10 +113,12 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
     const updated = {
       ...editData,
       merch_cost: merchTotal,
+      sponsorship_cost: Number(editData.sponsorship_cost) || 0,
       activity_type: normalizeActivityType(editData.activity_type),
     };
     try {
-      // Everything except activity_type — also the pre-migration fallback payload.
+      // Everything except the two newest columns — also the pre-migration
+      // fallback payload for each of them.
       const baseFields = {
         branch: updated.branch,
         date: updated.date,
@@ -134,8 +136,20 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
       };
       let { error } = await supabase
         .from('submissions')
-        .update({ ...baseFields, activity_type: updated.activity_type })
+        .update({ ...baseFields, sponsorship_cost: updated.sponsorship_cost, activity_type: updated.activity_type })
         .eq('id', updated.id);
+
+      // Databases that predate supabase_sponsorship_cost.sql → save the rest of
+      // the edit (Service Cost, merch, staff, …) and tell the admin how to
+      // enable the Sponsorship / Production Cost column.
+      if (error && isMissingColumnError(error, 'sponsorship_cost')) {
+        const retry = await supabase
+          .from('submissions')
+          .update({ ...baseFields, activity_type: updated.activity_type })
+          .eq('id', updated.id);
+        error = retry.error;
+        if (!error) window.alert(MISSING_SPONSORSHIP_COLUMN_HINT);
+      }
 
       // Databases that predate supabase_activity_type.sql → save the rest of the
       // edit and tell the admin how to enable the Activity Type column.
@@ -247,8 +261,13 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
               </div>
             </div>
 
-            <div className="form-field"><label>Security / Service Cost</label>
-              <input type="number" min={0} value={editData.team_cost} onChange={e => setEditData(d => d ? { ...d, team_cost: +e.target.value || 0 } : d)} />
+            <div className="grid-2" style={{ marginBottom: '16px', gap: '14px' }}>
+              <div className="form-field" style={{ margin: 0 }}><label>Security / Service Cost</label>
+                <input type="number" min={0} value={editData.team_cost} onChange={e => setEditData(d => d ? { ...d, team_cost: +e.target.value || 0 } : d)} />
+              </div>
+              <div className="form-field" style={{ margin: 0 }}><label>Sponsorship / Production Cost</label>
+                <input type="number" min={0} value={editData.sponsorship_cost} onChange={e => setEditData(d => d ? { ...d, sponsorship_cost: +e.target.value || 0 } : d)} />
+              </div>
             </div>
 
                         <hr style={{ border: 'none', height: '1px', background: 'var(--border)', margin: '22px 0' }} />
@@ -369,9 +388,14 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
                 </div>
               ))}
               <DetailRow label="Service Cost" value={fmtLAK(editData.team_cost)} />
-              <DetailRow label="Total Cost" value={fmtLAKShort(editData.team_cost + editData.merch_cost)} color="var(--red)" />
-              <DetailRow label="CPA (Cost / NC)" value={editData.new_register > 0 ? fmtLAK(Math.round((editData.team_cost + editData.merch_cost) / editData.new_register)) : '—'} color="#F4A62A" />
-              <DetailRow label="CPAO (Cost / NC Buyer)" value={editData.new_reg_purchased > 0 ? fmtLAK(Math.round((editData.team_cost + editData.merch_cost) / editData.new_reg_purchased)) : '—'} color="var(--blue)" />
+              <DetailRow
+                label="Sponsorship / Production Cost"
+                value={editData.sponsorship_cost > 0 ? fmtLAK(editData.sponsorship_cost) : '—'}
+                color={editData.sponsorship_cost > 0 ? undefined : 'var(--txt-dim)'}
+              />
+              <DetailRow label="Total Cost" value={fmtLAKShort(totalCostOf(editData))} color="var(--red)" />
+              <DetailRow label="CPA (Cost / NC)" value={editData.new_register > 0 ? fmtLAK(Math.round(totalCostOf(editData) / editData.new_register)) : '—'} color="#F4A62A" />
+              <DetailRow label="CPAO (Cost / NC Buyer)" value={editData.new_reg_purchased > 0 ? fmtLAK(Math.round(totalCostOf(editData) / editData.new_reg_purchased)) : '—'} color="var(--blue)" />
             </DetailSection>
           </div>
         )}

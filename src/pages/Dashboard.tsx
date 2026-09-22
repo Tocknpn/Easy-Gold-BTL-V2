@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,8 +12,8 @@ import {
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
-import type { ModalState, Submission } from '../lib/submissions';
-import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel } from '../lib/submissions';
+import type { ModalState, Submission, CostTypeKey } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
@@ -87,6 +87,103 @@ function SplitRow({ items }: { items: { label: string; val: string; pct?: number
   );
 }
 
+// ── Cost Type multi-select (Merch / Service / Sponsorship-Production) ──────
+// Picks which cost components are summed into the Total Cost that drives Total
+// Spending + CPA / CPO / CPAO. At least one component always stays selected.
+function CostTypeFilter({ selected, onChange }: { selected: CostTypeKey[]; onChange: (next: CostTypeKey[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click / Escape (same behaviour as the other overlays)
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const allSelected = selected.length === ALL_COST_TYPES.length;
+  const summary = allSelected
+    ? `All (${ALL_COST_TYPES.length})`
+    : COST_TYPES.filter(c => selected.includes(c.key)).map(c => c.shortLabel).join(' + ');
+
+  const toggle = (key: CostTypeKey) => {
+    if (selected.includes(key)) {
+      if (selected.length === 1) return; // never leave the metric without a cost basis
+      onChange(selected.filter(k => k !== key));
+    } else {
+      onChange(ALL_COST_TYPES.filter(k => selected.includes(k) || k === key));
+    }
+  };
+
+  return (
+    <div className="form-field" style={{ margin: 0, position: 'relative' }} ref={boxRef}>
+      <label id="cost-type-filter-label">Cost Type</label>
+      <button
+        type="button"
+        className="btn btn-ghost"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-labelledby="cost-type-filter-label"
+        onClick={() => setOpen(o => !o)}
+        style={{ padding: '7px 12px', fontSize: '12px', width: 'auto', fontWeight: 600 }}
+      >
+        <i className="fa-solid fa-layer-group" aria-hidden="true"></i>
+        {summary}
+        <i className={`fa-solid ${open ? 'fa-chevron-up' : 'fa-chevron-down'}`} style={{ fontSize: '9px', opacity: 0.7 }} aria-hidden="true"></i>
+      </button>
+
+      {open && (
+        <div
+          role="group"
+          aria-labelledby="cost-type-filter-label"
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
+            minWidth: '250px', background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: '10px', boxShadow: 'var(--shadow)', padding: '8px',
+          }}
+        >
+          {COST_TYPES.map(c => (
+            <label
+              key={c.key}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 9px',
+                borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--txt-main)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(c.key)}
+                onChange={() => toggle(c.key)}
+                style={{ width: '14px', height: '14px', accentColor: 'var(--accent)', flexShrink: 0 }}
+              />
+              {c.label}
+            </label>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', borderTop: '1px solid var(--border)', marginTop: '6px', paddingTop: '8px', paddingLeft: '9px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>Drives Total Cost → CPA · CPO · CPAO</span>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => onChange([...ALL_COST_TYPES])}
+              style={{ padding: '3px 9px', fontSize: '10px', opacity: allSelected ? 0.5 : 1 }}
+            >
+              All
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
@@ -98,6 +195,9 @@ export default function Dashboard() {
   const [teamFilter, setTeamFilter] = useState('All Teams');
   // 'All Types' | 'booth' | 'event' — filters by submissions.activity_type
   const [activityFilter, setActivityFilter] = useState('All Types');
+  // Which cost components make up the Total Cost used for every cost metric:
+  // Merch / Service / Sponsorship-Production. Default = all three.
+  const [costTypes, setCostTypes] = useState<CostTypeKey[]>(ALL_COST_TYPES);
   const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('D');
   const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });
 
@@ -153,8 +253,11 @@ export default function Dashboard() {
 
 
   // ── KPI aggregator ─────────────────────────────────────────────────────
-  const aggregateKPI = (rows: Submission[]) => {
-    let nc = 0, ec = 0, buyNew = 0, buyExisting = 0, teamCost = 0, merchCost = 0, nrp = 0, footfall = 0, stepIn = 0;
+  // Total Cost = the cost components selected in the Cost Type filter
+  // (Merch + Service + Sponsorship/Production by default). Every CPA / CPO /
+  // CPAO figure below is derived from that Total Cost.
+  const aggregateKPI = (rows: Submission[], types: CostTypeKey[]) => {
+    let nc = 0, ec = 0, buyNew = 0, buyExisting = 0, teamCost = 0, merchCost = 0, sponsorCost = 0, nrp = 0, footfall = 0, stepIn = 0;
     const days = new Set<string>();
     const byTeam: Record<string, { nc: number; ec: number; nrp: number; cost: number }> = {};
     for (const s of rows) {
@@ -162,8 +265,9 @@ export default function Dashboard() {
       ec += s.existing_users;
       buyNew += s.buy_value_new;
       buyExisting += s.buy_value_existing;
-      teamCost += s.team_cost;
-      merchCost += s.merch_cost;
+      teamCost += Number(s.team_cost) || 0;
+      merchCost += Number(s.merch_cost) || 0;
+      sponsorCost += Number(s.sponsorship_cost) || 0;
       nrp += s.new_reg_purchased || 0;
       footfall += s.footfall || 0;
       stepIn += s.step_in || 0;
@@ -173,14 +277,18 @@ export default function Dashboard() {
       byTeam[t].nc += s.new_register;
       byTeam[t].ec += s.existing_users;
       byTeam[t].nrp += s.new_reg_purchased || 0;
-      byTeam[t].cost += (s.team_cost || 0) + (s.merch_cost || 0);
+      // Per-team split follows the same cost-type selection as the totals.
+      for (const key of types) byTeam[t].cost += costOfType(s, key);
     }
     const totalBuy = buyNew + buyExisting;
-    const totalCost = teamCost + merchCost;
+    const allCost = teamCost + merchCost + sponsorCost;         // every component
+    const totalCost = (types.includes('service') ? teamCost : 0)
+      + (types.includes('merch') ? merchCost : 0)
+      + (types.includes('sponsorship') ? sponsorCost : 0);      // selected components only
     const totalAcq = nc + ec;
     const activeDays = days.size || 1;
     return {
-      nc, ec, nrp, totalAcq, totalBuy, totalCost, teamCost, merchCost,
+      nc, ec, nrp, totalAcq, totalBuy, totalCost, allCost, teamCost, merchCost, sponsorCost,
       activeDays,
       cpa: nc > 0 ? totalCost / nc : 0,
       cpo: (nrp + ec) > 0 ? totalCost / (nrp + ec) : 0,
@@ -193,8 +301,8 @@ export default function Dashboard() {
     };
   };
 
-  const kpi = useMemo(() => aggregateKPI(filtered), [filtered]);
-  const prevKpi = useMemo(() => aggregateKPI(prevFiltered), [prevFiltered]);
+  const kpi = useMemo(() => aggregateKPI(filtered, costTypes), [filtered, costTypes]);
+  const prevKpi = useMemo(() => aggregateKPI(prevFiltered, costTypes), [prevFiltered, costTypes]);
 
   // ── % contribution helpers ─────────────────────────────────────────────
   const pctOf = (val: number, total: number, fallback = 0) =>
@@ -204,8 +312,11 @@ export default function Dashboard() {
   const pctEC = pctOf(kpi.ec, kpi.totalAcq, 32.5);
   const pctBuyNC = pctOf(kpi.buyNew, kpi.totalBuy, 60);
   const pctBuyEC = pctOf(kpi.buyExisting, kpi.totalBuy, 40);
-  const pctSpendTeam = pctOf(kpi.teamCost, kpi.totalCost, 75);
-  const pctSpendMerch = pctOf(kpi.merchCost, kpi.totalCost, 25);
+  const pctSpendTeam = pctOf(kpi.teamCost, kpi.allCost, 0);
+  const pctSpendMerch = pctOf(kpi.merchCost, kpi.allCost, 0);
+  const pctSpendSponsor = pctOf(kpi.sponsorCost, kpi.allCost, 0);
+  // Human-readable list of the components currently forming the Total Cost.
+  const costTypeLabel = COST_TYPES.filter(c => costTypes.includes(c.key)).map(c => c.label).join(' + ');
   const totalTeamNC = kpi.kpv.nc + kpi.agency.nc;
   const pctKPV = pctOf(kpi.kpv.nc, totalTeamNC, 58);
   const pctAgency = pctOf(kpi.agency.nc, totalTeamNC, 42);
@@ -352,7 +463,7 @@ export default function Dashboard() {
     datasets: [{ data: [pctKPV, pctAgency], backgroundColor: [C_NC, C_EC], borderWidth: 0, hoverOffset: 4 }],
   };
   const donutSpendData = {
-    labels: ['Team Cost', 'Merch'],
+    labels: ['KPV Team', 'Agency Team'],
     datasets: [{ data: [spendKPV, spendAgency], backgroundColor: [C_NC, C_EC], borderWidth: 0, hoverOffset: 4 }],
   };
 
@@ -424,7 +535,8 @@ export default function Dashboard() {
             <option value="event">Event</option>
           </select>
         </div>
-        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); setActivityFilter('All Types'); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
+        <CostTypeFilter selected={costTypes} onChange={next => setCostTypes(normalizeCostTypes(next))} />
+        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); setActivityFilter('All Types'); setCostTypes([...ALL_COST_TYPES]); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
           <i className="fa-solid fa-xmark"></i> Clear
         </button>
       </div>
@@ -494,10 +606,14 @@ export default function Dashboard() {
           <SplitRow items={[
             { label: 'Merch', val: fmtLAKShort(kpi.merchCost), pct: pctSpendMerch, color: 'var(--orange)' },
             { label: 'Svc', val: fmtLAKShort(kpi.teamCost), pct: pctSpendTeam, color: 'var(--red)' },
+            { label: 'Spon', val: fmtLAKShort(kpi.sponsorCost), pct: pctSpendSponsor, color: 'var(--blue)' },
           ]} />
 
           <div style={{ marginTop: '4px' }}>
             <DeltaBadge curr={kpi.totalCost} prev={prevKpi.totalCost} invertGood compact />
+          </div>
+          <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
+            Total Cost = <strong style={{ color: 'var(--txt-sub)' }}>{costTypeLabel}</strong>
           </div>
           <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
             KPV: <strong style={{ color: 'var(--txt-sub)' }}>{fmtLAKShort(kpi.kpv.cost)}</strong>
@@ -704,7 +820,7 @@ export default function Dashboard() {
               .sort((a, b) => (a.date < b.date ? 1 : -1))
               .slice(0, 8)
               .map(s => {
-                const totalCost = (s.team_cost || 0) + (s.merch_cost || 0);
+                const totalCost = costForTypes(s, costTypes);
                 const cpa = s.new_register > 0 ? totalCost / s.new_register : 0;
                 return (
                   <tr key={s.id}>

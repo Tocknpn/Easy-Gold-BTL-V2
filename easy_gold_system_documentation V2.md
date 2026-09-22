@@ -41,8 +41,9 @@ The primary data table where all daily BTL marketing results are recorded.
 - **`buy_value_existing`**: Total purchase value from existing users.
 - **`footfall`**: Total estimated foot traffic passing by the booth/event.
 - **`step_in`**: Number of people who stepped into the booth/event area.
-- **`team_cost`**: Operational costs associated with the team for the day.
+- **`team_cost`**: Operational (Service) costs associated with the team for the day. Filled in by Admin in the Cost Manager.
 - **`merch_cost`**: Total cost of merchandise given away.
+- **`sponsorship_cost`**: Sponsorship / Production cost for the day — the third cost component. Filled in by Admin in the Cost Manager (or corrected in the submission modal). `0` means "not recorded yet" (this is the state of every pre-existing row).
 - **`merch_items`**: JSON string detailing specific merchandise distributed.
 - **`lat` & `lng`**: GPS coordinates of the submission location.
 - **`status`**: Current status of the submission (e.g., `active`).
@@ -119,10 +120,13 @@ The system operates with a strict Role-Based Access Control (RBAC) model.
 The web app calculates real-time performance metrics (KPIs) by aggregating data from the `submissions` sheet. Here is exactly how each metric is calculated:
 
 ### 4.1 Cost Calculations
-The Total Spending for a team on a given day is the sum of:
-*   **Team Cost**: Operational budgets (allowances, travel, etc.) entered manually in the submission form.
-*   **Merch Cost**: The automated sum of `(Quantity of Item * Cost Per Unit)` for every item selected in the "Merchandise Used" section. 
-*   **Total Cost** = `Team Cost + Merch Cost`
+The Total Spending for a team on a given day is the sum of the three cost components:
+*   **Service Cost** (`team_cost`): Operational budgets (allowances, travel, security, etc.). Entered by Admin in the Cost Manager.
+*   **Merch Cost** (`merch_cost`): The automated sum of `(Quantity of Item * Cost Per Unit)` for every item selected in the "Merchandise Used" section.
+*   **Sponsorship / Production Cost** (`sponsorship_cost`): Sponsorship, production and similar day costs. Entered by Admin in the Cost Manager (editable in the submission modal too). Blank / `0` = not recorded yet.
+*   **Total Cost** = `Service Cost + Merch Cost + Sponsorship/Production Cost`
+
+The Dashboard's **Cost Type** multi-select (Merch · Service Cost · Sponsorship / Production Cost) chooses which of these components are summed into that Total Cost, so efficiency metrics can be reviewed for any combination (e.g. Merch only, or Merch + Sponsorship). At least one component always stays selected.
 
 ### 4.2 Key Performance Indicators (KPIs)
 When you look at the Dashboard or Submission History, the app uses the `Total Cost` and the acquired user data to calculate efficiency:
@@ -147,6 +151,8 @@ On the Dashboard and Report pages, the data can be filtered. Here is how the fil
 1.  **Date Range (Start/End)**: The app fetches *all* submissions. It then runs a JavaScript `.filter()` to only keep rows where the submission `date` falls exactly between the Start Date and End Date inputs.
 2.  **Team Filter**: It applies a second `.filter()` to check if `submission.team` matches the selected dropdown. If "All Teams" is selected, this filter is skipped.
 3.  **Re-calculation**: After filtering, all the mathematical formulas (Sum of Costs, Sum of Acqusitions) are re-run *only on the filtered rows*, updating the UI numbers and charts instantly without needing to reload the page.
+4.  **Activity Filter** (Dashboard): Keeps only rows whose `activity_type` matches the selection (Booth / Event).
+5.  **Cost Type Filter** (Dashboard, multi-select): Chooses which cost components (Merch, Service Cost, Sponsorship / Production Cost) are added together to form the Total Cost. Everything driven by Total Cost — Total Spending, CPA, CPO, CPAO, the KPV/Agency splits, the previous-period deltas, the target badges and the Recent Submissions table — recalculates from the selected components only.
 
 ---
 
