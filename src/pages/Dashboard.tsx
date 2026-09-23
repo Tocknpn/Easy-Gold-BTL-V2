@@ -500,8 +500,6 @@ export default function Dashboard() {
   const pctSpendMerch = pctOf(merchSpend, kpi.totalCost, 0);
   const pctSpendService = pctOf(svcSpend, kpi.totalCost, 0);
   const pctSpendSponsor = pctOf(sponSpend, kpi.totalCost, 0);
-  // Human-readable list of the components currently forming the Total Cost.
-  const costTypeLabel = COST_TYPES.filter(c => costTypes.includes(c.key)).map(c => c.label).join(' + ');
   const totalTeamNC = kpi.kpv.nc + kpi.agency.nc;
   const pctKPV = pctOf(kpi.kpv.nc, totalTeamNC, 58);
   const pctAgency = pctOf(kpi.agency.nc, totalTeamNC, 42);
@@ -802,9 +800,6 @@ export default function Dashboard() {
 
           <div style={{ marginTop: '4px' }}>
             <DeltaBadge curr={kpi.totalCost} prev={prevKpi.totalCost} invertGood compact />
-          </div>
-          <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
-            Total Cost = <strong style={{ color: 'var(--txt-sub)' }}>{costTypeLabel}</strong>
           </div>
           <div style={{ marginTop: '3px', fontSize: '10px', color: 'var(--txt-dim)' }}>
             KPV: <strong style={{ color: 'var(--txt-sub)' }}>{fmtLAKShort(kpi.kpv.cost)}</strong>
