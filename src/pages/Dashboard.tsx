@@ -13,7 +13,7 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
 import type { ModalState, Submission, CostTypeKey } from '../lib/submissions';
-import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, normalizeTeam, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes, locationLabel, compareLocations, inLocationFilter, normalizeLocation } from '../lib/submissions';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
@@ -184,6 +184,147 @@ function CostTypeFilter({ selected, onChange }: { selected: CostTypeKey[]; onCha
   );
 }
 
+// ── Location multi-select (submissions.branch) ─────────────────────────────
+// DATE-FIRST: the option list only holds the places that actually had a
+// submission inside the current Start → End window (whole month → every
+// location of that month; half a month → only the places active in those days).
+// An EMPTY selection means "All Locations" — the safe default, because a range
+// can hold 100+ distinct places and the KPI maths must never collapse to ₭0.
+function LocationFilter({
+  options, counts, selected, onChange,
+}: {
+  options: string[];
+  counts: Record<string, number>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click / Escape (same behaviour as the other overlays)
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // Reopen unfiltered — the search text is per-use, not sticky.
+  useEffect(() => { if (!open) setQuery(''); }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const visible = q ? options.filter(v => locationLabel(v).toLowerCase().includes(q)) : options;
+
+  const toggle = (v: string) => {
+    onChange(selected.includes(v) ? selected.filter(k => k !== v) : [...selected, v]);
+  };
+
+  const isActive = selected.length > 0;
+  const summary = selected.length === 0
+    ? `All Locations (${options.length})`
+    : selected.length === 1
+      ? locationLabel(selected[0])
+      : `${selected.length} Locations`;
+
+  return (
+    <div className="form-field" style={{ margin: 0, position: 'relative' }} ref={boxRef}>
+      <label id="location-filter-label">Location</label>
+      <button
+        type="button"
+        className="btn btn-ghost"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-labelledby="location-filter-label"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          padding: '7px 12px', fontSize: '12px', width: 'auto', fontWeight: 600,
+          maxWidth: '240px',
+          borderColor: isActive ? 'var(--accent)' : undefined,
+          color: isActive ? 'var(--accent)' : undefined,
+        }}
+      >
+        <i className="fa-solid fa-location-dot" aria-hidden="true"></i>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>
+        {isActive && <span style={{ fontSize: '10px', opacity: 0.8 }}>· filtered</span>}
+        <i className={`fa-solid ${open ? 'fa-chevron-up' : 'fa-chevron-down'}`} style={{ fontSize: '9px', opacity: 0.7 }} aria-hidden="true"></i>
+      </button>
+
+      {open && (
+        <div
+          role="group"
+          aria-labelledby="location-filter-label"
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
+            width: '300px', background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: '10px', boxShadow: 'var(--shadow)', padding: '8px',
+          }}
+        >
+          <input
+            type="search"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search location…"
+            aria-label="Search location"
+            style={{ padding: '6px 10px', fontSize: '12px', marginBottom: '6px' }}
+          />
+
+          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+            {visible.map(v => (
+              <label
+                key={v}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 9px',
+                  borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--txt-main)',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(v)}
+                  onChange={() => toggle(v)}
+                  style={{ width: '14px', height: '14px', accentColor: 'var(--accent)', flexShrink: 0 }}
+                />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={locationLabel(v)}>
+                  {locationLabel(v)}
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--txt-dim)', flexShrink: 0 }}>{counts[v] || 0}</span>
+              </label>
+            ))}
+            {visible.length === 0 && (
+              <div style={{ fontSize: '11px', color: 'var(--txt-dim)', padding: '8px 9px' }}>
+                {options.length === 0
+                  ? 'No locations recorded in this date range.'
+                  : 'No location matches your search.'}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', borderTop: '1px solid var(--border)', marginTop: '6px', paddingTop: '8px', paddingLeft: '9px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>
+              {selected.length === 0 ? 'All locations in range' : `${selected.length} of ${options.length} selected`}
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => onChange([])}
+              style={{ padding: '3px 9px', fontSize: '10px', opacity: selected.length === 0 ? 0.5 : 1 }}
+            >
+              All
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
   const [loading, setLoading] = useState(true);
@@ -195,6 +336,9 @@ export default function Dashboard() {
   const [teamFilter, setTeamFilter] = useState('All Teams');
   // 'All Types' | 'booth' | 'event' — filters by submissions.activity_type
   const [activityFilter, setActivityFilter] = useState('All Types');
+  // Multi-select on submissions.branch ("Location"). EMPTY = All Locations — the
+  // option list itself is derived from the date range below (date-first).
+  const [locationFilter, setLocationFilter] = useState<string[]>([]);
   // Which cost components make up the Total Cost used for every cost metric:
   // Merch / Service / Sponsorship-Production. Default = all three.
   const [costTypes, setCostTypes] = useState<CostTypeKey[]>(ALL_COST_TYPES);
@@ -216,15 +360,43 @@ export default function Dashboard() {
     setLoading(false);
   };
 
+  // ── Location options, derived from the DATE RANGE (date-first) ───────────
+  // Only places that actually had a submission inside the current Start → End
+  // window show up in the dropdown: a whole month lists that month's locations,
+  // half a month lists only the locations that happened in those days. Counting
+  // here (once, O(n)) also gives each option its row-count badge.
+  const { locationOptions, locationCounts } = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of submissions) {
+      if ((startDate && s.date < startDate) || (endDate && s.date > endDate)) continue;
+      const key = normalizeLocation(s.branch);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const options = [...counts.keys()].sort(compareLocations);
+    return { locationOptions: options, locationCounts: Object.fromEntries(counts) };
+  }, [submissions, startDate, endDate]);
+
+  // A location that drops out of the new date range is unselected, so the KPI /
+  // CPA / CPO maths can never silently read ₭0 for a place that has no rows in
+  // the window any more. Returning `prev` unchanged when nothing moved keeps
+  // this effect from triggering extra renders.
+  useEffect(() => {
+    setLocationFilter(prev => {
+      const next = prev.filter(v => locationOptions.includes(v));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [locationOptions]);
+
   // ── Current period filter ───────────────────────────────────────────────
   const filtered = useMemo(() => {
     return submissions.filter(s => {
       const inRange = (!startDate || s.date >= startDate) && (!endDate || s.date <= endDate);
       const inTeam = teamFilter === 'All Teams' || s.team === teamFilter || s.team === teamFilter.replace(' Team', '');
       const inActivity = activityFilter === 'All Types' || normalizeActivityType(s.activity_type) === activityFilter;
-      return inRange && inTeam && inActivity;
+      const inLocation = inLocationFilter(s.branch, locationFilter);
+      return inRange && inTeam && inActivity && inLocation;
     });
-  }, [submissions, startDate, endDate, teamFilter, activityFilter]);
+  }, [submissions, startDate, endDate, teamFilter, activityFilter, locationFilter]);
 
   // ── Previous period filter (mirror the selected range length back in time) ──
   const prevFiltered = useMemo(() => {
@@ -246,9 +418,12 @@ export default function Dashboard() {
       const inRange = s.date >= ps && s.date <= pe;
       const inTeam = teamFilter === 'All Teams' || s.team === teamFilter || s.team === teamFilter.replace(' Team', '');
       const inActivity = activityFilter === 'All Types' || normalizeActivityType(s.activity_type) === activityFilter;
-      return inRange && inTeam && inActivity;
+      // Same Location selection as the current period, so every "vs prev" delta
+      // compares like-for-like instead of mixing filtered vs unfiltered totals.
+      const inLocation = inLocationFilter(s.branch, locationFilter);
+      return inRange && inTeam && inActivity && inLocation;
     });
-  }, [submissions, startDate, endDate, teamFilter, activityFilter]);
+  }, [submissions, startDate, endDate, teamFilter, activityFilter, locationFilter]);
 
 
 
@@ -272,7 +447,10 @@ export default function Dashboard() {
       footfall += s.footfall || 0;
       stepIn += s.step_in || 0;
       days.add(s.date);
-      const t = s.team || 'KPV';
+      // Group by the normalised team name — rows carry 'KPV'/'Agency' as well as
+      // 'KPV Team'/'Agency Team', and the split/doughnut lookups below are by
+      // the short name, so an un-normalised key would silently total to ₭0.
+      const t = normalizeTeam(s.team || 'KPV');
       if (!byTeam[t]) byTeam[t] = { nc: 0, ec: 0, nrp: 0, cost: 0 };
       byTeam[t].nc += s.new_register;
       byTeam[t].ec += s.existing_users;
@@ -535,8 +713,14 @@ export default function Dashboard() {
             <option value="event">Event</option>
           </select>
         </div>
+        <LocationFilter
+          options={locationOptions}
+          counts={locationCounts}
+          selected={locationFilter}
+          onChange={setLocationFilter}
+        />
         <CostTypeFilter selected={costTypes} onChange={next => setCostTypes(normalizeCostTypes(next))} />
-        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); setActivityFilter('All Types'); setCostTypes([...ALL_COST_TYPES]); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
+        <button className="btn btn-ghost" onClick={() => { setStartDate(''); setEndDate(''); setTeamFilter('All Teams'); setActivityFilter('All Types'); setLocationFilter([]); setCostTypes([...ALL_COST_TYPES]); }} style={{ padding: '7px 14px', fontSize: '12px', marginTop: '16px' }}>
           <i className="fa-solid fa-xmark"></i> Clear
         </button>
       </div>
@@ -812,7 +996,7 @@ export default function Dashboard() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Date</th><th>Team</th><th>Activity</th><th>Branch</th><th>Total Acq.</th><th>Buy Value</th><th>Cost</th><th>CPA</th><th>Status</th><th></th>
+              <th>Date</th><th>Team</th><th>Activity</th><th>Location</th><th>Total Acq.</th><th>Buy Value</th><th>Cost</th><th>CPA</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>

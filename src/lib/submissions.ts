@@ -68,6 +68,40 @@ export const labelDate = (s: string) => {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 };
 
+// ── Locations (a submission's `branch`) ───────────────────────────────────
+// The place a team visited is stored in submissions.branch — the forms label it
+// "Branch / Location". Rows without a place are mapped to NO_LOCATION so they
+// stay reachable from the Dashboard's Location filter instead of disappearing.
+export const NO_LOCATION = '—';
+
+/** Any stored/typed branch → a comparable, trimmed location value. */
+export const normalizeLocation = (v?: string): string =>
+  String(v ?? '').trim() || NO_LOCATION;
+
+/** Human label for a location value ('—' → "(No location recorded)"). */
+export const locationLabel = (v: string): string =>
+  normalizeLocation(v) === NO_LOCATION ? '(No location recorded)' : String(v).trim();
+
+/** Alphabetical, locale-aware, case-insensitive ordering (mixes EN + Lao names). */
+export const compareLocations = (a: string, b: string): number =>
+  locationLabel(a).localeCompare(locationLabel(b), undefined, { numeric: true, sensitivity: 'base' });
+
+/** Location predicate used by the Dashboard: an EMPTY selection = "All Locations". */
+export const inLocationFilter = (branch: string, selected: string[]): boolean =>
+  selected.length === 0 || selected.includes(normalizeLocation(branch));
+
+// ── Teams ────────────────────────────────────────────────────────────────
+// `submissions.team` is written verbatim from the logged-in user's team, so
+// rows exist as both 'KPV'/'Agency' and 'KPV Team'/'Agency Team' (the user
+// admin screen offers all four). Normalise before grouping, otherwise the
+// KPV/Agency splits and team doughnuts read ₭0 for the '… Team' rows.
+export const normalizeTeam = (t?: string): string => {
+  const s = String(t ?? '').trim();
+  if (/KPV/i.test(s)) return 'KPV';
+  if (/Agency/i.test(s)) return 'Agency';
+  return s;
+};
+
 export const parseMerch = (v: any): MerchItem[] => {
   try {
     const a = typeof v === 'string' ? JSON.parse(v) : v;
