@@ -459,14 +459,13 @@ export default function Dashboard() {
       for (const key of types) byTeam[t].cost += costOfType(s, key);
     }
     const totalBuy = buyNew + buyExisting;
-    const allCost = teamCost + merchCost + sponsorCost;         // every component
     const totalCost = (types.includes('service') ? teamCost : 0)
       + (types.includes('merch') ? merchCost : 0)
       + (types.includes('sponsorship') ? sponsorCost : 0);      // selected components only
     const totalAcq = nc + ec;
     const activeDays = days.size || 1;
     return {
-      nc, ec, nrp, totalAcq, totalBuy, totalCost, allCost, teamCost, merchCost, sponsorCost,
+      nc, ec, nrp, totalAcq, totalBuy, totalCost, teamCost, merchCost, sponsorCost,
       activeDays,
       cpa: nc > 0 ? totalCost / nc : 0,
       cpo: (nrp + ec) > 0 ? totalCost / (nrp + ec) : 0,
@@ -490,9 +489,17 @@ export default function Dashboard() {
   const pctEC = pctOf(kpi.ec, kpi.totalAcq, 32.5);
   const pctBuyNC = pctOf(kpi.buyNew, kpi.totalBuy, 60);
   const pctBuyEC = pctOf(kpi.buyExisting, kpi.totalBuy, 40);
-  const pctSpendTeam = pctOf(kpi.teamCost, kpi.allCost, 0);
-  const pctSpendMerch = pctOf(kpi.merchCost, kpi.allCost, 0);
-  const pctSpendSponsor = pctOf(kpi.sponsorCost, kpi.allCost, 0);
+  // Total Spending breakdown — mirrors the Cost Type selection. A component that
+  // is NOT selected reads ₭0 / 0%, and every share is of the SELECTED Total
+  // Spending, so the three shares always add back up to 100% of the headline
+  // figure. With all three components selected the Total Cost equals the sum of
+  // all three, which leaves the default (all-types) view completely unchanged.
+  const merchSpend = costTypes.includes('merch') ? kpi.merchCost : 0;
+  const svcSpend = costTypes.includes('service') ? kpi.teamCost : 0;
+  const sponSpend = costTypes.includes('sponsorship') ? kpi.sponsorCost : 0;
+  const pctSpendMerch = pctOf(merchSpend, kpi.totalCost, 0);
+  const pctSpendService = pctOf(svcSpend, kpi.totalCost, 0);
+  const pctSpendSponsor = pctOf(sponSpend, kpi.totalCost, 0);
   // Human-readable list of the components currently forming the Total Cost.
   const costTypeLabel = COST_TYPES.filter(c => costTypes.includes(c.key)).map(c => c.label).join(' + ');
   const totalTeamNC = kpi.kpv.nc + kpi.agency.nc;
@@ -788,9 +795,9 @@ export default function Dashboard() {
           <div className="kpi-val">{fmtLAKShort(kpi.totalCost)}</div>
 
           <SplitRow items={[
-            { label: 'Merch', val: fmtLAKShort(kpi.merchCost), pct: pctSpendMerch, color: 'var(--orange)' },
-            { label: 'Svc', val: fmtLAKShort(kpi.teamCost), pct: pctSpendTeam, color: 'var(--red)' },
-            { label: 'Spon', val: fmtLAKShort(kpi.sponsorCost), pct: pctSpendSponsor, color: 'var(--blue)' },
+            { label: 'Merch', val: fmtLAKShort(merchSpend), pct: pctSpendMerch, color: 'var(--orange)' },
+            { label: 'Svc', val: fmtLAKShort(svcSpend), pct: pctSpendService, color: 'var(--red)' },
+            { label: 'Spon', val: fmtLAKShort(sponSpend), pct: pctSpendSponsor, color: 'var(--blue)' },
           ]} />
 
           <div style={{ marginTop: '4px' }}>
