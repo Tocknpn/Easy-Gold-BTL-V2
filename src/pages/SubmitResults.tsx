@@ -128,7 +128,8 @@ export default function SubmitResults() {
       buy_value_existing: buyExisting,
       team_cost: 0, // Service cost is filled later by Admin in Cost Manager
       merch_cost: merchCost,
-      sponsorship_cost: 0, // Sponsorship / Production cost — filled later by Admin in Cost Manager
+      sponsorship_cost: 0, // Sponsorship cost — filled later by Admin in Cost Manager
+      prod_cost: 0, // Production cost — filled later by Admin in Cost Manager
       merch_items: merchRows,
       staff_in_charge: isKPV ? staffRows : [],
       footfall,
@@ -141,9 +142,10 @@ export default function SubmitResults() {
     let activityColumnMissing = false;
     try {
       // Everything except activity_type — also serves as the pre-migration fallback.
-      // sponsorship_cost is not sent on purpose: it is always 0 at submission
-      // time and the column DEFAULT 0 fills it (works even before the migration
-      // from supabase_sponsorship_cost.sql has been run).
+      // sponsorship_cost / prod_cost are not sent on purpose: both are always 0 at
+      // submission time and the column DEFAULT 0 fills them (works even before the
+      // migrations from supabase_sponsorship_cost.sql / supabase_prod_cost.sql
+      // have been run).
       const basePayload = {
         date: record.date,
         team: record.team,

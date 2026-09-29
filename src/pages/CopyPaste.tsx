@@ -14,6 +14,7 @@ const COLUMNS = [
   { key: 'team_cost', label: 'Service Cost', width: '120px' },
   { key: 'merch_cost', label: 'Merch Cost', width: '120px' },
   { key: 'sponsorship_cost', label: 'Sponsorship Cost', width: '150px' },
+  { key: 'prod_cost', label: 'Production Cost', width: '150px' },
   { key: 'total_cost', label: 'Total Cost', width: '120px' },
   { key: 'footfall', label: 'Footfall', width: '80px' },
   { key: 'step_in', label: 'Step-in', width: '80px' },
@@ -100,6 +101,7 @@ export default function CopyPaste() {
       case 'team_cost':
       case 'merch_cost':
       case 'sponsorship_cost':
+      case 'prod_cost':
       case 'total_cost': return fmtLAK(Number(value) || 0);
       default: return String(value);
     }
@@ -108,7 +110,7 @@ export default function CopyPaste() {
   const fmtRaw = (val: any, key: string): string => {
     if (val === null || val === undefined || val === '') return '';
     if (key === 'date') return String(val);
-    if (['buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'sponsorship_cost', 'total_cost'].includes(key)) return String(Number(val) || 0);
+    if (['buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'sponsorship_cost', 'prod_cost', 'total_cost'].includes(key)) return String(Number(val) || 0);
     return String(val);
   };
 
@@ -302,7 +304,7 @@ const toggleCell = (row: number, col: number) => {
     };
   });
 
-  const numericCols = ['new_register', 'new_reg_purchased', 'existing_users', 'buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'sponsorship_cost', 'total_cost', 'footfall', 'step_in'];
+  const numericCols = ['new_register', 'new_reg_purchased', 'existing_users', 'buy_value_new', 'buy_value_existing', 'team_cost', 'merch_cost', 'sponsorship_cost', 'prod_cost', 'total_cost', 'footfall', 'step_in'];
 return (
     <div onMouseUp={handleMouseUp}>
       {/* Header */}

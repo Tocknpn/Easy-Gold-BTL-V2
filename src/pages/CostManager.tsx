@@ -1,22 +1,25 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { Submission } from '../lib/submissions';
-import { fetchSubmissionsSummary, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, clearSubmissionsCache, totalCostOf, isMissingColumnError, MISSING_SPONSORSHIP_COLUMN_HINT } from '../lib/submissions';
+import { fetchSubmissionsSummary, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, clearSubmissionsCache, totalCostOf, isMissingColumnError, MISSING_SPONSORSHIP_COLUMN_HINT, MISSING_PROD_COST_COLUMN_HINT } from '../lib/submissions';
 import { supabase } from '../lib/supabase';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
-type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'buy_total' | 'merch_cost' | 'service_cost' | 'sponsorship_cost' | 'total_cost' | 'cpa';
+type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'buy_total' | 'merch_cost' | 'service_cost' | 'sponsorship_cost' | 'prod_cost' | 'total_cost' | 'cpa';
 
-const COLUMNS: { key: SortKey; label: string }[] = [
-  { key: 'date', label: 'Date' },
-  { key: 'team', label: 'Team' },
-  { key: 'branch', label: 'Branch' },
-  { key: 'new_register', label: 'Users (NC)' },
-  { key: 'buy_total', label: 'Buy Value' },
-  { key: 'merch_cost', label: 'Merch Cost' },
-  { key: 'service_cost', label: 'Service Cost (LAK)' },
-  { key: 'sponsorship_cost', label: 'Sponsorship / Prod. Cost (LAK)' },
-  { key: 'total_cost', label: 'Total Cost' },
-  { key: 'cpa', label: 'CPA (preview)' },
+// Short header labels keep the 11-column table inside the card (the full name
+// lives in `title`, used for the sort tooltip and the row-level inputs).
+const COLUMNS: { key: SortKey; label: string; title: string }[] = [
+  { key: 'date', label: 'Date', title: 'Date' },
+  { key: 'team', label: 'Team', title: 'Team' },
+  { key: 'branch', label: 'Branch', title: 'Branch / Location' },
+  { key: 'new_register', label: 'Users (NC)', title: 'New Customers' },
+  { key: 'buy_total', label: 'Buy Value', title: 'Buy Value (new + existing)' },
+  { key: 'merch_cost', label: 'Merch (₭)', title: 'Merch Cost' },
+  { key: 'service_cost', label: 'Service (₭)', title: 'Service Cost — editable, filled by Admin' },
+  { key: 'sponsorship_cost', label: 'Spon (₭)', title: 'Sponsorship Cost — editable, filled by Admin' },
+  { key: 'prod_cost', label: 'Prod (₭)', title: 'Production Cost — editable, filled by Admin' },
+  { key: 'total_cost', label: 'Total Cost', title: 'Total Cost (service + merch + sponsorship + production)' },
+  { key: 'cpa', label: 'CPA (preview)', title: 'CPA preview (Total Cost / New Customers)' },
 ];
 
 // ── Export to CSV function ──────────────────────────────────────────────
@@ -32,7 +35,8 @@ const exportToCSV = (data: Submission[], filename: string) => {
     'Buy Value Total',
     'Merch Cost',
     'Service Cost',
-    'Sponsorship/Production Cost',
+    'Sponsorship Cost',
+    'Production Cost',
     'Total Cost',
     'CPA',
     'Merch Items',
@@ -66,6 +70,7 @@ const exportToCSV = (data: Submission[], filename: string) => {
       s.merch_cost || 0,
       s.team_cost || 0,
       s.sponsorship_cost || 0,
+      s.prod_cost || 0,
       totalCost,
       cpa,
       merchItemsDetail,
@@ -122,9 +127,10 @@ export default function CostManager() {
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   // Pending edits: submission id → raw input string (lets admin fill many rows at once).
-  // Two independent draft maps — one per editable cost column.
+  // One independent draft map per editable cost column (service / sponsorship / production).
   const [serviceDrafts, setServiceDrafts] = useState<Record<string, string>>({});
   const [sponsorDrafts, setSponsorDrafts] = useState<Record<string, string>>({});
+  const [prodDrafts, setProdDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState('');
 
@@ -169,6 +175,7 @@ export default function CostManager() {
         case 'merch_cost': return s.merch_cost || 0;
         case 'service_cost': return s.team_cost || 0; // ₭0 = pending, filled by admin later
         case 'sponsorship_cost': return s.sponsorship_cost || 0; // ₭0 = not recorded yet
+        case 'prod_cost': return s.prod_cost || 0; // ₭0 = not recorded yet
         case 'total_cost': return totalCostOf(s);
         case 'cpa': return s.new_register > 0 ? totalCostOf(s) / s.new_register : -Infinity;
       }
@@ -193,60 +200,84 @@ export default function CostManager() {
 
   // ── Live totals for summary cards (drafts included) ───────────────────
   const totals = useMemo(() => {
-    let service = 0, merch = 0, sponsorship = 0;
+    let service = 0, merch = 0, sponsorship = 0, prod = 0;
     for (const s of filtered) {
       service += Number(serviceDrafts[s.id] !== undefined ? (Number(serviceDrafts[s.id]) || 0) : s.team_cost) || 0;
       merch += s.merch_cost || 0;
       sponsorship += Number(sponsorDrafts[s.id] !== undefined ? (Number(sponsorDrafts[s.id]) || 0) : s.sponsorship_cost) || 0;
+      prod += Number(prodDrafts[s.id] !== undefined ? (Number(prodDrafts[s.id]) || 0) : s.prod_cost) || 0;
     }
-    return { service, merch, sponsorship, combined: service + merch + sponsorship };
-  }, [filtered, serviceDrafts, sponsorDrafts]);
+    return { service, merch, sponsorship, prod, combined: service + merch + sponsorship + prod };
+  }, [filtered, serviceDrafts, sponsorDrafts, prodDrafts]);
 
   // ── Draft helpers (one pair per editable cost column) ─────────────────
   const getServiceDraftValue = (s: Submission) => (serviceDrafts[s.id] !== undefined ? serviceDrafts[s.id] : String(s.team_cost || 0));
   const getSponsorDraftValue = (s: Submission) => (sponsorDrafts[s.id] !== undefined ? sponsorDrafts[s.id] : String(s.sponsorship_cost || 0));
+  const getProdDraftValue = (s: Submission) => (prodDrafts[s.id] !== undefined ? prodDrafts[s.id] : String(s.prod_cost || 0));
   const isServiceModified = (s: Submission) => serviceDrafts[s.id] !== undefined && (Number(serviceDrafts[s.id]) || 0) !== s.team_cost;
   const isSponsorModified = (s: Submission) => sponsorDrafts[s.id] !== undefined && (Number(sponsorDrafts[s.id]) || 0) !== s.sponsorship_cost;
-  const isModified = (s: Submission) => isServiceModified(s) || isSponsorModified(s);
+  const isProdModified = (s: Submission) => prodDrafts[s.id] !== undefined && (Number(prodDrafts[s.id]) || 0) !== s.prod_cost;
+  const isModified = (s: Submission) => isServiceModified(s) || isSponsorModified(s) || isProdModified(s);
   const pendingCount = sorted.filter(isModified).length;
 
-  // Live Total Cost of a row — saved merchandising cost + both draft inputs.
+  // Live Total Cost of a row — saved merchandising cost + all three draft inputs.
   const liveTotalCost = (s: Submission) =>
     totalCostOf({
       team_cost: Number(getServiceDraftValue(s)) || 0,
       merch_cost: s.merch_cost || 0,
       sponsorship_cost: Number(getSponsorDraftValue(s)) || 0,
+      prod_cost: Number(getProdDraftValue(s)) || 0,
     });
 
   const setServiceDraft = (id: string, value: string) => setServiceDrafts(d => ({ ...d, [id]: value }));
   const setSponsorDraft = (id: string, value: string) => setSponsorDrafts(d => ({ ...d, [id]: value }));
+  const setProdDraft = (id: string, value: string) => setProdDrafts(d => ({ ...d, [id]: value }));
 
-  // ── Batch save: persist every edited Service / Sponsorship cost at once ──
+  // ── Batch save: persist every edited Service / Sponsorship / Production cost ──
   const handleSaveAll = async () => {
-    // One update per changed row — both editable cost columns travel together.
+    // One update per changed row — all three editable cost columns travel together.
     const updates = sorted.filter(isModified).map(s => ({
       id: s.id,
       team_cost: Math.max(0, Number(getServiceDraftValue(s)) || 0),
       sponsorship_cost: Math.max(0, Number(getSponsorDraftValue(s)) || 0),
+      prod_cost: Math.max(0, Number(getProdDraftValue(s)) || 0),
     }));
     if (updates.length === 0) return;
 
     setSaving(true);
     let dbFailures = 0;
-    let missingColumn = false;
+    let missingSponsor = false;
+    let missingProd = false;
     const realIds = updates.filter(u => !u.id.startsWith('mock-'));
     if (supabase && realIds.length > 0) {
       for (const u of realIds) {
         const { error } = await supabase
           .from('submissions')
-          .update({ team_cost: u.team_cost, sponsorship_cost: u.sponsorship_cost })
+          .update({ team_cost: u.team_cost, sponsorship_cost: u.sponsorship_cost, prod_cost: u.prod_cost })
           .eq('id', u.id);
         if (error) {
-          // Pre-migration database: still store the Service Cost, and tell the
-          // admin which SQL unlocks the Sponsorship / Production Cost column.
-          if (isMissingColumnError(error, 'sponsorship_cost')) {
-            missingColumn = true;
-            const retry = await supabase.from('submissions').update({ team_cost: u.team_cost }).eq('id', u.id);
+          // Pre-migration database: still store the Service Cost (and whichever of
+          // the two optional columns exists), then tell the admin which SQL
+          // unlocks the missing cost column.
+          const missing = isMissingColumnError(error, 'prod_cost') ? 'prod_cost'
+            : isMissingColumnError(error, 'sponsorship_cost') ? 'sponsorship_cost'
+            : null;
+          if (missing === 'prod_cost') {
+            missingProd = true;
+            const retry = await supabase
+              .from('submissions')
+              .update({ team_cost: u.team_cost, sponsorship_cost: u.sponsorship_cost })
+              .eq('id', u.id);
+            if (retry.error) {
+              dbFailures++;
+              console.error('Cost Manager: failed to update submission', u.id, retry.error);
+            }
+          } else if (missing === 'sponsorship_cost') {
+            missingSponsor = true;
+            const retry = await supabase
+              .from('submissions')
+              .update({ team_cost: u.team_cost, prod_cost: u.prod_cost })
+              .eq('id', u.id);
             if (retry.error) {
               dbFailures++;
               console.error('Cost Manager: failed to update submission', u.id, retry.error);
@@ -263,17 +294,21 @@ export default function CostManager() {
     const costMap = new Map(updates.map(u => [u.id, u]));
     setSubmissions(prev => prev.map(s => {
       const u = costMap.get(s.id);
-      return u ? { ...s, team_cost: u.team_cost, sponsorship_cost: u.sponsorship_cost } : s;
+      return u ? { ...s, team_cost: u.team_cost, sponsorship_cost: u.sponsorship_cost, prod_cost: u.prod_cost } : s;
     }));
     setServiceDrafts({});
     setSponsorDrafts({});
+    setProdDrafts({});
     setSaving(false);
     // Drop the egress caches so every other page refetches the new costs
     // (otherwise the 5/10-minute cache would keep showing the old numbers).
     if (realIds.length > 0) clearSubmissionsCache();
 
-    if (missingColumn) {
-      window.alert(`${MISSING_SPONSORSHIP_COLUMN_HINT}\n\nSaved ${updates.length - dbFailures}/${updates.length} record(s): Service Cost was stored, the Sponsorship / Production Cost was not.`);
+    if (missingSponsor || missingProd) {
+      const hints = [missingSponsor ? MISSING_SPONSORSHIP_COLUMN_HINT : '', missingProd ? MISSING_PROD_COST_COLUMN_HINT : '']
+        .filter(Boolean).join('\n\n');
+      const dropped = [missingSponsor ? 'Sponsorship Cost' : '', missingProd ? 'Production Cost' : ''].filter(Boolean).join(' and ');
+      window.alert(`${hints}\n\nSaved ${updates.length - dbFailures}/${updates.length} record(s): Service Cost was stored, the ${dropped} was not.`);
     } else if (dbFailures > 0 && realIds.length > 0) {
       window.alert(`Saved ${updates.length - dbFailures}/${updates.length} record(s). ${dbFailures} database update(s) failed — check your connection.`);
     } else {
@@ -293,7 +328,7 @@ export default function CostManager() {
           )}
           <button
             className="btn btn-ghost"
-            onClick={() => { setServiceDrafts({}); setSponsorDrafts({}); }}
+            onClick={() => { setServiceDrafts({}); setSponsorDrafts({}); setProdDrafts({}); }}
             disabled={pendingCount === 0 || saving}
             style={{ opacity: pendingCount === 0 ? 0.45 : 1 }}
           >
@@ -312,29 +347,37 @@ export default function CostManager() {
       </div>
       {loading && <div style={{ padding: '10px' }}>Loading submission records…</div>}
 
-      {/* Summary cards — one per cost component + the combined Total Cost */}
-      <div className="grid-4" style={{ marginBottom: '20px' }}>
+      {/* Summary cards — one per cost source (service / merch / sponsorship /
+          production) + the combined Total Cost. Wraps instead of overflowing. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '20px' }}>
         <div className="card" style={{ borderTop: '4px solid var(--red)' }}>
           <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginBottom: '6px' }}>Total Service Cost (Team)</div>
-          <div style={{ fontSize: '24px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.service)}</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.service)}</div>
           <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginTop: '4px' }}>{filtered.length} records in range</div>
         </div>
         <div className="card" style={{ borderTop: '4px solid var(--gold)' }}>
           <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginBottom: '6px' }}>Total Merch Cost</div>
-          <div style={{ fontSize: '24px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.merch)}</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.merch)}</div>
           <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginTop: '4px' }}>filled by staff on submission</div>
         </div>
         <div className="card" style={{ borderTop: '4px solid var(--blue)' }}>
-          <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginBottom: '6px' }}>Total Sponsorship / Production Cost</div>
-          <div style={{ fontSize: '24px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.sponsorship)}</div>
+          <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginBottom: '6px' }}>Total Sponsorship Cost</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.sponsorship)}</div>
           <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginTop: '4px' }}>
             {filtered.filter(s => (Number(sponsorDrafts[s.id] !== undefined ? Number(sponsorDrafts[s.id]) || 0 : s.sponsorship_cost) || 0) > 0).length} of {filtered.length} records filled
           </div>
         </div>
+        <div className="card" style={{ borderTop: '4px solid #3ECFCF' }}>
+          <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginBottom: '6px' }}>Total Production Cost</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.prod)}</div>
+          <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginTop: '4px' }}>
+            {filtered.filter(s => (Number(prodDrafts[s.id] !== undefined ? Number(prodDrafts[s.id]) || 0 : s.prod_cost) || 0) > 0).length} of {filtered.length} records filled
+          </div>
+        </div>
         <div className="card" style={{ borderTop: '4px solid var(--txt-main)' }}>
           <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginBottom: '6px' }}>Combined Operational Cost</div>
-          <div style={{ fontSize: '24px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.combined)}</div>
-          <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginTop: '4px' }}>service + merch + sponsorship</div>
+          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(totals.combined)}</div>
+          <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginTop: '4px' }}>service + merch + sponsorship + prod</div>
         </div>
       </div>
 
@@ -381,7 +424,8 @@ export default function CostManager() {
           )}
         </div>
 
-        <table className="data-table">
+        <div className="table-scroll">
+        <table className="data-table compact">
           <thead>
             <tr>
               {COLUMNS.map(col => (
@@ -392,8 +436,8 @@ export default function CostManager() {
                   role="button"
                   tabIndex={0}
                   aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
-                  title={`Sort by ${col.label}`}
-                  style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: col.key === 'service_cost' || col.key === 'sponsorship_cost' ? 'var(--gold)' : undefined }}
+                  title={`Sort by ${col.title}`}
+                  style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', color: col.key === 'service_cost' || col.key === 'sponsorship_cost' || col.key === 'prod_cost' ? 'var(--gold)' : undefined }}
                 >
                   {col.label}
                   <i
@@ -408,6 +452,7 @@ export default function CostManager() {
             {sorted.map(s => {
               const modified = isModified(s);
               const sponsorModified = isSponsorModified(s);
+              const prodModified = isProdModified(s);
               const total = liveTotalCost(s);
               const cpa = s.new_register > 0 ? total / s.new_register : NaN;
               return (
@@ -424,9 +469,9 @@ export default function CostManager() {
                       onChange={(val: string) => setServiceDraft(s.id, val)}
                       title="Fill the team operating (service) cost for this day"
                       style={{
-                        width: '130px',
+                        width: '104px',
                         padding: '6px 10px',
-                        fontSize: '13px',
+                        fontSize: '12px',
                         fontFamily: 'var(--font-mono)',
                         textAlign: 'right',
                         border: Number(getServiceDraftValue(s)) > 0 ? '1px solid var(--green)' : '1px solid var(--red)',
@@ -438,15 +483,31 @@ export default function CostManager() {
                     <CostInput
                       value={getSponsorDraftValue(s)}
                       onChange={(val: string) => setSponsorDraft(s.id, val)}
-                      title="Fill the sponsorship / production cost for this day (blank = not recorded)"
+                      title="Fill the sponsorship cost for this day (blank = not recorded)"
                       style={{
-                        width: '140px',
+                        width: '104px',
                         padding: '6px 10px',
-                        fontSize: '13px',
+                        fontSize: '12px',
                         fontFamily: 'var(--font-mono)',
                         textAlign: 'right',
                         border: Number(getSponsorDraftValue(s)) > 0 ? '1px solid var(--green)' : '1px dashed var(--border)',
                         background: sponsorModified ? 'var(--input-bg)' : undefined,
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <CostInput
+                      value={getProdDraftValue(s)}
+                      onChange={(val: string) => setProdDraft(s.id, val)}
+                      title="Fill the production cost for this day (blank = not recorded)"
+                      style={{
+                        width: '104px',
+                        padding: '6px 10px',
+                        fontSize: '12px',
+                        fontFamily: 'var(--font-mono)',
+                        textAlign: 'right',
+                        border: Number(getProdDraftValue(s)) > 0 ? '1px solid var(--green)' : '1px dashed var(--border)',
+                        background: prodModified ? 'var(--input-bg)' : undefined,
                       }}
                     />
                   </td>
@@ -464,9 +525,10 @@ export default function CostManager() {
             )}
           </tbody>
         </table>
+        </div>
 
         <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border)', fontSize: '11px', color: 'var(--txt-dim)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-          <span><i className="fa-solid fa-lightbulb" style={{ color: 'var(--gold)' }}></i> Tip: fill several <strong>Service Cost</strong> and <strong>Sponsorship / Production Cost</strong> boxes, then press <strong>Save Changes</strong> once — everything is written together and both feed CPA / CPO / CPAO.</span>
+          <span><i className="fa-solid fa-lightbulb" style={{ color: 'var(--gold)' }}></i> Tip: fill several <strong>Service Cost</strong>, <strong>Sponsorship Cost</strong> and <strong>Production Cost</strong> boxes, then press <strong>Save Changes</strong> once — everything is written together and all four cost sources feed CPA / CPO / CPAO.</span>
           <span>{sorted.length} record{sorted.length !== 1 ? 's' : ''} shown</span>
         </div>
       </div>

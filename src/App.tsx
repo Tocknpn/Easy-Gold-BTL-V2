@@ -21,12 +21,14 @@ const Diagnostic = lazy(() => import('./pages/Diagnostic'));
 const HealthMonitor = lazy(() => import('./pages/HealthMonitor'));
 const CopyPaste = lazy(() => import('./pages/CopyPaste'));
 
+// Dense admin screens get extra canvas width (their tables have 10+ columns)
+const WIDE_PAGES = ['/cost-manager', '/copy-paste', '/report'];
+
 function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem('eg_sidebar_collapsed') === '1');
   const navigate = useNavigate();
   const location = useLocation();
-
   useEffect(() => {
     const storedUser = localStorage.getItem('easygold_user');
     if (storedUser) {
@@ -138,7 +140,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <div id="content">
-          <div className="page active" style={{ display: 'block' }}>
+          <div className={`page active${WIDE_PAGES.includes(location.pathname) ? ' page-wide' : ''}`} style={{ display: 'block' }}>
             {children}
           </div>
         </div>

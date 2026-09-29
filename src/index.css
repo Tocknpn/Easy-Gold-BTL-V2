@@ -235,6 +235,19 @@ nav { flex: 1; overflow-y: auto; padding: 20px 12px; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover { background: var(--ink); }
 
+/* Wide tables (Cost Manager, Report, …) — the table scrolls INSIDE its card
+   instead of pushing the header off the page when a window is narrow. */
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll > .data-table { margin-top: 16px; }
+
+/* Compact variant for tables with many columns (10+) — same look, tighter fit */
+.data-table.compact th { font-size: 9px; padding: 9px 10px; letter-spacing: 0.06em; white-space: nowrap; }
+.data-table.compact td { font-size: 12px; padding: 9px 10px; }
+.data-table.compact input { padding: 6px 8px !important; }
+
+/* Wider page canvas for dense admin screens (Cost Manager, Copy & Paste) */
+.page-wide { max-width: 1440px; }
+
 /* Form fields */
 .merch-item { display: grid; grid-template-columns: 2fr 1fr 1fr 36px; gap: 10px; align-items: center; margin-bottom: 10px; }
 .summary-footer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 22px; margin-bottom: 20px; display: flex; justify-content: space-between; }

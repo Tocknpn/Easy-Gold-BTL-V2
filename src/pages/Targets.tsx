@@ -79,7 +79,7 @@ export default function Targets() {
           if (!byTeam[team]) byTeam[team] = { nc: 0, buyValue: 0, totalCost: 0 };
           byTeam[team].nc += Number(s.new_register) || 0;
           byTeam[team].buyValue += Number(s.buy_value_new) || 0;
-          byTeam[team].totalCost += totalCostOf(s); // Service + Merch + Sponsorship/Production
+          byTeam[team].totalCost += totalCostOf(s); // Service + Merch + Sponsorship + Production
         }
         setActuals(byTeam);
       }

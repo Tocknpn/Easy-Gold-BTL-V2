@@ -87,7 +87,7 @@ function SplitRow({ items }: { items: { label: string; val: string; pct?: number
   );
 }
 
-// ── Cost Type multi-select (Merch / Service / Sponsorship-Production) ──────
+// ── Cost Type multi-select (Merch / Service / Sponsorship / Production) ────
 // Picks which cost components are summed into the Total Cost that drives Total
 // Spending + CPA / CPO / CPAO. At least one component always stays selected.
 function CostTypeFilter({ selected, onChange }: { selected: CostTypeKey[]; onChange: (next: CostTypeKey[]) => void }) {
@@ -340,7 +340,7 @@ export default function Dashboard() {
   // option list itself is derived from the date range below (date-first).
   const [locationFilter, setLocationFilter] = useState<string[]>([]);
   // Which cost components make up the Total Cost used for every cost metric:
-  // Merch / Service / Sponsorship-Production. Default = all three.
+  // Merch / Service / Sponsorship / Production. Default = all four.
   const [costTypes, setCostTypes] = useState<CostTypeKey[]>(ALL_COST_TYPES);
   const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('D');
   const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });
@@ -429,10 +429,10 @@ export default function Dashboard() {
 
   // ── KPI aggregator ─────────────────────────────────────────────────────
   // Total Cost = the cost components selected in the Cost Type filter
-  // (Merch + Service + Sponsorship/Production by default). Every CPA / CPO /
+  // (Merch + Service + Sponsorship + Production by default). Every CPA / CPO /
   // CPAO figure below is derived from that Total Cost.
   const aggregateKPI = (rows: Submission[], types: CostTypeKey[]) => {
-    let nc = 0, ec = 0, buyNew = 0, buyExisting = 0, teamCost = 0, merchCost = 0, sponsorCost = 0, nrp = 0, footfall = 0, stepIn = 0;
+    let nc = 0, ec = 0, buyNew = 0, buyExisting = 0, teamCost = 0, merchCost = 0, sponsorCost = 0, prodCost = 0, nrp = 0, footfall = 0, stepIn = 0;
     const days = new Set<string>();
     const byTeam: Record<string, { nc: number; ec: number; nrp: number; cost: number }> = {};
     for (const s of rows) {
@@ -443,6 +443,7 @@ export default function Dashboard() {
       teamCost += Number(s.team_cost) || 0;
       merchCost += Number(s.merch_cost) || 0;
       sponsorCost += Number(s.sponsorship_cost) || 0;
+      prodCost += Number(s.prod_cost) || 0;
       nrp += s.new_reg_purchased || 0;
       footfall += s.footfall || 0;
       stepIn += s.step_in || 0;
@@ -461,11 +462,12 @@ export default function Dashboard() {
     const totalBuy = buyNew + buyExisting;
     const totalCost = (types.includes('service') ? teamCost : 0)
       + (types.includes('merch') ? merchCost : 0)
-      + (types.includes('sponsorship') ? sponsorCost : 0);      // selected components only
+      + (types.includes('sponsorship') ? sponsorCost : 0)
+      + (types.includes('prod') ? prodCost : 0);                 // selected components only
     const totalAcq = nc + ec;
     const activeDays = days.size || 1;
     return {
-      nc, ec, nrp, totalAcq, totalBuy, totalCost, teamCost, merchCost, sponsorCost,
+      nc, ec, nrp, totalAcq, totalBuy, totalCost, teamCost, merchCost, sponsorCost, prodCost,
       activeDays,
       cpa: nc > 0 ? totalCost / nc : 0,
       cpo: (nrp + ec) > 0 ? totalCost / (nrp + ec) : 0,
@@ -491,15 +493,17 @@ export default function Dashboard() {
   const pctBuyEC = pctOf(kpi.buyExisting, kpi.totalBuy, 40);
   // Total Spending breakdown — mirrors the Cost Type selection. A component that
   // is NOT selected reads ₭0 / 0%, and every share is of the SELECTED Total
-  // Spending, so the three shares always add back up to 100% of the headline
-  // figure. With all three components selected the Total Cost equals the sum of
-  // all three, which leaves the default (all-types) view completely unchanged.
+  // Spending, so the four shares always add back up to 100% of the headline
+  // figure. With all four components selected the Total Cost equals the sum of
+  // all four, which leaves the default (all-types) view completely unchanged.
   const merchSpend = costTypes.includes('merch') ? kpi.merchCost : 0;
   const svcSpend = costTypes.includes('service') ? kpi.teamCost : 0;
   const sponSpend = costTypes.includes('sponsorship') ? kpi.sponsorCost : 0;
+  const prodSpend = costTypes.includes('prod') ? kpi.prodCost : 0;
   const pctSpendMerch = pctOf(merchSpend, kpi.totalCost, 0);
   const pctSpendService = pctOf(svcSpend, kpi.totalCost, 0);
   const pctSpendSponsor = pctOf(sponSpend, kpi.totalCost, 0);
+  const pctSpendProd = pctOf(prodSpend, kpi.totalCost, 0);
   const totalTeamNC = kpi.kpv.nc + kpi.agency.nc;
   const pctKPV = pctOf(kpi.kpv.nc, totalTeamNC, 58);
   const pctAgency = pctOf(kpi.agency.nc, totalTeamNC, 42);
@@ -796,6 +800,7 @@ export default function Dashboard() {
             { label: 'Merch', val: fmtLAKShort(merchSpend), pct: pctSpendMerch, color: 'var(--orange)' },
             { label: 'Svc', val: fmtLAKShort(svcSpend), pct: pctSpendService, color: 'var(--red)' },
             { label: 'Spon', val: fmtLAKShort(sponSpend), pct: pctSpendSponsor, color: 'var(--blue)' },
+            { label: 'Prod', val: fmtLAKShort(prodSpend), pct: pctSpendProd, color: '#3ECFCF' },
           ]} />
 
           <div style={{ marginTop: '4px' }}>

@@ -1,9 +1,12 @@
 -- ============================================================================
--- Sponsorship / Production Cost — third cost component (Easy Gold BTL V2)
+-- Sponsorship Cost — third cost component (Easy Gold BTL V2)
 -- ----------------------------------------------------------------------------
 -- Total Cost used to be "Service Cost (team_cost) + Merch cost (merch_cost)".
--- A third component is now recorded per submission day: the Sponsorship /
--- Production Cost. It is filled in by Admin in the Cost Manager (and can be
+-- A third component is now recorded per submission day: the Sponsorship Cost.
+-- NOTE (newer change): the old combined "Sponsorship / Production Cost" field
+-- was split in two — this column now holds SPONSORSHIP only, and the new
+-- prod_cost column (see supabase_prod_cost.sql) holds PRODUCTION. Existing
+-- values are left untouched here (they stay in sponsorship_cost). It is filled in by Admin in the Cost Manager (and can be
 -- corrected in the submission modal), and it is included in Total Cost — and
 -- therefore in every CPA / CPO / CPAO and Total Spending figure.
 --

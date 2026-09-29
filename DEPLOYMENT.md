@@ -19,8 +19,8 @@ designed to persist real data in **Supabase (PostgreSQL)** and be served by
 | Router | `react-router-dom` **BrowserRouter** |
 | DB client | `@supabase/supabase-js` — created in `src/lib/supabase.ts` |
 | DB schema | `supabase_schema.sql` (run once in Supabase SQL Editor) |
-| DB migrations | `supabase_activity_type.sql`, `supabase_sponsorship_cost.sql`, `supabase_change_probe.sql` (run once each — safe to re-run) |
-| KPI logic | CPO/CPA/CPAO computed from `team_cost + merch_cost + sponsorship_cost`, restricted to the Dashboard's **Cost Type** multi-select. Shared helper: `totalCostOf()` in `src/lib/submissions.ts` |
+| DB migrations | `supabase_activity_type.sql`, `supabase_sponsorship_cost.sql`, `supabase_prod_cost.sql`, `supabase_change_probe.sql` (run once each — safe to re-run) |
+| KPI logic | CPO/CPA/CPAO computed from `team_cost + merch_cost + sponsorship_cost + prod_cost`, restricted to the Dashboard's **Cost Type** multi-select (4 options). Shared helper: `totalCostOf()` in `src/lib/submissions.ts` |
 
 ### Environment variables (used at build time)
 Read in `src/lib/supabase.ts`:

@@ -4,7 +4,7 @@ import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLA
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
-type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'new_reg_purchased' | 'existing_users' | 'merch_cost' | 'sponsorship_cost' | 'cost' | 'cpa' | 'cpo';
+type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'new_reg_purchased' | 'existing_users' | 'merch_cost' | 'sponsorship_cost' | 'prod_cost' | 'cost' | 'cpa' | 'cpo';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'date', label: 'DATE' },
@@ -14,7 +14,8 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'new_reg_purchased', label: 'PURCHASED' },
   { key: 'existing_users', label: 'EXISTING' },
   { key: 'merch_cost', label: 'MERCH COST' },
-  { key: 'sponsorship_cost', label: 'SPONSOR COST' },
+  { key: 'sponsorship_cost', label: 'SPON COST' },
+  { key: 'prod_cost', label: 'PROD COST' },
   { key: 'cost', label: 'TOTAL COST' },
   { key: 'cpa', label: 'CPA' },
   { key: 'cpo', label: 'CPO' },
@@ -54,7 +55,7 @@ export default function Report() {
 
   // ── Derived rows with computed metrics ────────────────────────────────
   const rows = useMemo<Row[]>(() => submissions.map(s => {
-    // Total Cost = Service + Merch + Sponsorship/Production (shared helper, so
+    // Total Cost = Service + Merch + Sponsorship + Production (shared helper, so
     // this page can never drift from the Dashboard / Cost Manager).
     const cost = totalCostOf(s);
     const buyers = (s.new_reg_purchased || 0) + (s.existing_users || 0);
@@ -84,6 +85,7 @@ export default function Report() {
         case 'existing_users': return r.s.existing_users;
         case 'merch_cost': return r.s.merch_cost || 0;
         case 'sponsorship_cost': return r.s.sponsorship_cost || 0;
+        case 'prod_cost': return r.s.prod_cost || 0;
         case 'cost': return r.cost;
         case 'cpa': return Number.isFinite(r.cpa) ? r.cpa : -Infinity;
         case 'cpo': return Number.isFinite(r.cpo) ? r.cpo : -Infinity;
@@ -150,7 +152,7 @@ export default function Report() {
       const str = v === null || v === undefined ? '' : String(v);
       return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
     };
-    const header = ['Date', 'Team', 'Branch', 'New Reg (NC)', 'NC Purchased', 'Existing (EC)', 'Buy Value New', 'Buy Value Existing', 'Total Buy Value', 'Footfall', 'Step-in', 'Service Cost', 'Merch Cost', 'Sponsorship/Production Cost', 'Total Cost', 'CPA', 'CPO'];
+    const header = ['Date', 'Team', 'Branch', 'New Reg (NC)', 'NC Purchased', 'Existing (EC)', 'Buy Value New', 'Buy Value Existing', 'Total Buy Value', 'Footfall', 'Step-in', 'Service Cost', 'Merch Cost', 'Sponsorship Cost', 'Production Cost', 'Total Cost', 'CPA', 'CPO'];
     const lines = [header.join(',')];
     for (const r of sorted) {
       lines.push([
@@ -168,6 +170,7 @@ export default function Report() {
         r.s.team_cost,
         r.s.merch_cost,
         r.s.sponsorship_cost,
+        r.s.prod_cost,
         r.cost,
         Number.isFinite(r.cpa) ? Math.round(r.cpa) : '',
         Number.isFinite(r.cpo) ? Math.round(r.cpo) : '',
@@ -223,7 +226,8 @@ export default function Report() {
           </span>
         </div>
 
-        <table className="data-table">
+        <div className="table-scroll">
+        <table className="data-table compact">
           <thead>
             <tr>
               {COLUMNS.map(col => (
@@ -265,6 +269,7 @@ export default function Report() {
                 <td>{(r.s.existing_users || 0).toLocaleString()}</td>
                 <td>{fmtLAK(r.s.merch_cost)}</td>
                 <td>{r.s.sponsorship_cost > 0 ? fmtLAK(r.s.sponsorship_cost) : <span style={{ color: 'var(--txt-dim)' }}>—</span>}</td>
+                <td>{r.s.prod_cost > 0 ? fmtLAK(r.s.prod_cost) : <span style={{ color: 'var(--txt-dim)' }}>—</span>}</td>
                 <td>{fmtLAKShort(r.cost)}</td>
                 <td>{Number.isFinite(r.cpa) ? fmtLAK(Math.round(r.cpa)) : '—'}</td>
                 <td>{Number.isFinite(r.cpo) ? fmtLAK(Math.round(r.cpo)) : '—'}</td>
@@ -279,6 +284,7 @@ export default function Report() {
             )}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination footer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border)', fontSize: '12px', color: 'var(--txt-sub)', flexWrap: 'wrap', gap: '10px' }}>
