@@ -32,22 +32,31 @@ const NumberInput = ({ value, onChange, placeholder }: { value: number, onChange
 
 export default function SubmitResults() {
   const user = getCurrentUser();
-  const isKPV = (user?.team || 'KPV') === 'KPV';
+  const isAdmin = user?.role === 'admin';
 
-  const [myCheckIns, setMyCheckIns] = useState<CheckInRecord[]>([]);
+  // Admin can switch team freely; staff are locked to their own team
+  const [selectedTeam, setSelectedTeam] = useState<'KPV' | 'Agency'>(
+    (user?.team as 'KPV' | 'Agency') || 'KPV'
+  );
+  const isKPV = selectedTeam === 'KPV';
+
+  const [allCheckIns, setAllCheckIns] = useState<CheckInRecord[]>([]);
   const [kpvStaff, setKpvStaff] = useState<StaffMember[]>([]);
 
   React.useEffect(() => {
     const load = async () => {
-      const [allCheckIns, allStaff] = await Promise.all([
+      const [checkIns, allStaff] = await Promise.all([
         fetchCheckIns(),
         fetchStaff()
       ]);
-      setMyCheckIns(allCheckIns.filter(c => c.team === (user?.team || 'KPV')));
+      setAllCheckIns(checkIns);
       setKpvStaff(allStaff.filter(s => s.team === 'KPV'));
     };
     load();
   }, [user]);
+
+  // Filter check-ins by the currently selected team
+  const myCheckIns = allCheckIns.filter(c => c.team === selectedTeam);
 
   const [checkInId, setCheckInId] = useState('');
   // Booth (default) or Event — chosen next to the Activity Check-in selector.
@@ -73,6 +82,16 @@ export default function SubmitResults() {
     fetchMerchCatalog().then(setMerchCatalog);
   }, []);
 
+  // When admin switches team, reset the check-in selection and location fields
+  const handleTeamChange = (team: 'KPV' | 'Agency') => {
+    setSelectedTeam(team);
+    setCheckInId('');
+    setDate('');
+    setBranch('');
+    setStaffRows([]);
+    setDone('');
+  };
+
   const merchCost = merchRows.reduce((a, i) => {
     const cpu = merchCatalog.find(m => m.name === i.name)?.cpu || 0;
     return a + Number(i.qty) * cpu;
@@ -88,7 +107,7 @@ export default function SubmitResults() {
     }
   };
 
-    const updateMerch = (idx: number, patch: Partial<MerchItem>) => {
+  const updateMerch = (idx: number, patch: Partial<MerchItem>) => {
     setMerchRows(rows => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
 
@@ -97,16 +116,18 @@ export default function SubmitResults() {
     if (!date || !branch) return;
     setSubmitting(true);
 
+    const team = selectedTeam;
+
     // Prevent duplicate records for the same branch on the same day
     const localSubs = getLocalSubmissions();
-    const localExists = localSubs.some(s => s.date === date && s.branch === branch && s.team === (user?.team || 'KPV'));
+    const localExists = localSubs.some(s => s.date === date && s.branch === branch && s.team === team);
 
     const { data: existingRecords } = await supabase
       .from('submissions')
       .select('id')
       .eq('date', date)
       .eq('branch', branch)
-      .eq('team', user?.team || 'KPV')
+      .eq('team', team)
       .limit(1);
 
     if ((existingRecords && existingRecords.length > 0) || localExists) {
@@ -118,7 +139,7 @@ export default function SubmitResults() {
     const record: Submission = {
       id: `sub-${Date.now()}`,
       date,
-      team: user?.team || 'KPV',
+      team,
       branch,
       activity_type: normalizeActivityType(activityType),
       new_register: nc,
@@ -188,14 +209,14 @@ export default function SubmitResults() {
 
     setSubmitting(false);
     if (!savedToDb) {
-      void writeAuditLog('submission.offline', { branch, date, team: user?.team || 'KPV' }, 'warning', user?.team || '');
+      void writeAuditLog('submission.offline', { branch, date, team }, 'warning', team);
       setDone(`⚠️ No connection — results were saved on THIS DEVICE only, not in the database yet. They will still show on this phone, but Admin cannot see them yet. When internet is back, tell Admin to check Submission History (the record may need to be entered again).`);
     } else if (activityColumnMissing) {
-      void writeAuditLog('submission.create', { branch, date, team: user?.team || 'KPV', nc, buy_new: buyNew, buy_existing: buyExisting, activity_type: activityType }, 'success', user?.team || '');
+      void writeAuditLog('submission.create', { branch, date, team, nc, buy_new: buyNew, buy_existing: buyExisting, activity_type: activityType }, 'success', team);
       window.alert(MISSING_ACTIVITY_COLUMN_HINT);
       setDone(`✓ Results submitted for ${branch} on ${labelDate(date)} — saved to the database, but the Activity Type (${activityLabel(record.activity_type)}) was NOT stored: Admin must run supabase_activity_type.sql.`);
     } else {
-      void writeAuditLog('submission.create', { branch, date, team: user?.team || 'KPV', nc, buy_new: buyNew, buy_existing: buyExisting, activity_type: activityType }, 'success', user?.team || '');
+      void writeAuditLog('submission.create', { branch, date, team, nc, buy_new: buyNew, buy_existing: buyExisting, activity_type: activityType }, 'success', team);
       setDone(`✓ ${activityLabel(record.activity_type)} results submitted for ${branch} on ${labelDate(date)} — saved to the database. Admin will fill Service Cost in Cost Manager.`);
     }
     // Reset form
@@ -203,18 +224,52 @@ export default function SubmitResults() {
     setActivityType(DEFAULT_ACTIVITY_TYPE);
     setNc(0); setNrp(0); setBuyNew(0); setEc(0); setBuyExisting(0);
     setFootfall(0); setStepIn(0);
-        setMerchRows([]); setStaffRows([]);
+    setMerchRows([]); setStaffRows([]);
   };
 
   return (
     <div>
       {/* ── Activity Check-In selector ── */}
       <div style={{ background: 'rgba(46,194,122,0.1)', border: '1px solid var(--green)', borderRadius: '8px', padding: '12px 16px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px var(--green)' }}></div>
+        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 8px var(--green)', flexShrink: 0 }}></div>
+
+        {/* ── Admin-only Team switcher ── */}
+        {isAdmin && (
+          <>
+            <strong style={{ fontSize: '13px', color: 'var(--txt-main)', whiteSpace: 'nowrap' }}>Team:</strong>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {(['KPV', 'Agency'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => handleTeamChange(t)}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    border: '1px solid',
+                    cursor: 'pointer',
+                    borderColor: selectedTeam === t ? 'var(--gold)' : 'var(--border)',
+                    background: selectedTeam === t ? 'rgba(212,168,67,0.15)' : 'transparent',
+                    color: selectedTeam === t ? 'var(--gold)' : 'var(--txt-sub)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <span aria-hidden="true" style={{ width: '1px', height: '22px', background: 'rgba(46,194,122,0.35)' }}></span>
+          </>
+        )}
+
         <strong style={{ fontSize: '13px', color: 'var(--txt-main)', whiteSpace: 'nowrap' }}>Activity Check-in:</strong>
         {myCheckIns.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '12px', color: 'var(--red)' }}>No captured check-in found — capture your location first.</span>
+            <span style={{ fontSize: '12px', color: 'var(--red)' }}>
+              No {selectedTeam} check-in found — capture location first.
+            </span>
             <Link to="/checkin" className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: '11px' }}>
               <i className="fa-solid fa-location-dot"></i> Go to Check-In
             </Link>
@@ -254,7 +309,12 @@ export default function SubmitResults() {
             <h2 style={{ fontSize: '15px', marginBottom: '3px' }}>Daily Activity Results</h2>
             <div className="text-xs">End-of-day Log</div>
           </div>
-          <div className="text-xs" style={{ color: 'var(--txt-sub)' }}>{user?.team || 'KPV'} Team</div>
+          <span
+            className={`pill ${isKPV ? 'pill-gold' : 'pill-blue'}`}
+            style={{ alignSelf: 'center', fontSize: '12px', padding: '4px 12px' }}
+          >
+            {selectedTeam} Team
+          </span>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -359,3 +419,4 @@ export default function SubmitResults() {
     </div>
   );
 }
+
