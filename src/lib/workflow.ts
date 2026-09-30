@@ -264,7 +264,19 @@ export interface AppUserRow {
 
 export async function fetchUsers(): Promise<AppUserRow[]> {
   try {
-    const { data, error } = await supabase.from('users').select('*').order('name');
+    // Explicit column list, never select('*'): the anon role no longer has
+    // SELECT on users.password / users.token (see supabase_lock_passwords.sql),
+    // so a star-select would come back as "permission denied for column password".
+    let data: any[] | null;
+    let error: any;
+    ({ data, error } = await supabase
+      .from('users')
+      .select('id,username,name,role,team,is_active')
+      .order('name'));
+    // Databases that predate the is_active migration → retry without that column.
+    if (error && isMissingColumnError(error, 'is_active')) {
+      ({ data, error } = await supabase.from('users').select('id,username,name,role,team').order('name'));
+    }
     if (error) {
       console.error('Error fetching users:', error);
       return [];

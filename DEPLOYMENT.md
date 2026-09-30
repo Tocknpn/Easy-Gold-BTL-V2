@@ -118,28 +118,42 @@ Import the **8 data sheets** (skip the 9th, "Staff Report Template" — that is 
 ```sql
 -- Placeholder passwords only — change them on first login, and never commit
 -- real credentials: this repository was public once
--- (see supabase_rotate_credentials.sql).
+-- (see supabase_lock_passwords.sql, which rotates them and locks the column).
 INSERT INTO users (username, password, name, role, team) VALUES
 ('admin@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Admin', 'admin', 'Admin Team'),
 ('manager@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Manager', 'manager', 'Manager Team');
 ```
 
 ### RLS (row-level security) — currently OFF, and that is a security hole
-The anon key only reads/writes what RLS allows, and the anon key ships inside the
-public JS bundle, so **anyone can call the REST API directly**. Because
-`supabase_schema.sql` never enables RLS, that means full read/write access to
-every table right now — including `users.password`, so an unauthenticated visitor
-could read every password with a single GET request.
+The anon key only reads/writes what the table grants allow, and the anon key ships
+inside the public JS bundle, so **anyone can call the REST API directly**. Because
+`supabase_schema.sql` never enables RLS, `anon` currently has full read/write
+access to every table.
 
-Short term: do not reuse these passwords anywhere else, and treat the database as
-public until RLS is on.
-Proper fix: enable RLS on every table and add policies for what the app actually
-does (insert `submissions` / `checkins`, update `submissions` for Cost Manager),
-and move the `users` table behind a `security definer` login RPC so the anon role
-never needs to read passwords.
-Caveat: a plain `revoke select (password) on users from anon` is **not** enough —
-Postgres requires column privileges for the `WHERE password = ...` filter, so
-login would break.
+**Already locked down: `users.password` / `users.token` are not readable with the
+anon key any more.** `supabase_lock_passwords.sql` revokes the anon role's
+table-wide `SELECT` on `users`, hands back only the safe columns
+(`id, username, name, role, team, is_active`), rotates every password, and moves
+the login check into the `security definer` function `public.verify_login`, which
+the app calls as `supabase.rpc('verify_login', { p_username, p_password })`.
+
+Two caveats worth knowing:
+- A bare `revoke select (password) on users from anon` does **not** work, and
+  neither does a column-level revoke applied *after* the table-wide grant.
+  Postgres takes the **union** of table-level and column-level privileges, so the
+  table-level `SELECT` has to be revoked first and the safe columns granted back.
+  That is why the script has two steps instead of one.
+- The login query could not simply stay as `WHERE password = ...` either, because
+  that filter itself needs `SELECT` on the column. That is what the
+  `security definer` RPC is for.
+
+**Still open:** RLS is off on `submissions` / `checkins` / `merch` / `route_plan`,
+and `users` still accepts anon `UPDATE`. An attacker holding the anon key can
+therefore still read and write the business data (sales figures, GPS, staff
+names) and could change an account's password — they just can no longer read one.
+The fix is a policy per table matching what the app actually does: insert into
+`submissions` / `checkins`, update `submissions` for Cost Manager, and move the
+User Setting writes onto RPCs.
 
 ---
 

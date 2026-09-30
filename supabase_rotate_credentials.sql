@@ -31,6 +31,11 @@
 --
 -- SAFE TO RE-RUN: section 2 always writes the same literals, so a second run
 -- cannot lock anyone out.
+--
+-- SUPERSEDED BY supabase_lock_passwords.sql. That script generates the new
+-- passwords for you (nothing to invent by hand) and, more importantly, stops the
+-- anon key from being able to READ users.password / users.token at all, which
+-- this file does not do. Prefer it unless you specifically want the manual list.
 -- ============================================================================
 
 -- 0. Audit: who exists right now ---------------------------------------------

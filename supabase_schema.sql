@@ -100,8 +100,8 @@ CREATE TABLE audit_log (
 
 -- Initial Data
 -- Placeholder passwords only — change them on first login, and never commit real
--- credentials (this repository was public once). Rotation script:
--- supabase_rotate_credentials.sql
+-- credentials (this repository was public once). Rotation + column lock:
+-- supabase_lock_passwords.sql
 INSERT INTO users (username, password, name, role, team, is_active) VALUES
 ('admin@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Admin', 'admin', 'Admin Team', true),
 ('manager@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Souphaxay K.', 'manager', 'Manager Team', true);

@@ -4,8 +4,8 @@ import { supabase } from '../lib/supabase';
 
 // Demo credentials — only work when no real Supabase DB is configured
 // Deliberately throwaway values: this file ships to the browser and lives in
-// git, so anything hard-coded here is public. Real logins are checked against
-// the `users` table in Supabase (see supabase_rotate_credentials.sql).
+// git, so anything hard-coded here is public. Real logins are checked by the
+// `verify_login` function in Supabase (see supabase_lock_passwords.sql).
 
 const DEMO_USERS: Record<string, { name: string; role: string; team: string; dest: string }> = {
   'demo-admin@example.com:demo-admin-8f3a':    { name: 'Demo Admin',  role: 'admin', team: 'Admin Team', dest: '/' },
@@ -38,27 +38,47 @@ export default function Login() {
         const timeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('__timeout__')), 8000)
         );
-        const query = supabase
-          .from('users')
-          // Only the columns the login flow reads — never ship password/token to the browser.
-          .select('username,name,role,team,is_active')
-          .eq('username', username)
-          .eq('password', password)
-          .single();
+        // The anon role must not be able to read users.password / users.token
+        // (see supabase_lock_passwords.sql), so the credential check runs inside
+        // a `security definer` SQL function that returns only the safe columns.
+        let { data, error: fetchError } = await Promise.race([
+          supabase.rpc('verify_login', { p_username: username, p_password: password }),
+          timeoutPromise,
+        ]);
 
-        const { data, error: fetchError } = await Promise.race([query, timeoutPromise]);
+        // Until that SQL has been run in Supabase the function does not exist
+        // (PGRST202). Fall back to the old direct lookup so the app keeps working
+        // in EITHER order — deploy first or run the SQL first. Once the SQL is
+        // applied this branch is dead: revoking the column makes it error out.
+        if (fetchError?.code === 'PGRST202') {
+          const legacy = await Promise.race([
+            supabase
+              .from('users')
+              .select('username,name,role,team,is_active')
+              .eq('username', username)
+              .eq('password', password)
+              .single(),
+            timeoutPromise,
+          ]);
+          data = legacy.data;
+          fetchError = legacy.error;
+        }
 
-        if (fetchError || !data) {
+        // The RPC is set-returning so it arrives as a 0/1-row array; the legacy
+        // path above returns a single object. Accept either shape.
+        const row = Array.isArray(data) ? data[0] : data;
+
+        if (fetchError || !row) {
           setError('Invalid username or password.');
-        } else if (data.is_active === false) {
+        } else if (row.is_active === false) {
           setError('This account has been deactivated. Please contact an administrator.');
         } else {
-          const role = data.role === 'admin' || data.role === 'manager' ? 'admin' : 'staff';
+          const role = row.role === 'admin' || row.role === 'manager' ? 'admin' : 'staff';
           localStorage.setItem('easygold_user', JSON.stringify({
-            username: data.username ?? username,
-            name: data.name ?? username,
+            username: row.username ?? username,
+            name: row.name ?? username,
             role,
-            team: role === 'staff' ? (data.team === 'Agency' ? 'Agency' : 'KPV') : (data.team || ''),
+            team: role === 'staff' ? (row.team === 'Agency' ? 'Agency' : 'KPV') : (row.team || ''),
           }));
           navigate(role === 'admin' ? '/' : '/calendar');
         }
