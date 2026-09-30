@@ -3,16 +3,24 @@ import { totalCostOf } from './submissions';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+export interface EventType {
+  id: string;
+  created_at: string;
+  name: string;
+  description: string;
+  sort_order: number;
+}
+
 export interface Event {
   id: string;
   created_at: string;
   updated_at: string;
   year: number;
-  quarter: string;           // 'Q1' | 'Q2' | 'Q3' | 'Q4'
-  team: string;              // 'KPV' | 'Agency' | 'ESG'
+  quarter: string;           // derived display only ('Q1'–'Q4')
+  team: string;
   event_name: string;
-  start_date: string;        // ISO date
-  end_date: string;          // ISO date
+  start_date: string;
+  end_date: string;
   activity_type: string;
   objective: string;
   scale: string;
@@ -36,10 +44,11 @@ export interface Event {
   status: string;
 }
 
+/** Monthly KPI targets — one row per (year, month, team, activity_type) */
 export interface EventTarget {
   id: string;
   year: number;
-  quarter: string;
+  month: number;   // 1–12
   team: string;
   activity_type: string;
   cpf_target: number;
@@ -52,21 +61,21 @@ export interface EventTarget {
 }
 
 export interface EventKPIs {
-  total_cost_from_subs: number;  // sum of linked submission costs
-  total_cost: number;            // total_cost_from_subs + media_cost
+  total_cost_from_subs: number;
+  total_cost: number;
   total_nc: number;
   total_ec: number;
-  total_buyers: number;          // nc_purchased + ec
+  total_buyers: number;
   total_buy_value: number;
   total_footfall: number;
-  cpa: number;                   // total_cost / total_nc
-  cpo: number;                   // total_cost / total_buyers
-  cpm: number;                   // (total_cost / impressions) * 1000
-  cpf: number;                   // total_cost / footfall
-  pct_nc: number;                // total_nc / target_nc * 100
+  cpa: number;
+  cpo: number;
+  cpm: number;
+  cpf: number;
+  pct_nc: number;
   pct_ec: number;
   pct_buy_value: number;
-  linked_count: number;          // number of linked submissions
+  linked_count: number;
 }
 
 export interface LinkedSubmission {
@@ -89,28 +98,15 @@ export interface LinkedSubmission {
   event_id: string | null;
 }
 
-// ── Lookup tables ───────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
-export const ACTIVITY_TYPES_EVENT = [
-  'H2H Booth',
-  'Event (indoor)',
-  'Event (outdoor)',
-  'Sponsorship',
-  'Wealth Talk',
-  'On Shop',
+export const MONTHS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
 ] as const;
+export const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-export const EVENT_OBJECTIVES = [
-  'Acquisition/Awareness',
-  'Awareness/Education',
-  'Acquisition',
-] as const;
-
-export const EVENT_SCALES = ['Small', 'Medium', 'Large', 'National'] as const;
-export const EVENT_TEAMS = ['KPV', 'Agency', 'ESG'] as const;
-export const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
-export const EVENT_STATUSES = ['active', 'completed', 'cancelled'] as const;
-
+export const currentMonth = (): number => new Date().getMonth() + 1; // 1–12
 export const currentQuarter = (): string => {
   const m = new Date().getMonth();
   if (m < 3) return 'Q1';
@@ -118,21 +114,37 @@ export const currentQuarter = (): string => {
   if (m < 9) return 'Q3';
   return 'Q4';
 };
+export const monthToQuarter = (m: number): string =>
+  m <= 3 ? 'Q1' : m <= 6 ? 'Q2' : m <= 9 ? 'Q3' : 'Q4';
 
-// ── Row mapper ──────────────────────────────────────────────────────────────
+export const EVENT_OBJECTIVES = [
+  'Acquisition/Awareness',
+  'Awareness/Education',
+  'Acquisition',
+] as const;
+export const EVENT_SCALES = ['Small', 'Medium', 'Large', 'National'] as const;
+export const EVENT_TEAMS = ['KPV', 'Agency', 'ESG'] as const;
+export const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
+export const EVENT_STATUSES = ['active', 'completed', 'cancelled'] as const;
+
+// ── Row mappers ──────────────────────────────────────────────────────────────
 
 function mapEventRow(r: any): Event {
+  const sd = r.start_date || '';
+  // Derive quarter from start_date month
+  const month = sd ? new Date(sd + 'T00:00:00').getMonth() + 1 : 0;
+  const quarter = monthToQuarter(month || 7);
   return {
     id: String(r.id ?? ''),
     created_at: r.created_at || '',
     updated_at: r.updated_at || '',
     year: Number(r.year) || new Date().getFullYear(),
-    quarter: r.quarter || 'Q3',
+    quarter,
     team: r.team || 'KPV',
     event_name: r.event_name || '',
-    start_date: r.start_date || '',
+    start_date: sd,
     end_date: r.end_date || '',
-    activity_type: r.activity_type || 'Event (indoor)',
+    activity_type: r.activity_type || '',
     objective: r.objective || 'Acquisition/Awareness',
     scale: r.scale || '',
     description: r.description || '',
@@ -178,7 +190,89 @@ function mapLinkedSub(r: any): LinkedSubmission {
   };
 }
 
-// ── Fetch events (list view) ────────────────────────────────────────────────
+// ── Event Types (SKU) ────────────────────────────────────────────────────────
+
+export async function fetchEventTypes(): Promise<EventType[]> {
+  try {
+    const { data, error } = await supabase
+      .from('event_types')
+      .select('*')
+      .order('sort_order')
+      .order('name');
+    if (error || !data) return [];
+    return data.map((r: any) => ({
+      id: r.id,
+      created_at: r.created_at || '',
+      name: r.name || '',
+      description: r.description || '',
+      sort_order: Number(r.sort_order) || 0,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function createEventType(payload: {
+  name: string;
+  description?: string;
+  sort_order?: number;
+}): Promise<{ data: EventType | null; error: any }> {
+  try {
+    const { data, error } = await supabase
+      .from('event_types')
+      .insert([{ name: payload.name.trim(), description: payload.description || '', sort_order: payload.sort_order ?? 0 }])
+      .select()
+      .single();
+    if (error) return { data: null, error };
+    return {
+      data: { id: data.id, created_at: data.created_at, name: data.name, description: data.description || '', sort_order: data.sort_order },
+      error: null,
+    };
+  } catch (err) {
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Update an event type name — cascades the rename to all events and event_targets rows
+ * that reference the old name.
+ */
+export async function updateEventType(
+  id: string,
+  oldName: string,
+  updates: { name: string; description?: string; sort_order?: number }
+): Promise<{ error: any }> {
+  try {
+    const newName = updates.name.trim();
+    // 1. Update the master type record
+    const { error: typeErr } = await supabase
+      .from('event_types')
+      .update({ name: newName, description: updates.description ?? '', sort_order: updates.sort_order ?? 0 })
+      .eq('id', id);
+    if (typeErr) return { error: typeErr };
+
+    // 2. Cascade rename to events table
+    if (newName !== oldName) {
+      await supabase.from('events').update({ activity_type: newName }).eq('activity_type', oldName);
+      // 3. Cascade rename to event_targets table
+      await supabase.from('event_targets').update({ activity_type: newName }).eq('activity_type', oldName);
+    }
+    return { error: null };
+  } catch (err) {
+    return { error: err };
+  }
+}
+
+export async function deleteEventType(id: string): Promise<{ error: any }> {
+  try {
+    const { error } = await supabase.from('event_types').delete().eq('id', id);
+    return { error };
+  } catch (err) {
+    return { error: err };
+  }
+}
+
+// ── Events CRUD ──────────────────────────────────────────────────────────────
 
 export async function fetchEvents(filters?: {
   year?: number;
@@ -187,16 +281,19 @@ export async function fetchEvents(filters?: {
   status?: string;
 }): Promise<{ data: Event[]; error: any }> {
   try {
-    let q = supabase
-      .from('events')
-      .select('*')
-      .order('start_date', { ascending: false });
-
+    let q = supabase.from('events').select('*').order('start_date', { ascending: false });
     if (filters?.year) q = q.eq('year', filters.year);
-    if (filters?.quarter) q = q.eq('quarter', filters.quarter);
     if (filters?.team) q = q.eq('team', filters.team);
     if (filters?.status) q = q.eq('status', filters.status);
-
+    // Quarter filter: derive month range from quarter string
+    if (filters?.quarter) {
+      const qMap: Record<string, [string, string]> = {
+        Q1: ['01', '03'], Q2: ['04', '06'], Q3: ['07', '09'], Q4: ['10', '12'],
+      };
+      const [mFrom, mTo] = qMap[filters.quarter] || ['01', '12'];
+      const y = filters.year || new Date().getFullYear();
+      q = q.gte('start_date', `${y}-${mFrom}-01`).lte('start_date', `${y}-${mTo}-31`);
+    }
     const { data, error } = await Promise.race([
       q,
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('__timeout__')), 10000)),
@@ -208,15 +305,9 @@ export async function fetchEvents(filters?: {
   }
 }
 
-// ── Fetch single event ──────────────────────────────────────────────────────
-
 export async function fetchEventById(id: string): Promise<Event | null> {
   try {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const { data, error } = await supabase.from('events').select('*').eq('id', id).maybeSingle();
     if (error || !data) return null;
     return mapEventRow(data);
   } catch {
@@ -224,45 +315,30 @@ export async function fetchEventById(id: string): Promise<Event | null> {
   }
 }
 
-// ── Create event ────────────────────────────────────────────────────────────
-
 export async function createEvent(
-  payload: Omit<Event, 'id' | 'created_at' | 'updated_at'>
+  payload: Omit<Event, 'id' | 'created_at' | 'updated_at' | 'quarter'>
 ): Promise<{ data: Event | null; error: any }> {
   try {
-    const { data, error } = await supabase
-      .from('events')
-      .insert([payload])
-      .select()
-      .single();
+    const { data, error } = await supabase.from('events').insert([payload]).select().single();
     if (error) return { data: null, error };
     return { data: mapEventRow(data), error: null };
   } catch (err) {
     return { data: null, error: err };
   }
 }
-
-// ── Update event ────────────────────────────────────────────────────────────
 
 export async function updateEvent(
   id: string,
-  payload: Partial<Omit<Event, 'id' | 'created_at' | 'updated_at'>>
+  payload: Partial<Omit<Event, 'id' | 'created_at' | 'updated_at' | 'quarter'>>
 ): Promise<{ data: Event | null; error: any }> {
   try {
-    const { data, error } = await supabase
-      .from('events')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data, error } = await supabase.from('events').update(payload).eq('id', id).select().single();
     if (error) return { data: null, error };
     return { data: mapEventRow(data), error: null };
   } catch (err) {
     return { data: null, error: err };
   }
 }
-
-// ── Delete event ────────────────────────────────────────────────────────────
 
 export async function deleteEvent(id: string): Promise<{ error: any }> {
   try {
@@ -273,7 +349,7 @@ export async function deleteEvent(id: string): Promise<{ error: any }> {
   }
 }
 
-// ── Fetch linked submissions for an event ───────────────────────────────────
+// ── Linked Submissions ───────────────────────────────────────────────────────
 
 export async function fetchLinkedSubmissions(eventId: string): Promise<LinkedSubmission[]> {
   try {
@@ -288,8 +364,6 @@ export async function fetchLinkedSubmissions(eventId: string): Promise<LinkedSub
     return [];
   }
 }
-
-// ── Fetch unlinked event-type submissions (for linking picker) ──────────────
 
 export async function fetchUnlinkedEventSubmissions(): Promise<LinkedSubmission[]> {
   try {
@@ -307,49 +381,29 @@ export async function fetchUnlinkedEventSubmissions(): Promise<LinkedSubmission[
   }
 }
 
-// ── Link / unlink submission ────────────────────────────────────────────────
-
-export async function linkSubmissionToEvent(
-  submissionId: string,
-  eventId: string | null
-): Promise<{ error: any }> {
+export async function linkSubmissionToEvent(submissionId: string, eventId: string | null): Promise<{ error: any }> {
   try {
-    const { error } = await supabase
-      .from('submissions')
-      .update({ event_id: eventId })
-      .eq('id', submissionId);
+    const { error } = await supabase.from('submissions').update({ event_id: eventId }).eq('id', submissionId);
     return { error };
   } catch (err) {
     return { error: err };
   }
 }
 
-// ── Compute event KPIs from linked submissions ──────────────────────────────
+// ── KPI computation ──────────────────────────────────────────────────────────
 
-export function computeEventKPIs(
-  event: Event,
-  subs: LinkedSubmission[]
-): EventKPIs {
-  let total_cost_from_subs = 0;
-  let total_nc = 0;
-  let total_ec = 0;
-  let total_buyers = 0;
-  let total_buy_value = 0;
-  let total_footfall = 0;
-
+export function computeEventKPIs(event: Event, subs: LinkedSubmission[]): EventKPIs {
+  let total_cost_from_subs = 0, total_nc = 0, total_ec = 0, total_buyers = 0, total_buy_value = 0, total_footfall = 0;
   for (const s of subs) {
-    const cost = totalCostOf(s as any);
-    total_cost_from_subs += cost;
+    total_cost_from_subs += totalCostOf(s as any);
     total_nc += s.new_register;
     total_ec += s.existing_users;
     total_buyers += s.new_reg_purchased + s.existing_users;
     total_buy_value += (s.buy_value_new || 0) + (s.buy_value_existing || 0);
     total_footfall += s.footfall || 0;
   }
-
   const total_cost = total_cost_from_subs + (event.media_cost || 0);
   const impressions = event.total_media_impressions || 0;
-
   return {
     total_cost_from_subs,
     total_cost,
@@ -369,24 +423,24 @@ export function computeEventKPIs(
   };
 }
 
-// ── Fetch event targets ─────────────────────────────────────────────────────
+// ── Event Targets (monthly) ──────────────────────────────────────────────────
 
 export async function fetchEventTargets(
   year?: number,
-  quarter?: string,
+  month?: number,
   team?: string
 ): Promise<EventTarget[]> {
   try {
-    let q = supabase.from('event_targets').select('*').order('team').order('activity_type');
+    let q = supabase.from('event_targets').select('*').order('month').order('team').order('activity_type');
     if (year) q = q.eq('year', year);
-    if (quarter) q = q.eq('quarter', quarter);
+    if (month) q = q.eq('month', month);
     if (team) q = q.eq('team', team);
     const { data, error } = await q;
     if (error || !data) return [];
     return data.map((r: any) => ({
       id: r.id,
       year: Number(r.year),
-      quarter: r.quarter,
+      month: Number(r.month),
       team: r.team,
       activity_type: r.activity_type,
       cpf_target: Number(r.cpf_target) || 0,
@@ -402,20 +456,27 @@ export async function fetchEventTargets(
   }
 }
 
-export async function upsertEventTarget(
-  target: Omit<EventTarget, 'id'>
-): Promise<{ error: any }> {
+export async function upsertEventTarget(target: Omit<EventTarget, 'id'>): Promise<{ error: any }> {
   try {
     const { error } = await supabase
       .from('event_targets')
-      .upsert([target], { onConflict: 'year,quarter,team,activity_type' });
+      .upsert([target], { onConflict: 'year,month,team,activity_type' });
     return { error };
   } catch (err) {
     return { error: err };
   }
 }
 
-// ── Format helpers ──────────────────────────────────────────────────────────
+export async function deleteEventTarget(id: string): Promise<{ error: any }> {
+  try {
+    const { error } = await supabase.from('event_targets').delete().eq('id', id);
+    return { error };
+  } catch (err) {
+    return { error: err };
+  }
+}
+
+// ── Format helpers ────────────────────────────────────────────────────────────
 
 export const fmtLAK = (n: number) => `₭${n.toLocaleString('en-US')}`;
 export const fmtLAKShort = (n: number): string => {
@@ -424,11 +485,5 @@ export const fmtLAKShort = (n: number): string => {
   return `₭${n.toLocaleString('en-US')}`;
 };
 export const fmtPct = (n: number): string => `${Math.round(n)}%`;
-
-export const statusColor = (s: string) => {
-  if (s === 'completed') return 'var(--green)';
-  if (s === 'cancelled') return 'var(--red)';
-  return 'var(--blue)';
-};
-export const statusLabel = (s: string) =>
-  s === 'completed' ? 'Completed' : s === 'cancelled' ? 'Cancelled' : 'Active';
+export const statusColor = (s: string) => s === 'completed' ? 'var(--green)' : s === 'cancelled' ? 'var(--red)' : 'var(--blue)';
+export const statusLabel = (s: string) => s === 'completed' ? 'Completed' : s === 'cancelled' ? 'Cancelled' : 'Active';

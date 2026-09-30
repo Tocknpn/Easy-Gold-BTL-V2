@@ -1,8 +1,8 @@
-﻿-- Easy Gold BTL — Event Management Migration
+﻿-- Easy Gold BTL -- Event Management Migration
 -- Run this once in the Supabase SQL Editor.
 -- Safe to re-run: all statements use IF NOT EXISTS / OR REPLACE.
 
--- 1. events — master BTL event record
+-- 1. events table
 CREATE TABLE IF NOT EXISTS public.events (
   id                            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at                    timestamptz DEFAULT now(),
@@ -37,11 +37,11 @@ CREATE TABLE IF NOT EXISTS public.events (
     CHECK (status IN ('active','completed','cancelled'))
 );
 
--- 2. Link submissions to an event (many-to-one)
+-- 2. Link submissions to an event
 ALTER TABLE public.submissions
   ADD COLUMN IF NOT EXISTS event_id uuid REFERENCES public.events(id) ON DELETE SET NULL;
 
--- 3. event_targets — per-quarter / per-team / per-type KPI targets
+-- 3. event_targets table
 CREATE TABLE IF NOT EXISTS public.event_targets (
   id               uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   year             int NOT NULL,
@@ -58,11 +58,11 @@ CREATE TABLE IF NOT EXISTS public.event_targets (
   UNIQUE (year, quarter, team, activity_type)
 );
 
--- 4. updated_at auto-bump trigger
+-- 4. updated_at trigger
 CREATE OR REPLACE FUNCTION public.set_events_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS trg_events_updated_at ON public.events;
 CREATE TRIGGER trg_events_updated_at
@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS idx_events_team_year     ON public.events(team, year,
 CREATE INDEX IF NOT EXISTS idx_events_status        ON public.events(status);
 CREATE INDEX IF NOT EXISTS idx_submissions_event_id ON public.submissions(event_id);
 
--- 6. Seed Q3 2026 targets (from Google Sheet Setup tab)
+-- 6. Seed Q3 2026 targets
 INSERT INTO public.event_targets (year,quarter,team,activity_type,cpf_target,cpa_target,cpo_target,cpm_target,nc_target,ec_target,buy_value_target) VALUES
   (2026,'Q3','Agency','H2H Booth',        7500,150000,94000,500,30,50,50000000),
   (2026,'Q3','Agency','Event (indoor)',   7500,150000,94000,500,30,50,50000000),

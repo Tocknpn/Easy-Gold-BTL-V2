@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Event, EventKPIs, EventTarget, LinkedSubmission } from '../lib/events';
 import {
-  fetchEvents, fetchLinkedSubmissions, computeEventKPIs, fetchEventTargets,
-  ACTIVITY_TYPES_EVENT, EVENT_TEAMS, QUARTERS,
-  currentQuarter, fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel,
+  fetchEvents, fetchLinkedSubmissions, computeEventKPIs, fetchEventTargets, fetchEventTypes,
+  EVENT_TEAMS, MONTHS,
+  currentMonth, fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel,
 } from '../lib/events';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -51,10 +51,11 @@ interface EventCardProps {
 }
 
 function EventCard({ event, kpis, targets, onClick }: EventCardProps) {
+  const evMonth = event.start_date ? new Date(event.start_date + 'T00:00:00').getMonth() + 1 : 0;
   const target = targets.find(t =>
     t.team === event.team &&
     t.activity_type === event.activity_type &&
-    t.quarter === event.quarter &&
+    t.month === evMonth &&
     t.year === event.year
   );
 
@@ -185,10 +186,11 @@ interface ModalProps {
 function EventDetailModal({ event, kpis, subs, targets, onClose }: ModalProps) {
   if (!event) return null;
 
+  const evMonth2 = event.start_date ? new Date(event.start_date + 'T00:00:00').getMonth() + 1 : 0;
   const target = targets.find(t =>
     t.team === event.team &&
     t.activity_type === event.activity_type &&
-    t.quarter === event.quarter &&
+    t.month === evMonth2 &&
     t.year === event.year
   );
 
@@ -377,10 +379,11 @@ export default function EventReport() {
   const [allKpis, setAllKpis] = useState<Record<string, EventKPIs>>({});
   const [allSubs, setAllSubs] = useState<Record<string, LinkedSubmission[]>>({});
   const [targets, setTargets] = useState<EventTarget[]>([]);
+  const [eventTypeNames, setEventTypeNames] = useState<string[]>([]);
 
   // Filters
   const [filterYear, setFilterYear] = useState<number>(THIS_YEAR);
-  const [filterQuarter, setFilterQuarter] = useState<string>(currentQuarter());
+  const [filterMonth, setFilterMonth] = useState<number>(currentMonth());
   const [filterTeam, setFilterTeam] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('active');
@@ -391,17 +394,18 @@ export default function EventReport() {
   // ── Load events ──
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: evs }, tgts] = await Promise.all([
+    const [{ data: evs }, tgts, types] = await Promise.all([
       fetchEvents({
         year: filterYear || undefined,
-        quarter: filterQuarter || undefined,
         team: filterTeam || undefined,
         status: filterStatus || undefined,
       }),
-      fetchEventTargets(filterYear || undefined, filterQuarter || undefined),
+      fetchEventTargets(filterYear || undefined, filterMonth || undefined),
+      fetchEventTypes(),
     ]);
     setEvents(evs);
     setTargets(tgts);
+    setEventTypeNames(types.map(t => t.name));
     setLoading(false);
 
     // Load KPIs for all events concurrently
@@ -414,15 +418,21 @@ export default function EventReport() {
     }));
     setAllKpis(kpiMap);
     setAllSubs(subsMap);
-  }, [filterYear, filterQuarter, filterTeam, filterStatus]);
+  }, [filterYear, filterMonth, filterTeam, filterStatus]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Filter by type client-side
-  const displayed = useMemo(() =>
-    filterType ? events.filter(e => e.activity_type === filterType) : events,
-    [events, filterType]
-  );
+  // Filter by type + month client-side
+  const displayed = useMemo(() => {
+    let evs = filterType ? events.filter(e => e.activity_type === filterType) : events;
+    if (filterMonth) {
+      evs = evs.filter(e => {
+        const m = e.start_date ? new Date(e.start_date + 'T00:00:00').getMonth() + 1 : 0;
+        return m === filterMonth;
+      });
+    }
+    return evs;
+  }, [events, filterType, filterMonth]);
 
   // ── Aggregate KPIs for summary row ──
   const totalKpis = useMemo(() => {
@@ -441,9 +451,9 @@ export default function EventReport() {
         <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
           {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select value={filterQuarter} onChange={e => setFilterQuarter(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
-          <option value="">All Quarters</option>
-          {QUARTERS.map(q => <option key={q} value={q}>{q}</option>)}
+        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
+          <option value={0}>All Months</option>
+          {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
         <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
           <option value="">All Teams</option>
@@ -451,7 +461,7 @@ export default function EventReport() {
         </select>
         <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
           <option value="">All Types</option>
-          {ACTIVITY_TYPES_EVENT.map(a => <option key={a} value={a}>{a}</option>)}
+          {eventTypeNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
           <option value="">All Status</option>
