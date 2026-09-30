@@ -14,11 +14,16 @@ when connected, with a full **demo data mode** that works offline via `localStor
   Submit Results (KPV also records Staff‑In‑Charge).
 
 ## Demo logins
+Shown on the login screen only when the build has **no** Supabase credentials
+(offline / demo mode). These are deliberately throwaway values — real logins are
+checked against the `users` table in Supabase, and real credentials must never be
+hard-coded here (this file is public).
+
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@easygold.la` | `admin123` |
-| KPV Staff | `kpv@easygold.la` | `kpv123` |
-| Agency Staff | `agency@easygold.la` | `agency123` |
+| Admin | `demo-admin@example.com` | `demo-admin-8f3a` |
+| KPV Staff | `demo-kpv@example.com` | `demo-kpv-2c17` |
+| Agency Staff | `demo-agency@example.com` | `demo-agency-5b9d` |
 
 ## Local development
 ```bash

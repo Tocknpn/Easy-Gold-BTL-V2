@@ -114,17 +114,32 @@ Import the **8 data sheets** (skip the 9th, "Staff Report Template" — that is 
    Otherwise the modal still shows totals via `merch_cost`, but row-level item
    detail may be incomplete.
 
-### Seed demo users so login works with real data
+### Seed the first admin so login works with real data
 ```sql
+-- Placeholder passwords only — change them on first login, and never commit
+-- real credentials: this repository was public once
+-- (see supabase_rotate_credentials.sql).
 INSERT INTO users (username, password, name, role, team) VALUES
-('admin@easygold.la', 'admin123', 'Admin', 'admin', 'Admin Team'),
-('manager@easygold.la', 'manager123', 'Manager', 'manager', 'Manager Team');
+('admin@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Admin', 'admin', 'Admin Team'),
+('manager@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Manager', 'manager', 'Manager Team');
 ```
 
-### RLS (row-level security) note
-The anon key only reads/writes what RLS allows. The app *inserts* `submissions`
-and `checkins` and *updates* `submissions` (Cost Manager). Either leave RLS off
-for now, or add policies for your auth user, otherwise you'll see "DB write failed".
+### RLS (row-level security) — currently OFF, and that is a security hole
+The anon key only reads/writes what RLS allows, and the anon key ships inside the
+public JS bundle, so **anyone can call the REST API directly**. Because
+`supabase_schema.sql` never enables RLS, that means full read/write access to
+every table right now — including `users.password`, so an unauthenticated visitor
+could read every password with a single GET request.
+
+Short term: do not reuse these passwords anywhere else, and treat the database as
+public until RLS is on.
+Proper fix: enable RLS on every table and add policies for what the app actually
+does (insert `submissions` / `checkins`, update `submissions` for Cost Manager),
+and move the `users` table behind a `security definer` login RPC so the anon role
+never needs to read passwords.
+Caveat: a plain `revoke select (password) on users from anon` is **not** enough —
+Postgres requires column privileges for the `WHERE password = ...` filter, so
+login would break.
 
 ---
 

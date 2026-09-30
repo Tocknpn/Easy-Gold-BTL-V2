@@ -37,3 +37,12 @@ dist-ssr
 *.xls
 *.pdf
 demo.html
+
+# Data exports, personnel lists, screenshots and site reports.
+# These were committed to a PUBLIC repo once (users.csv exposed every password
+# and session token). Keep the real files locally, never in git.
+data-export-cleaned/
+Screenshot of the web/
+submissions_fixed.csv
+merch_audit.json
+*.pages.dev-*LightHouse.html

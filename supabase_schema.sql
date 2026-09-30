@@ -99,9 +99,12 @@ CREATE TABLE audit_log (
 );
 
 -- Initial Data
+-- Placeholder passwords only — change them on first login, and never commit real
+-- credentials (this repository was public once). Rotation script:
+-- supabase_rotate_credentials.sql
 INSERT INTO users (username, password, name, role, team, is_active) VALUES
-('admin@easygold.la', 'admin123', 'Admin', 'admin', 'Admin Team', true),
-('manager@easygold.la', 'manager123', 'Souphaxay K.', 'manager', 'Manager Team', true);
+('admin@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Admin', 'admin', 'Admin Team', true),
+('manager@easygold.la', 'CHANGE-ME-ON-FIRST-LOGIN', 'Souphaxay K.', 'manager', 'Manager Team', true);
 
 -- Migration for databases created before is_active was added (safe to re-run):
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active boolean DEFAULT true;

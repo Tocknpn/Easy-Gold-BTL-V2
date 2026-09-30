@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 // Demo credentials — only work when no real Supabase DB is configured
+// Deliberately throwaway values: this file ships to the browser and lives in
+// git, so anything hard-coded here is public. Real logins are checked against
+// the `users` table in Supabase (see supabase_rotate_credentials.sql).
+
 const DEMO_USERS: Record<string, { name: string; role: string; team: string; dest: string }> = {
-  'admin@easygold.la:admin123':   { name: 'Admin',       role: 'admin', team: 'Admin Team',   dest: '/' },
-  'manager@easygold.la:manager123': { name: 'Souphaxay K.', role: 'admin', team: 'Manager Team', dest: '/' },
-  'kpv@easygold.la:kpv123':       { name: 'Somxay K.',   role: 'staff', team: 'KPV',          dest: '/calendar' },
-  'agency@easygold.la:agency123': { name: 'Alita P.',    role: 'staff', team: 'Agency',        dest: '/calendar' },
+  'demo-admin@example.com:demo-admin-8f3a':    { name: 'Demo Admin',  role: 'admin', team: 'Admin Team', dest: '/' },
+  'demo-kpv@example.com:demo-kpv-2c17':        { name: 'Demo KPV',    role: 'staff', team: 'KPV',        dest: '/calendar' },
+  'demo-agency@example.com:demo-agency-5b9d':  { name: 'Demo Agency', role: 'staff', team: 'Agency',     dest: '/calendar' },
 };
 
 const hasRealDB = () => {
@@ -125,7 +128,7 @@ export default function Login() {
             <label>Username</label>
             <input
               type="text"
-              placeholder="e.g. manager@easygold.la"
+              placeholder="your.name@easygold.la"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
@@ -162,15 +165,15 @@ export default function Login() {
               Demo Accounts — click to fill
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('admin@easygold.la'); setPassword('admin123'); setError(''); setIsTimeout(false); }}>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('demo-admin@example.com'); setPassword('demo-admin-8f3a'); setError(''); setIsTimeout(false); }}>
                 <span><i className="fa-solid fa-user-shield" style={{ color: 'var(--accent)', marginRight: '8px' }}></i>Admin</span>
                 <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>full access</span>
               </button>
-              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('kpv@easygold.la'); setPassword('kpv123'); setError(''); setIsTimeout(false); }}>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('demo-kpv@example.com'); setPassword('demo-kpv-2c17'); setError(''); setIsTimeout(false); }}>
                 <span><i className="fa-solid fa-user" style={{ color: 'var(--blue)', marginRight: '8px' }}></i>Staff — KPV</span>
                 <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
               </button>
-              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('agency@easygold.la'); setPassword('agency123'); setError(''); setIsTimeout(false); }}>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('demo-agency@example.com'); setPassword('demo-agency-5b9d'); setError(''); setIsTimeout(false); }}>
                 <span><i className="fa-solid fa-user" style={{ color: 'var(--green)', marginRight: '8px' }}></i>Staff — Agency</span>
                 <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
               </button>
