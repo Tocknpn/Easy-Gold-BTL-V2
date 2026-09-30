@@ -11,14 +11,15 @@
 #   https://easy-gold-btl-v2.pages.dev            (Cloudflare Pages)
 #   https://easy-gold-btl-v2.<subdomain>.workers.dev  (this workflow)
 #
-# One-time setup (GitHub > Settings > Secrets and variables > Actions):
-#   CLOUDFLARE_API_TOKEN        token with the "Edit Cloudflare Workers" template
-#   CLOUDFLARE_ACCOUNT_ID       Cloudflare dashboard > account ID
-#   VITE_SUPABASE_URL           same value as configured in the Pages project
-#   VITE_SUPABASE_ANON_KEY      same value as configured in the Pages project
+# One-time setup (GitHub > Settings > Secrets and variables > Actions >
+# REPOSITORY secrets - environment secrets are NOT visible to this workflow):
+#   CLOUDFLARE_API_TOKEN    token with the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID   Cloudflare dashboard > Workers & Pages > Account Details
 #
-# Without the two VITE_SUPABASE_* secrets the fallback URL would build in demo
-# mode and show sample data instead of real rows.
+# Supabase values are reused from the existing repo secrets SUPABASE_URL /
+# SUPABASE_ANON_KEY (the same ones the Supabase Keepalive workflow uses), so
+# there is nothing else to configure. Without them the fallback URL would build
+# in demo mode and show sample data instead of real rows.
 # ============================================================================
 name: Deploy Workers fallback
 
@@ -56,8 +57,11 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Reuse the repo secrets the Supabase Keepalive workflow already uses.
+          # Same values as the Pages project's VITE_* build variables, and already
+          # proven working (Keepalive writes heartbeats with them).
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Drop Pages-only redirects file from the Worker bundle
         # public/_redirects is required by the Pages deployment, but Workers ignores
