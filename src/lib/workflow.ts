@@ -389,14 +389,18 @@ export async function fetchAuditLogs(limit = 1000): Promise<AuditLogRow[]> {
 export async function writeAuditLog(action: string, payload: any = {}, status = 'success', team = ''): Promise<void> {
   try {
     const user = getCurrentUser();
-    await supabase.from('audit_log').insert({
+    const { error } = await supabase.from('audit_log').insert({
       action,
       user_name: user?.name || user?.username || 'system',
       team: team || user?.team || '',
       payload: payload ?? {},
       status,
+      timestamp: new Date().toISOString(),
     });
+    if (error) {
+      console.error('[AuditLog] Insert failed:', error.message, error.details, error.hint);
+    }
   } catch (err) {
-    console.error('Error writing audit log:', err);
+    console.error('[AuditLog] Unexpected error:', err);
   }
 }

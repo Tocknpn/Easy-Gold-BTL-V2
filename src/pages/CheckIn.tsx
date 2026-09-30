@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { addCheckIn, fetchCheckIns, getCurrentUser, deleteCheckIn } from '../lib/workflow';
+import { addCheckIn, fetchCheckIns, getCurrentUser, deleteCheckIn, writeAuditLog } from '../lib/workflow';
 import type { CheckInRecord } from '../lib/workflow';
 import { labelDate } from '../lib/submissions';
 
@@ -45,6 +45,7 @@ export default function CheckIn() {
       lng,
     };
     await addCheckIn(rec);
+    void writeAuditLog('checkin.create', { location: rec.location, team: rec.team, date: rec.date, lat, lng }, 'success', rec.team);
     const newHistory = await fetchCheckIns();
     setHistory(newHistory);
     setLastCapture(rec);
@@ -56,6 +57,7 @@ export default function CheckIn() {
     const ok = await deleteCheckIn(id);
     if (ok) {
       setHistory(prev => prev.filter(c => c.id !== id));
+      void writeAuditLog('checkin.delete', { id }, 'success', team);
     } else {
       alert('Failed to delete check-in.');
     }
