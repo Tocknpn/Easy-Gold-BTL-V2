@@ -332,3 +332,43 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(20px);
 }
+
+/* ── Event Management / Event Report ── */
+/* Event cards lift on hover (set via inline style — just the shadow variant) */
+.event-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+/* Pill variant for neutral/dark bg chips */
+.pill-neutral {
+  background: var(--border);
+  color: var(--txt-dim);
+  border: 1px solid var(--border);
+}
+
+/* Wider page canvas override for event management two-panel layout */
+.page.page-wide .event-two-panel {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 68px - 56px); /* viewport - topbar - page padding */
+  overflow: hidden;
+}
+
+/* Scrollable left list in two-panel layout */
+.event-list-panel {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* Orange pill variant */
+.pill-orange {
+  background: var(--orange-dim);
+  color: var(--orange);
+  border: 1px solid rgba(244,148,58,0.3);
+}

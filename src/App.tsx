@@ -20,9 +20,11 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Diagnostic = lazy(() => import('./pages/Diagnostic'));
 const HealthMonitor = lazy(() => import('./pages/HealthMonitor'));
 const CopyPaste = lazy(() => import('./pages/CopyPaste'));
+const EventManagement = lazy(() => import('./pages/EventManagement'));
+const EventReport = lazy(() => import('./pages/EventReport'));
 
 // Dense admin screens get extra canvas width (their tables have 10+ columns)
-const WIDE_PAGES = ['/cost-manager', '/copy-paste', '/report'];
+const WIDE_PAGES = ['/cost-manager', '/copy-paste', '/report', '/event-management'];
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
@@ -34,7 +36,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     if (storedUser) {
       const u = JSON.parse(storedUser);
       setUser(u);
-      const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health', '/diagnostic'];
+      const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health', '/diagnostic', '/event-management', '/event-report'];
       const privileged = u.role === 'admin' || u.role === 'manager';
       if (!privileged && ADMIN_ONLY.includes(location.pathname)) {
         navigate('/calendar', { replace: true });
@@ -85,6 +87,8 @@ function Layout({ children }: { children: React.ReactNode }) {
     '/health': { title: 'Health Monitor', sub: 'Admin - Connection & Performance' },
     '/diagnostic': { title: 'Diagnostic', sub: 'Admin - Supabase Connection Check' },
     '/copy-paste': { title: 'Copy & Paste', sub: 'Quick data copy to clipboard' },
+    '/event-management': { title: 'Event Management', sub: 'Manager – Event Planning & Details' },
+    '/event-report': { title: 'Event Report', sub: 'Manager – Event Profile & KPI Gallery' },
   };
 
   const currentPath = location.pathname;
@@ -176,6 +180,8 @@ function App() {
           <Route path="/copy-paste" element={<Layout><CopyPaste /></Layout>} />
           <Route path="/health" element={<Layout><HealthMonitor /></Layout>} />
           <Route path="/diagnostic" element={<Layout><Diagnostic /></Layout>} />
+          <Route path="/event-management" element={<Layout><EventManagement /></Layout>} />
+          <Route path="/event-report" element={<Layout><EventReport /></Layout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
