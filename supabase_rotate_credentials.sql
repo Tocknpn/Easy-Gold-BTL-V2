@@ -15,16 +15,22 @@
 --   burned and rotated. (The same CSV also exposed staff names and branch
 --   sales/GPS data - that data cannot be rotated, only unpublished.)
 --
+-- IMPORTANT: this file contains NO real passwords, so it is safe in git.
+--   Section 2 ships with 'CHANGEME-...' placeholders. Replace those six values
+--   with real new passwords BEFORE running. If you forget, section 2 is a no-op
+--   for the ones you did not edit (it refuses to apply a placeholder) and the
+--   status query in section 5 reports how many are left.
+--
 -- WHAT IT DOES
 --   0. lists the accounts that exist right now
 --   1. backs up the current password/token values (rotation is reversible)
---   2. sets NEW passwords for the five known leaked accounts (edit section 2)
---   3. catches any OTHER account still on a leaked/weak password
+--   2. sets NEW passwords for the six known accounts (edit section 2)
+--   3. catches every OTHER account on a leaked, short or weak password
 --   4. regenerates the leaked `token` values
---   5. prints the final list - copy it somewhere safe
+--   5. prints the final list + a status line - copy the passwords somewhere safe
 --
--- SAFE TO RE-RUN: section 2 always writes the same literal passwords, so a
--- second run cannot lock anyone out.
+-- SAFE TO RE-RUN: section 2 always writes the same literals, so a second run
+-- cannot lock anyone out.
 -- ============================================================================
 
 -- 0. Audit: who exists right now ---------------------------------------------
@@ -50,29 +56,35 @@ where not exists (
 );
 
 -- 2. NEW PASSWORDS ----------------------------------------------------------
--- Edit the five values on the right, then share them with the team through a
--- password manager (never by email/chat/commit).
+-- STEP 1: replace each CHANGEME-... below with a real password (10+ characters),
+-- then hand it to that person through a password manager - never by email, chat
+-- or commit. A placeholder is never applied, so forgetting one only means that
+-- account keeps its old password (section 5 reports how many are left).
 update public.users u
    set password = v.new_password
   from (values
-    ('admin@easygold.la',       'Tiger-Mango-7734!'),
-    ('manager@easygold.la',     'River-Lotus-2198!'),
-    ('kpv@easygold.la',         'Bamboo-Falcon-5061!'),
-    ('d-day@easygold.la',       'Copper-Cedar-8347!'),
-    ('souphanithvst@gmail.com', 'Silver-Orchid-1925!')
+    ('admin@easygold.la',       'CHANGEME-admin'),
+    ('manager@easygold.la',     'CHANGEME-manager'),
+    ('kpv@easygold.la',         'CHANGEME-kpv'),
+    ('d-day@easygold.la',       'CHANGEME-dday'),
+    ('souphanithvst@gmail.com', 'CHANGEME-souphanith'),
+    ('alounys08@gmail.com',     'CHANGEME-alounys')
   ) as v(username, new_password)
- where u.username = v.username;
+ where u.username = v.username
+   and v.new_password not like 'CHANGEME-%';
 
--- 3. Catch-all: any other account still using a leaked / weak password -------
--- Catches accounts not listed above. The generated value is printed by
--- section 5, so nothing is lost.
+-- 3. Catch-all: any other account on a leaked / weak / short password ---------
+-- Catches accounts not listed above (any password that was published in the CSV,
+-- or is shorter than 8 characters). The generated value is printed by section 5,
+-- so nothing is lost.
 update public.users u
    set password = 'EG-' || upper(substr(md5(random()::text), 1, 10)) || '!'
- where u.password in ('admin123', 'manager123', 'kpv9999', 'dday123', '123456',
-                      'kpv123', 'agency123', 'password', 'Password123', '123456789')
+ where (u.password in ('admin123', 'manager123', 'kpv9999', 'dday123', '123456',
+                       'kpv123', 'agency123', 'password', 'Password123', '123456789')
+        or length(u.password) < 8)
    and u.username not in ('admin@easygold.la', 'manager@easygold.la',
                           'kpv@easygold.la', 'd-day@easygold.la',
-                          'souphanithvst@gmail.com');
+                          'souphanithvst@gmail.com', 'alounys08@gmail.com');
 
 -- 4. The leaked session `token` column --------------------------------------
 -- The web app never reads public.users.token (verified: no reference anywhere
@@ -91,6 +103,14 @@ select username, name, role, team, is_active,
        password as new_password, token as new_token
 from public.users
 order by role desc, username;
+
+-- Status line. placeholders_left > 0 means section 2 still has CHANGEME values
+-- you did not edit; short_passwords_left > 0 means an account is still weak
+-- (section 3 skips the six addresses above, so check those by hand).
+select
+  (select count(*) from public.users)                                  as total_accounts,
+  (select count(*) from public.users where password like 'CHANGEME-%') as placeholders_left,
+  (select count(*) from public.users where length(password) < 8)       as short_passwords_left;
 
 -- 6. Rollback (only if you must) --------------------------------------------
 -- update public.users u
