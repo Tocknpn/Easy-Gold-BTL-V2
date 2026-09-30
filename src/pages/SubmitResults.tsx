@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort, clearSubmissionsCache, DEFAULT_ACTIVITY_TYPE, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT } from '../lib/submissions';
-import { fetchCheckIns, fetchStaff, getCurrentUser } from '../lib/workflow';
+import { fetchCheckIns, fetchStaff, getCurrentUser, writeAuditLog } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
 
 // Helper component for number inputs with comma formatting (e.g. 1,000)
@@ -188,11 +188,14 @@ export default function SubmitResults() {
 
     setSubmitting(false);
     if (!savedToDb) {
+      void writeAuditLog('submission.offline', { branch, date, team: user?.team || 'KPV' }, 'warning', user?.team || '');
       setDone(`⚠️ No connection — results were saved on THIS DEVICE only, not in the database yet. They will still show on this phone, but Admin cannot see them yet. When internet is back, tell Admin to check Submission History (the record may need to be entered again).`);
     } else if (activityColumnMissing) {
+      void writeAuditLog('submission.create', { branch, date, team: user?.team || 'KPV', nc, buy_new: buyNew, buy_existing: buyExisting, activity_type: activityType }, 'success', user?.team || '');
       window.alert(MISSING_ACTIVITY_COLUMN_HINT);
       setDone(`✓ Results submitted for ${branch} on ${labelDate(date)} — saved to the database, but the Activity Type (${activityLabel(record.activity_type)}) was NOT stored: Admin must run supabase_activity_type.sql.`);
     } else {
+      void writeAuditLog('submission.create', { branch, date, team: user?.team || 'KPV', nc, buy_new: buyNew, buy_existing: buyExisting, activity_type: activityType }, 'success', user?.team || '');
       setDone(`✓ ${activityLabel(record.activity_type)} results submitted for ${branch} on ${labelDate(date)} — saved to the database. Admin will fill Service Cost in Cost Manager.`);
     }
     // Reset form

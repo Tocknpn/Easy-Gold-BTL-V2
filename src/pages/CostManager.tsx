@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import type { Submission } from '../lib/submissions';
 import { fetchSubmissionsSummary, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, clearSubmissionsCache, totalCostOf, isMissingColumnError, MISSING_SPONSORSHIP_COLUMN_HINT, MISSING_PROD_COST_COLUMN_HINT } from '../lib/submissions';
 import { supabase } from '../lib/supabase';
+import { writeAuditLog } from '../lib/workflow';
 
 // ── Sortable columns (every header is sortable) ──────────────────────────
 type SortKey = 'date' | 'team' | 'branch' | 'new_register' | 'buy_total' | 'merch_cost' | 'service_cost' | 'sponsorship_cost' | 'prod_cost' | 'total_cost' | 'cpa';
@@ -312,6 +313,7 @@ export default function CostManager() {
     } else if (dbFailures > 0 && realIds.length > 0) {
       window.alert(`Saved ${updates.length - dbFailures}/${updates.length} record(s). ${dbFailures} database update(s) failed — check your connection.`);
     } else {
+      void writeAuditLog('cost.update', { records_saved: updates.length, ids: updates.map(u => u.id) }, 'success');
       setFlash(`✓ Saved ${updates.length} record${updates.length > 1 ? 's' : ''} — CPA / CPO / CPAO updated`);
     }
   };
