@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Wrangler local state / dry-run output (Workers fallback deployment)
+.wrangler/
+.wrangler-dryrun/
+
 # Environment / secrets — NEVER commit real keys
 .env
 .env.*

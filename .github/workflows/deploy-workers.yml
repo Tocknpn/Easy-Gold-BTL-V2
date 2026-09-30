@@ -1,0 +1,75 @@
+# ============================================================================
+# Deploy the *.workers.dev fallback
+# ----------------------------------------------------------------------------
+# Publishes the same `dist/` build that Cloudflare Pages serves, but onto a
+# Worker (assets-only). Why: the ISP used by this project blocks the whole
+# `pages.dev` zone (DNS blackhole + TLS SNI reset), so `*.pages.dev` is
+# unreachable for those users. `workers.dev` resolves normally, giving a
+# working second URL for the app.
+#
+# This does NOT replace the Pages deployment - both stay live:
+#   https://easy-gold-btl-v2.pages.dev            (Cloudflare Pages)
+#   https://easy-gold-btl-v2.<subdomain>.workers.dev  (this workflow)
+#
+# One-time setup (GitHub > Settings > Secrets and variables > Actions):
+#   CLOUDFLARE_API_TOKEN        token with the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID       Cloudflare dashboard > account ID
+#   VITE_SUPABASE_URL           same value as configured in the Pages project
+#   VITE_SUPABASE_ANON_KEY      same value as configured in the Pages project
+#
+# Without the two VITE_SUPABASE_* secrets the fallback URL would build in demo
+# mode and show sample data instead of real rows.
+# ============================================================================
+name: Deploy Workers fallback
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-workers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build & deploy to workers.dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Drop Pages-only redirects file from the Worker bundle
+        # public/_redirects is required by the Pages deployment, but Workers ignores
+        # `/*  /index.html  200` as an "infinite loop" rule and warns about it.
+        # The SPA fallback here comes from assets.not_found_handling in wrangler.jsonc,
+        # so the file is removed from this build only (Pages is built separately).
+        run: rm -f dist/_redirects
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.144.0'
+          command: deploy

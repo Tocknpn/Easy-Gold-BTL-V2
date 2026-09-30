@@ -1,0 +1,27 @@
+// Cloudflare Workers fallback deployment for the Easy Gold BTL Tracker.
+//
+// WHY THIS EXISTS
+//   Some ISPs (confirmed on the network used by this project) blackhole the entire
+//   `pages.dev` zone at the DNS level AND reset the TLS handshake when the
+//   ClientHello SNI contains `pages.dev`. The site itself is healthy, but it is
+//   unreachable from those networks (`DNS_PROBE_POSSIBLE` / `ERR_CONNECTION_RESET`).
+//   `workers.dev` is NOT on that blocklist, so this config publishes the exact same
+//   `dist/` build to a second, reachable URL.
+//
+// NOTE
+//   This is a static-assets-only Worker (no `main` entrypoint), so no Worker script
+//   is ever invoked. Static asset requests are unmetered and not billed against the
+//   Workers plan.
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "easy-gold-btl-v2",
+  "compatibility_date": "2026-09-30",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist",
+    // BrowserRouter deep links (/calendar, /report, /cost-manager, ...) must return
+    // index.html instead of a 404. This is the Workers equivalent of the
+    // `public/_redirects` file used by the Pages deployment.
+    "not_found_handling": "single-page-application"
+  }
+}
