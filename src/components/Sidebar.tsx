@@ -149,6 +149,7 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             <NavLink to="/copy-paste" icon="fa-solid fa-copy" label="Copy & Paste" />
             <NavLink to="/plan-setting" icon="fa-solid fa-table-list" label="Monthly Route Plan" />
             <NavLink to="/health" icon="fa-solid fa-heart-pulse" label="Health Monitor" />
+            <NavLink to="/diagnostic" icon="fa-solid fa-stethoscope" label="Diagnostic" />
           </div>
         )}
 

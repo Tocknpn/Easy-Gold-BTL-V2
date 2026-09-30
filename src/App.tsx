@@ -34,7 +34,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     if (storedUser) {
       const u = JSON.parse(storedUser);
       setUser(u);
-      const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health'];
+      const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health', '/diagnostic'];
       const privileged = u.role === 'admin' || u.role === 'manager';
       if (!privileged && ADMIN_ONLY.includes(location.pathname)) {
         navigate('/calendar', { replace: true });
@@ -83,6 +83,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     '/plan-setting': { title: 'Monthly Route Plan', sub: 'Admin - Editable Monthly Schedule' },
     '/settings': { title: 'Upload & Settings', sub: 'Admin - Config Panel' },
     '/health': { title: 'Health Monitor', sub: 'Admin - Connection & Performance' },
+    '/diagnostic': { title: 'Diagnostic', sub: 'Admin - Supabase Connection Check' },
     '/copy-paste': { title: 'Copy & Paste', sub: 'Quick data copy to clipboard' },
   };
 
@@ -174,7 +175,7 @@ function App() {
           <Route path="/settings" element={<Layout><Settings /></Layout>} />
           <Route path="/copy-paste" element={<Layout><CopyPaste /></Layout>} />
           <Route path="/health" element={<Layout><HealthMonitor /></Layout>} />
-          <Route path="/diagnostic" element={<Diagnostic />} />
+          <Route path="/diagnostic" element={<Layout><Diagnostic /></Layout>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
