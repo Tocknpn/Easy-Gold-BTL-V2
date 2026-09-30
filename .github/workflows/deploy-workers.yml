@@ -57,11 +57,9 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Reuse the repo secrets the Supabase Keepalive workflow already uses.
-          # Same values as the Pages project's VITE_* build variables, and already
-          # proven working (Keepalive writes heartbeats with them).
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # Using the VITE_ prefixed repository secrets specifically created for the build
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Drop Pages-only redirects file from the Worker bundle
         # public/_redirects is required by the Pages deployment, but Workers ignores
