@@ -14,6 +14,7 @@ import { Line, Doughnut } from 'react-chartjs-2';
 import { Link } from 'react-router-dom';
 import type { ModalState, Submission, CostTypeKey } from '../lib/submissions';
 import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, normalizeTeam, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes, locationLabel, compareLocations, inLocationFilter, normalizeLocation } from '../lib/submissions';
+import { supabase } from '../lib/supabase';
 import SubmissionModal from '../components/SubmissionModal';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
@@ -23,7 +24,7 @@ const C_EC = '#10B981'; // emerald — cool, very distinct from amber
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend, Filler);
 
 // ── KPI targets (absolute values) ─────────────────────────────────────────
-const TARGETS = {
+const FALLBACK_TARGETS = {
   acq: 2500,          // Total Acquisition target
   cpa: 100_000,       // Cost per NC target (lower is better)
   cpo: 60_000,        // Cost per Buyer target
@@ -327,6 +328,7 @@ function LocationFilter({
 
 export default function Dashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>(genMockSubmissions);
+  const [targetsData, setTargetsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isStale, setIsStale] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
@@ -355,6 +357,11 @@ export default function Dashboard() {
     const result = await fetchSubmissionsSummary();
     if (result.error && !result.stale) console.error('Error fetching submissions:', result.error);
     if (result.data && result.data.length > 0) setSubmissions(result.data);
+
+    // Fetch dynamic targets from db
+    const { data: tData } = await supabase.from('targets').select('*');
+    if (tData) setTargetsData(tData);
+
     setIsStale(result.stale);
     setCachedAt(result.cachedAt);
     setLoading(false);
@@ -511,8 +518,40 @@ export default function Dashboard() {
   const spendKPV = pctOf(kpi.kpv.cost, totalTeamCost, 55);
   const spendAgency = pctOf(kpi.agency.cost, totalTeamCost, 45);
 
+  // Dynamic Targets calculation
+  const dynamicTargets = useMemo(() => {
+    let acq = 0;
+    let cpaSum = 0, cpoSum = 0, cpaoSum = 0;
+    let cpaCount = 0, cpoCount = 0, cpaoCount = 0;
+
+    if (targetsData.length > 0 && startDate && endDate) {
+      const startYM = startDate.substring(0, 7);
+      const endYM = endDate.substring(0, 7);
+
+      for (const t of targetsData) {
+        if (!t.month) continue;
+        const tYM = t.month.substring(0, 7);
+        if (tYM >= startYM && tYM <= endYM) {
+          if (teamFilter === 'All Teams' || t.team === teamFilter) {
+            acq += (t.new_reg_target || 0);
+            if (t.cpa_target > 0) { cpaSum += t.cpa_target; cpaCount++; }
+            if (t.cpo_target > 0) { cpoSum += t.cpo_target; cpoCount++; }
+            if (t.cpao_target > 0) { cpaoSum += t.cpao_target; cpaoCount++; }
+          }
+        }
+      }
+    }
+
+    return {
+      acq: acq > 0 ? acq : FALLBACK_TARGETS.acq,
+      cpa: cpaCount > 0 ? cpaSum / cpaCount : FALLBACK_TARGETS.cpa,
+      cpo: cpoCount > 0 ? cpoSum / cpoCount : FALLBACK_TARGETS.cpo,
+      cpao: cpaoCount > 0 ? cpaoSum / cpaoCount : FALLBACK_TARGETS.cpao,
+    };
+  }, [targetsData, startDate, endDate, teamFilter]);
+
   // Target % hit
-  const acqPctTarget = Math.round((kpi.totalAcq / TARGETS.acq) * 100);
+  const acqPctTarget = Math.round((kpi.totalAcq / dynamicTargets.acq) * 100);
 
   // ── Trend chart data ─────────────────────────────────────────────────────
   const trendData = useMemo(() => {
@@ -826,7 +865,7 @@ export default function Dashboard() {
 
           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <DeltaBadge curr={kpi.cpa} prev={prevKpi.cpa} invertGood />
-            <TargetBadge curr={kpi.cpa} target={TARGETS.cpa} invertGood />
+            <TargetBadge curr={kpi.cpa} target={dynamicTargets.cpa} invertGood />
           </div>
         </div>
 
@@ -843,7 +882,7 @@ export default function Dashboard() {
 
           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <DeltaBadge curr={kpi.cpo} prev={prevKpi.cpo} invertGood />
-            <TargetBadge curr={kpi.cpo} target={TARGETS.cpo} invertGood />
+            <TargetBadge curr={kpi.cpo} target={dynamicTargets.cpo} invertGood />
           </div>
         </div>
 
@@ -860,7 +899,7 @@ export default function Dashboard() {
 
           <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
             <DeltaBadge curr={kpi.cpao} prev={prevKpi.cpao} invertGood />
-            <TargetBadge curr={kpi.cpao} target={TARGETS.cpao} invertGood />
+            <TargetBadge curr={kpi.cpao} target={dynamicTargets.cpao} invertGood />
           </div>
         </div>
       </div>
