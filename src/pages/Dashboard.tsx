@@ -11,11 +11,12 @@ import {
   Filler,
 } from 'chart.js';
 import { Line, Doughnut } from 'react-chartjs-2';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import type { ModalState, Submission, CostTypeKey } from '../lib/submissions';
 import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, normalizeTeam, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes, locationLabel, compareLocations, inLocationFilter, normalizeLocation } from '../lib/submissions';
 import { supabase } from '../lib/supabase';
 import SubmissionModal from '../components/SubmissionModal';
+import MarketingReport from '../components/MarketingReport';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
 const C_NC = '#F59E0B'; // amber  — warm, high contrast
@@ -346,6 +347,27 @@ export default function Dashboard() {
   const [costTypes, setCostTypes] = useState<CostTypeKey[]>(ALL_COST_TYPES);
   const [trendMode, setTrendMode] = useState<'D' | 'W' | 'M'>('D');
   const [modal, setModal] = useState<ModalState>({ open: false, submission: null, isEditing: false });
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'overall' | 'marketing'>(
+    tabParam === 'marketing' ? 'marketing' : 'overall'
+  );
+
+  useEffect(() => {
+    if (tabParam === 'marketing' || tabParam === 'overall') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const switchTab = (tab: 'overall' | 'marketing') => {
+    setActiveTab(tab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    }, { replace: true });
+  };
 
   useEffect(() => {
     fetchData();
@@ -735,8 +757,96 @@ export default function Dashboard() {
         </div>
       ) : null}
 
-      {/* Filters */}
-      <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+      {/* ── Dashboard Tabs Navigation ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '20px',
+        background: 'var(--surface)',
+        padding: '6px 10px',
+        borderRadius: '12px',
+        border: '1px solid var(--border)',
+        boxShadow: 'var(--shadow-sm)',
+        flexWrap: 'wrap',
+        gap: '12px',
+      }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => switchTab('overall')}
+            style={{
+              padding: '8px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: activeTab === 'overall' ? 'var(--accent)' : 'transparent',
+              color: activeTab === 'overall' ? '#FFFFFF' : 'var(--txt-sub)',
+              boxShadow: activeTab === 'overall' ? '0 2px 6px rgba(27, 86, 200, 0.25)' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <i className="fa-solid fa-chart-pie"></i>
+            <span>Overall Report</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => switchTab('marketing')}
+            style={{
+              padding: '8px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: activeTab === 'marketing' ? 'var(--accent)' : 'transparent',
+              color: activeTab === 'marketing' ? '#FFFFFF' : 'var(--txt-sub)',
+              boxShadow: activeTab === 'marketing' ? '0 2px 6px rgba(27, 86, 200, 0.25)' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <i className="fa-solid fa-bullhorn"></i>
+            <span>Marketing Report</span>
+            <span style={{
+              fontSize: '9px',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: '12px',
+              background: activeTab === 'marketing' ? 'rgba(255,255,255,0.25)' : 'var(--accent-dim)',
+              color: activeTab === 'marketing' ? '#FFFFFF' : 'var(--accent)',
+              letterSpacing: '0.04em',
+            }}>
+              Slide Deck
+            </span>
+          </button>
+        </div>
+
+        <div style={{ fontSize: '11px', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '6px' }}>
+          <span>Current Tab:</span>
+          <strong style={{ color: 'var(--txt-main)' }}>
+            {activeTab === 'overall' ? 'Operations Overview' : 'Marketing Activation Deck'}
+          </strong>
+        </div>
+      </div>
+
+      {activeTab === 'marketing' ? (
+        <MarketingReport
+          submissions={submissions}
+          targetsData={targetsData}
+        />
+      ) : (
+        <>
+          {/* Filters */}
+          <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <div className="form-field" style={{ margin: 0 }}>
           <label>Start Date</label>
           <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '7px 12px', fontSize: '12px', width: 'auto' }} />
@@ -1081,6 +1191,8 @@ export default function Dashboard() {
           </tbody>
         </table>
       </div>
+    </>
+  )}
 
       {/* Submission detail modal */}
       <SubmissionModal

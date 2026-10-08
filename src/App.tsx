@@ -23,8 +23,8 @@ const CopyPaste = lazy(() => import('./pages/CopyPaste'));
 const EventManagement = lazy(() => import('./pages/EventManagement'));
 const EventReport = lazy(() => import('./pages/EventReport'));
 
-// Dense admin screens get extra canvas width (their tables have 10+ columns)
-const WIDE_PAGES = ['/cost-manager', '/copy-paste', '/report', '/event-management'];
+// Dense admin screens and slide decks get extra canvas width (1440px)
+const WIDE_PAGES = ['/', '/cost-manager', '/copy-paste', '/report', '/event-management'];
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
