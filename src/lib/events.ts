@@ -1018,27 +1018,39 @@ export async function fetchEvents(filters?: {
 
     if (!error && data && data.length > 0) {
       const mapped = data.map(mapEventRow);
-      // Merge with local storage cache to keep photo URLs or offline edits
+      // Merge with local storage cache to keep photo URLs or offline edits, and preserve local-only events
       const local = getLocalEvents();
-      const merged = mapped.map(remoteEv => {
-        const match = local.find(l => l.id === remoteEv.id);
-        if (match) {
-          return {
-            ...remoteEv,
-            photo_urls: (remoteEv.photo_urls && remoteEv.photo_urls.some(Boolean)) ? remoteEv.photo_urls : match.photo_urls,
-            merch_items_list: remoteEv.merch_items_list.length > 0 ? remoteEv.merch_items_list : match.merch_items_list,
-          };
-        }
-        return remoteEv;
-      });
+      const remoteIds = new Set(mapped.map(m => m.id));
+      const localOnly = local.filter(l => !remoteIds.has(l.id));
+      const merged = [
+        ...mapped.map(remoteEv => {
+          const match = local.find(l => l.id === remoteEv.id);
+          if (match) {
+            return {
+              ...remoteEv,
+              photo_urls: (remoteEv.photo_urls && remoteEv.photo_urls.some(Boolean)) ? remoteEv.photo_urls : match.photo_urls,
+              merch_items_list: remoteEv.merch_items_list.length > 0 ? remoteEv.merch_items_list : match.merch_items_list,
+            };
+          }
+          return remoteEv;
+        }),
+        ...localOnly
+      ];
       saveLocalEvents(merged);
-      return { data: merged, error: null };
+
+      let filtered = [...merged];
+      if (filters?.year) filtered = filtered.filter(e => e.year === filters.year);
+      if (filters?.quarter) filtered = filtered.filter(e => e.quarter === filters.quarter);
+      if (filters?.team) filtered = filtered.filter(e => e.team === filters.team);
+      if (filters?.status) filtered = filtered.filter(e => e.status === filters.status);
+      return { data: filtered, error: null };
     }
 
     // Fallback to local storage
     const local = getLocalEvents();
     let filtered = [...local];
     if (filters?.year) filtered = filtered.filter(e => e.year === filters.year);
+    if (filters?.quarter) filtered = filtered.filter(e => e.quarter === filters.quarter);
     if (filters?.team) filtered = filtered.filter(e => e.team === filters.team);
     if (filters?.status) filtered = filtered.filter(e => e.status === filters.status);
     return { data: filtered, error: null };
@@ -1046,6 +1058,7 @@ export async function fetchEvents(filters?: {
     const local = getLocalEvents();
     let filtered = [...local];
     if (filters?.year) filtered = filtered.filter(e => e.year === filters.year);
+    if (filters?.quarter) filtered = filtered.filter(e => e.quarter === filters.quarter);
     if (filters?.team) filtered = filtered.filter(e => e.team === filters.team);
     if (filters?.status) filtered = filtered.filter(e => e.status === filters.status);
     return { data: filtered, error: null };
@@ -1069,35 +1082,64 @@ export async function createEvent(
 ): Promise<{ data: Event | null; error: any }> {
   const newId = `ev-${Date.now()}`;
   const now = new Date().toISOString();
+  const quarter = monthToQuarter(payload.start_date ? new Date(payload.start_date).getMonth() + 1 : 7);
+  const year = payload.start_date ? new Date(payload.start_date).getFullYear() : (payload.year || THIS_YEAR);
+
   const localEvent: Event = {
     ...payload,
     id: newId,
+    year,
+    quarter,
+    end_date: payload.end_date || payload.start_date,
     created_at: now,
     updated_at: now,
-    quarter: monthToQuarter(payload.start_date ? new Date(payload.start_date).getMonth() + 1 : 7),
   };
 
   // 1. Save to local storage first for immediate instant responsiveness
   const currentLocal = getLocalEvents();
-  saveLocalEvents([localEvent, ...currentLocal]);
+  saveLocalEvents([localEvent, ...currentLocal.filter(e => e.id !== newId)]);
 
   // 2. Best-effort DB insert
   try {
-    const dbPayload = {
+    const dbPayload: any = {
       ...payload,
-      media_sources: JSON.stringify(payload.media_sources),
-      merch_items_list: JSON.stringify(payload.merch_items_list),
-      photo_urls: JSON.stringify(payload.photo_urls),
+      year,
+      quarter,
+      end_date: payload.end_date || payload.start_date,
+      approval_date: payload.approval_date || null,
+      start_time: payload.start_time || '',
+      end_time: payload.end_time || '',
+      media_sources: JSON.stringify(payload.media_sources || []),
+      merch_items_list: JSON.stringify(payload.merch_items_list || []),
+      photo_urls: JSON.stringify(payload.photo_urls || []),
     };
-    const { data, error } = await supabase.from('events').insert([dbPayload]).select().single();
-    if (!error && data) {
+
+    let { data, error } = await supabase.from('events').insert([dbPayload]).select().single();
+
+    // If check constraint fails on status 'pending', retry with 'active' (in case migration v3 has not been run yet)
+    if (error && error.message && error.message.includes('events_status_check')) {
+      console.warn('Retrying insert with status="active" for older schema compatibility...');
+      dbPayload.status = 'active';
+      const retry = await supabase.from('events').insert([dbPayload]).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error('Supabase createEvent error:', error);
+      // Return localEvent so the UI never breaks, but log error
+      return { data: localEvent, error };
+    }
+
+    if (data) {
       const mapped = mapEventRow(data);
       // Update local storage with real DB id
       saveLocalEvents([mapped, ...currentLocal.filter(e => e.id !== newId)]);
       return { data: mapped, error: null };
     }
-  } catch (err) {
-    console.warn('DB createEvent fallback to local storage:', err);
+  } catch (err: any) {
+    console.error('DB createEvent exception:', err);
+    return { data: localEvent, error: err };
   }
 
   return { data: localEvent, error: null };
@@ -1113,11 +1155,15 @@ export async function updateEvent(
   let updatedLocal: Event | null = null;
   const nextList = currentLocal.map(ev => {
     if (ev.id === id) {
+      const start_date = payload.start_date || ev.start_date;
+      const quarter = start_date ? monthToQuarter(new Date(start_date).getMonth() + 1) : ev.quarter;
+      const year = start_date ? new Date(start_date).getFullYear() : (payload.year || ev.year);
       updatedLocal = {
         ...ev,
         ...payload,
+        year,
+        quarter,
         updated_at: now,
-        quarter: payload.start_date ? monthToQuarter(new Date(payload.start_date).getMonth() + 1) : ev.quarter,
       };
       return updatedLocal;
     }
@@ -1128,18 +1174,35 @@ export async function updateEvent(
   // 2. Best-effort DB update
   try {
     const dbPayload: any = { ...payload };
+    if (payload.start_date) {
+      dbPayload.quarter = monthToQuarter(new Date(payload.start_date).getMonth() + 1);
+      dbPayload.year = new Date(payload.start_date).getFullYear();
+    }
+    if (payload.approval_date === '') dbPayload.approval_date = null;
     if (payload.media_sources) dbPayload.media_sources = JSON.stringify(payload.media_sources);
     if (payload.merch_items_list) dbPayload.merch_items_list = JSON.stringify(payload.merch_items_list);
     if (payload.photo_urls) dbPayload.photo_urls = JSON.stringify(payload.photo_urls);
 
-    const { data, error } = await supabase.from('events').update(dbPayload).eq('id', id).select().single();
+    let { data, error } = await supabase.from('events').update(dbPayload).eq('id', id).select().single();
+    if (error && error.message && error.message.includes('events_status_check') && dbPayload.status === 'pending') {
+      dbPayload.status = 'active';
+      const retry = await supabase.from('events').update(dbPayload).eq('id', id).select().single();
+      data = retry.data;
+      error = retry.error;
+    }
+
     if (!error && data) {
       const mapped = mapEventRow(data);
       saveLocalEvents(nextList.map(e => e.id === id ? mapped : e));
       return { data: mapped, error: null };
     }
-  } catch (err) {
-    console.warn('DB updateEvent fallback to local storage:', err);
+    if (error) {
+      console.error('Supabase updateEvent error:', error);
+      return { data: updatedLocal, error };
+    }
+  } catch (err: any) {
+    console.error('DB updateEvent fallback:', err);
+    return { data: updatedLocal, error: err };
   }
 
   return { data: updatedLocal, error: null };

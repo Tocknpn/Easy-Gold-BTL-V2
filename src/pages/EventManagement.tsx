@@ -16,11 +16,89 @@ const DRAFT_KEY = 'easygold_event_plan_draft_v2';
 
 const labelDate = (s: string) => {
   if (!s) return '—';
-  const d = new Date(s + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+  const parts = s.split('T')[0].split('-');
+  if (parts.length === 3) {
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+    }
+  }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+  }
+  return s;
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
+
+function FormattedNumberInput({
+  value,
+  onChange,
+  placeholder,
+  readOnly = false,
+  style = {},
+}: {
+  value: number;
+  onChange?: (val: number) => void;
+  placeholder?: string;
+  readOnly?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const [localStr, setLocalStr] = useState(() => (value === 0 ? '' : value.toLocaleString('en-US')));
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalStr(value === 0 ? '' : value.toLocaleString('en-US'));
+    }
+  }, [value, isFocused]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (readOnly || !onChange) return;
+    const raw = e.target.value.replace(/,/g, '').trim();
+    if (raw === '') {
+      setLocalStr('');
+      onChange(0);
+      return;
+    }
+    if (/^\d+$/.test(raw)) {
+      const num = Number(raw);
+      setLocalStr(num.toLocaleString('en-US'));
+      onChange(num);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      readOnly={readOnly}
+      placeholder={placeholder || '0'}
+      value={isFocused && localStr === '' ? '' : (value === 0 && !isFocused ? '0' : localStr)}
+      onFocus={() => {
+        setIsFocused(true);
+        if (value === 0) setLocalStr('');
+      }}
+      onBlur={() => {
+        setIsFocused(false);
+        setLocalStr(value === 0 ? '' : value.toLocaleString('en-US'));
+      }}
+      onChange={handleChange}
+      style={{
+        fontSize: '13px',
+        padding: '8px 10px',
+        fontFamily: 'var(--font-mono)',
+        width: '100%',
+        background: readOnly ? 'var(--ink)' : 'var(--surface)',
+        cursor: readOnly ? 'not-allowed' : 'text',
+        color: readOnly ? 'var(--txt-sub)' : 'var(--txt-main)',
+        opacity: readOnly ? 0.9 : 1,
+        ...style,
+      }}
+    />
+  );
+}
 
 function KpiChip({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -44,18 +122,11 @@ function SectionTitle({ icon, title, badge }: { icon: string; title: string; bad
   );
 }
 
-function FF({ label, children, note, preview }: { label: string; children: React.ReactNode; note?: string; preview?: string }) {
+function FF({ label, children, note }: { label: string; children: React.ReactNode; note?: string; preview?: string }) {
   return (
     <div style={{ marginBottom: '14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '5px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
-          {preview && (
-            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-dim)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)' }}>
-              {preview}
-            </span>
-          )}
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px', minHeight: '18px' }}>
+        <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
         {note && <span style={{ fontSize: '10px', color: 'var(--txt-sub)' }}>{note}</span>}
       </div>
       {children}
@@ -210,20 +281,38 @@ export default function EventManagement() {
     });
   };
 
-  // Merch items helpers
+  // Merch items helpers — auto-recalculate Merch Cost and Budget Total
+  const recalculateMerchCost = (items: EventMerchItem[]) => {
+    return items.reduce((acc, m) => acc + ((Number(m.qty) || 0) * (Number(m.cpu) || 0)), 0);
+  };
+
   const addMerchRow = (defaultName = '') => {
     const catItem = catalog.find(c => c.name === defaultName);
+    const cpu = catItem?.cpu || 0;
     const newItem: EventMerchItem = {
       name: defaultName || (catalog[0]?.name || 'Merch Item'),
-      qty: 100,
-      cpu: catItem?.cpu || 0,
-      total: (catItem?.cpu || 0) * 100,
+      qty: 0, // Defaults to 0 and ready to change
+      cpu: cpu,
+      total: 0,
     };
-    setFormData(prev => ({
-      ...prev,
-      merch_items_list: [...prev.merch_items_list, newItem],
-      merch_required: true,
-    }));
+    setFormData(prev => {
+      const nextList = [...prev.merch_items_list, newItem];
+      const merchCost = recalculateMerchCost(nextList);
+      const totalBudget =
+        (Number(prev.budget_media) || 0) +
+        (Number(prev.budget_production) || 0) +
+        (Number(prev.budget_sponsor) || 0) +
+        merchCost +
+        (Number(prev.budget_operation) || 0) +
+        (Number(prev.budget_other) || 0);
+      return {
+        ...prev,
+        merch_items_list: nextList,
+        merch_required: true,
+        budget_merch: merchCost,
+        budget_total: totalBudget,
+      };
+    });
   };
 
   const updateMerchRow = (idx: number, patch: Partial<EventMerchItem>) => {
@@ -231,26 +320,52 @@ export default function EventManagement() {
       const updated = prev.merch_items_list.map((item, i) => {
         if (i !== idx) return item;
         const merged = { ...item, ...patch };
-        if (patch.name && !patch.cpu) {
+        if (patch.name && patch.cpu === undefined) {
           const match = catalog.find(c => c.name === patch.name);
-          if (match) merged.cpu = match.cpu;
+          if (match) merged.cpu = match.cpu || 0;
         }
-        merged.total = (merged.qty || 0) * (merged.cpu || 0);
+        merged.total = (Number(merged.qty) || 0) * (Number(merged.cpu) || 0);
         return merged;
       });
-      return { ...prev, merch_items_list: updated };
+      const merchCost = recalculateMerchCost(updated);
+      const totalBudget =
+        (Number(prev.budget_media) || 0) +
+        (Number(prev.budget_production) || 0) +
+        (Number(prev.budget_sponsor) || 0) +
+        merchCost +
+        (Number(prev.budget_operation) || 0) +
+        (Number(prev.budget_other) || 0);
+      return {
+        ...prev,
+        merch_items_list: updated,
+        budget_merch: merchCost,
+        budget_total: totalBudget,
+      };
     });
   };
 
   const removeMerchRow = (idx: number) => {
-    setFormData(prev => ({
-      ...prev,
-      merch_items_list: prev.merch_items_list.filter((_, i) => i !== idx),
-    }));
+    setFormData(prev => {
+      const updated = prev.merch_items_list.filter((_, i) => i !== idx);
+      const merchCost = recalculateMerchCost(updated);
+      const totalBudget =
+        (Number(prev.budget_media) || 0) +
+        (Number(prev.budget_production) || 0) +
+        (Number(prev.budget_sponsor) || 0) +
+        merchCost +
+        (Number(prev.budget_operation) || 0) +
+        (Number(prev.budget_other) || 0);
+      return {
+        ...prev,
+        merch_items_list: updated,
+        budget_merch: merchCost,
+        budget_total: totalBudget,
+      };
+    });
   };
 
   const syncMerchToBudget = () => {
-    const total = formData.merch_items_list.reduce((acc, m) => acc + (m.total || ((m.qty || 0) * (m.cpu || 0))), 0);
+    const total = recalculateMerchCost(formData.merch_items_list);
     setField('budget_merch', total);
   };
 
@@ -307,24 +422,38 @@ export default function EventManagement() {
     if (!formData.start_date) { setSaveMsg('Start date is required.'); return; }
     setSaving(true); setSaveMsg('');
 
+    const startYear = new Date(formData.start_date).getFullYear();
+    const payloadWithDates = {
+      ...formData,
+      year: startYear || formData.year,
+      end_date: formData.end_date || formData.start_date,
+    };
+
     if (isCreating) {
-      const { data, error } = await createEvent(formData);
-      if (error) { setSaveMsg(`Error: ${error.message || String(error)}`); setSaving(false); return; }
+      const { data, error } = await createEvent(payloadWithDates);
       if (data) {
-        setEvents(prev => [data, ...prev]);
+        setEvents(prev => [data, ...prev.filter(e => e.id !== data.id)]);
         setSelected(data);
+        if (data.year && filterYear !== data.year) {
+          setFilterYear(data.year);
+        }
         setIsCreating(false);
         localStorage.removeItem(DRAFT_KEY);
         setHasRestoredDraft(false);
       }
+      if (error) {
+        console.warn('DB createEvent note:', error);
+      }
     } else if (isEditing && selected) {
-      const { data, error } = await updateEvent(selected.id, formData);
-      if (error) { setSaveMsg(`Error: ${error.message || String(error)}`); setSaving(false); return; }
+      const { data, error } = await updateEvent(selected.id, payloadWithDates);
       if (data) {
         setEvents(prev => prev.map(e => e.id === data.id ? data : e));
         setSelected(data);
         if (viewingEvent?.id === data.id) setViewingEvent(data);
         setIsEditing(false);
+      }
+      if (error) {
+        console.warn('DB updateEvent note:', error);
       }
     }
     setSaving(false);
@@ -871,23 +1000,23 @@ export default function EventManagement() {
               />
               <div style={{ background: 'var(--ink)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)', marginBottom: '16px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '14px' }}>
-                  <FF label="Media Cost (₭)" preview={formData.budget_media ? fmtLAKShort(formData.budget_media) : undefined}>
-                    <input type="number" min={0} value={formData.budget_media} onChange={e => setField('budget_media', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FF label="Media Cost (₭)">
+                    <FormattedNumberInput value={formData.budget_media} onChange={v => setField('budget_media', v)} />
                   </FF>
-                  <FF label="Prod. Cost (₭)" preview={formData.budget_production ? fmtLAKShort(formData.budget_production) : undefined}>
-                    <input type="number" min={0} value={formData.budget_production} onChange={e => setField('budget_production', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FF label="Prod. Cost (₭)">
+                    <FormattedNumberInput value={formData.budget_production} onChange={v => setField('budget_production', v)} />
                   </FF>
-                  <FF label="Sponsor Cost (₭)" preview={formData.budget_sponsor ? fmtLAKShort(formData.budget_sponsor) : undefined}>
-                    <input type="number" min={0} value={formData.budget_sponsor} onChange={e => setField('budget_sponsor', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FF label="Sponsor Cost (₭)">
+                    <FormattedNumberInput value={formData.budget_sponsor} onChange={v => setField('budget_sponsor', v)} />
                   </FF>
-                  <FF label="Merch Cost (₭)" preview={formData.budget_merch ? fmtLAKShort(formData.budget_merch) : undefined}>
-                    <input type="number" min={0} value={formData.budget_merch} onChange={e => setField('budget_merch', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FF label="Merch Cost (₭)" note="Linked below">
+                    <FormattedNumberInput value={formData.budget_merch} readOnly={true} />
                   </FF>
-                  <FF label="Op. Cost (₭)" preview={formData.budget_operation ? fmtLAKShort(formData.budget_operation) : undefined}>
-                    <input type="number" min={0} value={formData.budget_operation} onChange={e => setField('budget_operation', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FF label="Op. Cost (₭)">
+                    <FormattedNumberInput value={formData.budget_operation} onChange={v => setField('budget_operation', v)} />
                   </FF>
-                  <FF label="Other Cost (₭)" preview={formData.budget_other ? fmtLAKShort(formData.budget_other) : undefined}>
-                    <input type="number" min={0} value={formData.budget_other} onChange={e => setField('budget_other', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FF label="Other Cost (₭)">
+                    <FormattedNumberInput value={formData.budget_other} onChange={v => setField('budget_other', v)} />
                   </FF>
                 </div>
 
@@ -897,9 +1026,9 @@ export default function EventManagement() {
                     <strong style={{ fontSize: '18px', color: 'var(--accent)', marginLeft: '8px' }}>{fmtLAK(formData.budget_total)}</strong>
                     <span style={{ fontSize: '12px', color: 'var(--txt-sub)', marginLeft: '8px' }}>({fmtLAKShort(formData.budget_total)})</span>
                   </div>
-                  <button type="button" className="btn btn-ghost" onClick={syncMerchToBudget} style={{ fontSize: '11px', padding: '5px 12px', border: '1px solid var(--border)' }}>
-                    <i className="fa-solid fa-gift" style={{ color: 'var(--accent)' }}></i> Pull Merch Cost from List
-                  </button>
+                  <span className="pill pill-gold" style={{ fontSize: '11px', padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <i className="fa-solid fa-link" style={{ color: 'var(--accent)' }}></i> Merch Cost Auto-linked from List
+                  </span>
                 </div>
               </div>
 
@@ -912,13 +1041,13 @@ export default function EventManagement() {
               <div style={{ background: 'var(--surface)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border)', marginBottom: '16px' }}>
                 {formData.merch_items_list.length === 0 ? (
                   <div style={{ padding: '16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: '12px' }}>
-                    No merch items added yet. Click "+ Add Merch Item" to specify merchandise going to this event.
+                    No merch items added yet. Click "+ Add from Catalog…" or "+ Add Merch Item" to specify merchandise for this event.
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto', marginBottom: '12px' }}>
                     <table className="data-table compact" style={{ marginTop: 0 }}>
                       <thead>
-                        <tr><th>Item Name</th><th style={{ width: '120px' }}>Qty</th><th style={{ width: '150px' }}>Cost per Unit (₭)</th><th style={{ width: '160px' }}>Total (₭)</th><th></th></tr>
+                        <tr><th>Item Name</th><th style={{ width: '130px' }}>Qty</th><th style={{ width: '150px' }}>Cost per Unit (₭)</th><th style={{ width: '160px' }}>Total (₭)</th><th></th></tr>
                       </thead>
                       <tbody>
                         {formData.merch_items_list.map((item, idx) => (
@@ -936,22 +1065,28 @@ export default function EventManagement() {
                               </datalist>
                             </td>
                             <td>
-                              <input
-                                type="number"
-                                min={1}
+                              <FormattedNumberInput
                                 value={item.qty}
-                                onChange={e => updateMerchRow(idx, { qty: Number(e.target.value) })}
-                                style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
+                                onChange={val => updateMerchRow(idx, { qty: val })}
+                                placeholder="0"
+                                style={{ fontSize: '12px', padding: '5px 8px' }}
                               />
                             </td>
                             <td>
-                              <input
-                                type="number"
-                                min={0}
-                                value={item.cpu || 0}
-                                onChange={e => updateMerchRow(idx, { cpu: Number(e.target.value) })}
-                                style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
-                              />
+                              <div style={{
+                                background: 'var(--ink)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '6px',
+                                padding: '5px 8px',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '12px',
+                                color: 'var(--txt-sub)',
+                                cursor: 'not-allowed',
+                                userSelect: 'none',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {fmtLAK(item.cpu || 0)}
+                              </div>
                             </td>
                             <td>
                               <strong style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{fmtLAK((item.qty || 0) * (item.cpu || 0))}</strong>
@@ -967,20 +1102,20 @@ export default function EventManagement() {
                     </table>
                   </div>
                 )}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button type="button" className="btn btn-ghost" onClick={() => addMerchRow()} style={{ fontSize: '12px', padding: '6px 12px', border: '1px solid var(--border)' }}>
-                    <i className="fa-solid fa-plus"></i> Add Merch Item
-                  </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   {catalog.length > 0 && (
                     <select
                       onChange={e => { if (e.target.value) { addMerchRow(e.target.value); e.target.value = ''; } }}
-                      style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}
+                      style={{ fontSize: '12px', padding: '6px 12px', width: 'auto', background: 'var(--surface)', border: '1px solid var(--accent)', color: 'var(--accent)', fontWeight: 600, borderRadius: '6px' }}
                       defaultValue=""
                     >
                       <option value="" disabled>+ Add from Catalog…</option>
                       {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
                     </select>
                   )}
+                  <button type="button" className="btn btn-ghost" onClick={() => addMerchRow()} style={{ fontSize: '12px', padding: '6px 12px', border: '1px solid var(--border)' }}>
+                    <i className="fa-solid fa-plus"></i> Add Merch Item
+                  </button>
                 </div>
               </div>
 
@@ -1016,8 +1151,8 @@ export default function EventManagement() {
                     </div>
                   </FF>
                 </div>
-                <FF label="Target Media Impressions" preview={formData.total_media_impressions ? fmtLAKShort(formData.total_media_impressions) : undefined}>
-                  <input type="number" min={0} value={formData.total_media_impressions} onChange={e => setField('total_media_impressions', Number(e.target.value))} placeholder="e.g. 1,000,000" style={{ fontSize: '13px', padding: '8px 12px' }} />
+                <FF label="Target Media Impressions">
+                  <FormattedNumberInput value={formData.total_media_impressions} onChange={v => setField('total_media_impressions', v)} placeholder="e.g. 1,000,000" />
                 </FF>
               </div>
 
@@ -1028,40 +1163,40 @@ export default function EventManagement() {
                 badge="Manual Benchmarks"
               />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-                <FF label="Target Buy Value (₭)" preview={formData.target_buy_value ? fmtLAKShort(formData.target_buy_value) : undefined}>
-                  <input type="number" min={0} value={formData.target_buy_value} onChange={e => setField('target_buy_value', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                <FF label="Target Buy Value (₭)">
+                  <FormattedNumberInput value={formData.target_buy_value} onChange={v => setField('target_buy_value', v)} />
                 </FF>
                 <FF label="Target Footfall">
-                  <input type="number" min={0} value={formData.target_footfall} onChange={e => setField('target_footfall', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FormattedNumberInput value={formData.target_footfall} onChange={v => setField('target_footfall', v)} />
                 </FF>
                 <FF label="Target NC (New Customers)">
-                  <input type="number" min={0} value={formData.target_nc} onChange={e => setField('target_nc', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FormattedNumberInput value={formData.target_nc} onChange={v => setField('target_nc', v)} />
                 </FF>
                 <FF label="Target NC Buyer (Optional)">
-                  <input type="number" min={0} value={formData.target_nc_buyer || 0} onChange={e => setField('target_nc_buyer', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FormattedNumberInput value={formData.target_nc_buyer || 0} onChange={v => setField('target_nc_buyer', v)} />
                 </FF>
 
                 <FF label="Target EC (Existing Cust.)">
-                  <input type="number" min={0} value={formData.target_ec} onChange={e => setField('target_ec', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FormattedNumberInput value={formData.target_ec} onChange={v => setField('target_ec', v)} />
                 </FF>
                 <FF label="Target Download">
-                  <input type="number" min={0} value={formData.target_download || 0} onChange={e => setField('target_download', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FormattedNumberInput value={formData.target_download || 0} onChange={v => setField('target_download', v)} />
                 </FF>
                 <FF label="Target KYC">
-                  <input type="number" min={0} value={formData.target_kyc || 0} onChange={e => setField('target_kyc', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  <FormattedNumberInput value={formData.target_kyc || 0} onChange={v => setField('target_kyc', v)} />
                 </FF>
-                <FF label="Target CPA (₭ / NC)" preview={formData.target_cpa ? fmtLAKShort(formData.target_cpa) : undefined}>
-                  <input type="number" min={0} value={formData.target_cpa} onChange={e => setField('target_cpa', Number(e.target.value))} placeholder="e.g. 740,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                <FF label="Target CPA (₭ / NC)">
+                  <FormattedNumberInput value={formData.target_cpa} onChange={v => setField('target_cpa', v)} placeholder="e.g. 740,000" />
                 </FF>
 
-                <FF label="Target CPO (₭ / Order)" preview={formData.target_cpo ? fmtLAKShort(formData.target_cpo) : undefined}>
-                  <input type="number" min={0} value={formData.target_cpo} onChange={e => setField('target_cpo', Number(e.target.value))} placeholder="e.g. 259,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                <FF label="Target CPO (₭ / Order)">
+                  <FormattedNumberInput value={formData.target_cpo} onChange={v => setField('target_cpo', v)} placeholder="e.g. 259,000" />
                 </FF>
-                <FF label="Target CPM (₭ / 1k Imp)" preview={formData.target_cpm ? fmtLAKShort(formData.target_cpm) : undefined}>
-                  <input type="number" min={0} value={formData.target_cpm} onChange={e => setField('target_cpm', Number(e.target.value))} placeholder="e.g. 64" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                <FF label="Target CPM (₭ / 1k Imp)">
+                  <FormattedNumberInput value={formData.target_cpm} onChange={v => setField('target_cpm', v)} placeholder="e.g. 64" />
                 </FF>
-                <FF label="Target CPF (₭ / Footfall)" preview={formData.target_cpf ? fmtLAKShort(formData.target_cpf) : undefined}>
-                  <input type="number" min={0} value={formData.target_cpf} onChange={e => setField('target_cpf', Number(e.target.value))} placeholder="e.g. 43,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                <FF label="Target CPF (₭ / Footfall)">
+                  <FormattedNumberInput value={formData.target_cpf} onChange={v => setField('target_cpf', v)} placeholder="e.g. 43,000" />
                 </FF>
                 <FF label="Proposal Google Drive Link">
                   <input value={formData.proposal_link} onChange={e => setField('proposal_link', e.target.value)} placeholder="https://drive.google.com/..." style={{ fontSize: '13px', padding: '8px 10px' }} />

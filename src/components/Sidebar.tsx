@@ -137,8 +137,8 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             <NavLink to="/report" icon="fa-solid fa-file-lines" label="Submission History" />
             <NavLink to="/merch-report" icon="fa-solid fa-box-open" label="Merch Report" />
             <NavLink to="/route-map" icon="fa-solid fa-map-location-dot" label="Route Map" />
-            <NavLink to="/event-management" icon="fa-solid fa-calendar-star" label="Event Management" />
-            <NavLink to="/event-report" icon="fa-solid fa-chart-mixed" label="Event Report" />
+            <NavLink to="/event-management" icon="fa-solid fa-calendar-check" label="Event Management" />
+            <NavLink to="/event-report" icon="fa-solid fa-chart-pie" label="Event Report" />
           </div>
         )}
 
