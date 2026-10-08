@@ -1,18 +1,19 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Event, EventTarget, EventType, EventMerchItem } from '../lib/events';
+import type { Event, EventType, EventMerchItem, CustomListOptions } from '../lib/events';
 import {
   fetchEvents, createEvent, updateEvent, deleteEvent,
-  fetchEventTargets,
   fetchEventTypes, createEventType, deleteEventType,
   computeEventHitSummary, computeCPMetrics,
-  EVENT_OBJECTIVES, EVENT_SCALES, EVENT_TEAMS, EVENT_STATUSES, MEDIA_SOURCES,
-  MONTHS_SHORT,
+  getCustomListOptions, saveCustomListOptions, DEFAULT_LIST_OPTIONS,
+  EVENT_STATUSES,
   fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel, scaleColor, blankEvent,
 } from '../lib/events';
 import { fetchMerchCatalog } from '../lib/submissions';
 import type { MerchItem } from '../lib/submissions';
 
 const THIS_YEAR = new Date().getFullYear();
+const DRAFT_KEY = 'easygold_event_plan_draft_v2';
+
 const labelDate = (s: string) => {
   if (!s) return '—';
   const d = new Date(s + 'T00:00:00');
@@ -43,11 +44,18 @@ function SectionTitle({ icon, title, badge }: { icon: string; title: string; bad
   );
 }
 
-function FF({ label, children, note }: { label: string; children: React.ReactNode; note?: string }) {
+function FF({ label, children, note, preview }: { label: string; children: React.ReactNode; note?: string; preview?: string }) {
   return (
     <div style={{ marginBottom: '14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-        <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '5px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
+          {preview && (
+            <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-dim)', padding: '1px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)' }}>
+              {preview}
+            </span>
+          )}
+        </div>
         {note && <span style={{ fontSize: '10px', color: 'var(--txt-sub)' }}>{note}</span>}
       </div>
       {children}
@@ -64,22 +72,29 @@ export default function EventManagement() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
 
-  // ── Event types ──
+  // ── Dynamic Dropdown Lists Setup ──
+  const [listOptions, setListOptions] = useState<CustomListOptions>(getCustomListOptions);
+  const [showListSetup, setShowListSetup] = useState(false);
+  const [listTab, setListTab] = useState<'types' | 'scales' | 'objectives' | 'teams' | 'media'>('types');
+  const [newOptionVal, setNewOptionVal] = useState('');
+  const [newOptionDesc, setNewOptionDesc] = useState('');
+
+  // ── Event types master ──
   const [eventTypes, setEventTypes] = useState<EventType[]>([]);
-  const [showTypes, setShowTypes] = useState(false);
-  const [newTypeName, setNewTypeName] = useState('');
-  const [newTypeDesc, setNewTypeDesc] = useState('');
 
   // ── Merch catalog ──
   const [catalog, setCatalog] = useState<MerchItem[]>([]);
 
   // ── Detail / Plan Form ──
   const [selected, setSelected] = useState<Event | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<Event | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Omit<Event, 'id' | 'created_at' | 'updated_at' | 'quarter'>>(blankEvent(''));
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [draftSavedAt, setDraftSavedAt] = useState<string>('');
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
   // ── Actuals Modal ──
   const [actualEvent, setActualEvent] = useState<Event | null>(null);
@@ -122,10 +137,6 @@ export default function EventManagement() {
   });
   const [savingActuals, setSavingActuals] = useState(false);
 
-  // ── Monthly Targets ──
-  const [targets, setTargets] = useState<EventTarget[]>([]);
-  const [showTargets, setShowTargets] = useState(false);
-
   // ── Data Loaders ──
   const loadEvents = useCallback(async () => {
     const { data } = await fetchEvents({
@@ -149,12 +160,20 @@ export default function EventManagement() {
     fetchMerchCatalog().then(setCatalog);
   }, [loadEvents, loadTypes]);
 
-  // Load monthly targets
-  const loadTargets = useCallback(() => {
-    fetchEventTargets(THIS_YEAR).then(setTargets);
-  }, []);
-
-  useEffect(() => { if (showTargets) loadTargets(); }, [showTargets, loadTargets]);
+  // ── Auto-save Draft to LocalStorage ──
+  useEffect(() => {
+    if (!isCreating) return;
+    // Only auto-save if user entered at least something meaningful
+    if (formData.event_name || formData.location || formData.budget_total > 0 || formData.target_nc > 0) {
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ data: formData, time: now }));
+        setDraftSavedAt(now);
+      } catch {
+        // ignore
+      }
+    }
+  }, [formData, isCreating]);
 
   // ── Form helpers ──
   const setField = <K extends keyof typeof formData>(k: K, v: typeof formData[K]) => {
@@ -231,17 +250,48 @@ export default function EventManagement() {
   };
 
   const syncMerchToBudget = () => {
-    const total = formData.merch_items_list.reduce((acc, m) => acc + (m.total || (m.qty * (m.cpu || 0))), 0);
+    const total = formData.merch_items_list.reduce((acc, m) => acc + (m.total || ((m.qty || 0) * (m.cpu || 0))), 0);
     setField('budget_merch', total);
   };
 
   // ── Plan CRUD handlers ──
   const openCreate = async () => {
     const types = eventTypes.length > 0 ? eventTypes : await loadTypes();
-    setFormData(blankEvent(types[0]?.name || ''));
+    const blank = blankEvent(types[0]?.name || 'H2H Booth');
+
+    // Check for existing draft
+    try {
+      const rawDraft = localStorage.getItem(DRAFT_KEY);
+      if (rawDraft) {
+        const parsed = JSON.parse(rawDraft);
+        if (parsed?.data?.event_name || parsed?.data?.location) {
+          setFormData({ ...blank, ...parsed.data });
+          setDraftSavedAt(parsed.time || 'earlier');
+          setHasRestoredDraft(true);
+          setIsCreating(true);
+          setIsEditing(false);
+          setSelected(null);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    setFormData(blank);
+    setHasRestoredDraft(false);
+    setDraftSavedAt('');
     setIsCreating(true);
     setIsEditing(false);
     setSelected(null);
+  };
+
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    const types = eventTypes.length > 0 ? eventTypes : [];
+    setFormData(blankEvent(types[0]?.name || 'H2H Booth'));
+    setHasRestoredDraft(false);
+    setDraftSavedAt('');
   };
 
   const startEdit = (ev: Event) => {
@@ -264,6 +314,8 @@ export default function EventManagement() {
         setEvents(prev => [data, ...prev]);
         setSelected(data);
         setIsCreating(false);
+        localStorage.removeItem(DRAFT_KEY);
+        setHasRestoredDraft(false);
       }
     } else if (isEditing && selected) {
       const { data, error } = await updateEvent(selected.id, formData);
@@ -271,6 +323,7 @@ export default function EventManagement() {
       if (data) {
         setEvents(prev => prev.map(e => e.id === data.id ? data : e));
         setSelected(data);
+        if (viewingEvent?.id === data.id) setViewingEvent(data);
         setIsEditing(false);
       }
     }
@@ -283,6 +336,7 @@ export default function EventManagement() {
     if (error) { alert(`Delete failed: ${error.message}`); return; }
     setEvents(prev => prev.filter(e => e.id !== ev.id));
     if (selected?.id === ev.id) setSelected(null);
+    if (viewingEvent?.id === ev.id) setViewingEvent(null);
   };
 
   // ── Actuals Recording Handlers ──
@@ -339,7 +393,6 @@ export default function EventManagement() {
     if (!actualEvent) return;
     setSavingActuals(true);
 
-    // Autocalculate CP metrics from the filled actual values
     const cp = computeCPMetrics(
       actualData.actual_cost,
       actualData.actual_nc,
@@ -378,6 +431,7 @@ export default function EventManagement() {
     if (!error && data) {
       setEvents(prev => prev.map(e => e.id === data.id ? data : e));
       if (selected?.id === data.id) setSelected(data);
+      if (viewingEvent?.id === data.id) setViewingEvent(data);
     }
     setSavingActuals(false);
     setActualEvent(null);
@@ -395,17 +449,70 @@ export default function EventManagement() {
     );
   }, [actualData]);
 
-  // ── Types Handlers ──
-  const handleAddType = async () => {
-    if (!newTypeName.trim()) return;
-    await createEventType({ name: newTypeName.trim(), description: newTypeDesc.trim(), sort_order: eventTypes.length });
-    setNewTypeName(''); setNewTypeDesc('');
-    loadTypes();
+  // ── Custom Dropdown List Management Handlers ──
+  const handleAddOption = async () => {
+    if (!newOptionVal.trim()) return;
+    const val = newOptionVal.trim();
+
+    if (listTab === 'types') {
+      await createEventType({ name: val, description: newOptionDesc.trim(), sort_order: eventTypes.length });
+      setNewOptionVal('');
+      setNewOptionDesc('');
+      await loadTypes();
+      return;
+    }
+
+    const next = { ...listOptions };
+    if (listTab === 'scales' && !next.scales.includes(val)) {
+      next.scales = [...next.scales, val];
+    } else if (listTab === 'objectives' && !next.objectives.includes(val)) {
+      next.objectives = [...next.objectives, val];
+    } else if (listTab === 'teams' && !next.teams.includes(val)) {
+      next.teams = [...next.teams, val];
+    } else if (listTab === 'media' && !next.mediaSources.includes(val)) {
+      next.mediaSources = [...next.mediaSources, val];
+    }
+    setListOptions(next);
+    saveCustomListOptions(next);
+    setNewOptionVal('');
+    setNewOptionDesc('');
   };
-  const handleDeleteType = async (type: EventType) => {
-    if (!window.confirm(`Delete event type "${type.name}"?`)) return;
-    await deleteEventType(type.id);
-    loadTypes();
+
+  const handleDeleteOption = async (item: string) => {
+    if (!window.confirm(`Remove "${item}" from this list?`)) return;
+
+    if (listTab === 'types') {
+      const match = eventTypes.find(t => t.name === item);
+      if (match) {
+        await deleteEventType(match.id);
+        await loadTypes();
+      }
+      return;
+    }
+
+    const next = { ...listOptions };
+    if (listTab === 'scales') {
+      next.scales = next.scales.filter(s => s !== item);
+    } else if (listTab === 'objectives') {
+      next.objectives = next.objectives.filter(s => s !== item);
+    } else if (listTab === 'teams') {
+      next.teams = next.teams.filter(s => s !== item);
+    } else if (listTab === 'media') {
+      next.mediaSources = next.mediaSources.filter(s => s !== item);
+    }
+    setListOptions(next);
+    saveCustomListOptions(next);
+  };
+
+  const handleResetDefaults = () => {
+    if (!window.confirm('Reset this list to system default options?')) return;
+    const next = { ...listOptions };
+    if (listTab === 'scales') next.scales = [...DEFAULT_LIST_OPTIONS.scales];
+    if (listTab === 'objectives') next.objectives = [...DEFAULT_LIST_OPTIONS.objectives];
+    if (listTab === 'teams') next.teams = [...DEFAULT_LIST_OPTIONS.teams];
+    if (listTab === 'media') next.mediaSources = [...DEFAULT_LIST_OPTIONS.mediaSources];
+    setListOptions(next);
+    saveCustomListOptions(next);
   };
 
   const showForm = isCreating || isEditing;
@@ -441,23 +548,20 @@ export default function EventManagement() {
           >
             <i className="fa-solid fa-list"></i> Table
           </button>
+
+          {/* List Options Setup Modal Button (Replaces Event Types & removed unused KPI Targets button) */}
           <button
             className="btn btn-ghost"
-            style={{ fontSize: '12px', padding: '6px 12px' }}
-            onClick={() => { setShowTypes(v => !v); setShowTargets(false); }}
+            style={{ fontSize: '12px', padding: '6px 12px', border: '1px solid var(--border)', background: 'var(--surface)' }}
+            onClick={() => setShowListSetup(true)}
+            title="Configure Dropdown Lists (Activity Types, Scales, Objectives, Teams, Media)"
           >
-            <i className="fa-solid fa-tags"></i> Event Types
+            <i className="fa-solid fa-sliders" style={{ color: 'var(--accent)' }}></i> List Setup
           </button>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: '12px', padding: '6px 12px' }}
-            onClick={() => { setShowTargets(v => !v); setShowTypes(false); }}
-          >
-            <i className="fa-solid fa-bullseye"></i> KPI Targets
-          </button>
+
           <button
             className="btn btn-primary"
-            style={{ fontSize: '12px', padding: '7px 16px', background: 'linear-gradient(135deg, var(--accent), #2563eb)' }}
+            style={{ fontSize: '12px', padding: '7px 18px', background: 'linear-gradient(135deg, var(--accent), #2563eb)' }}
             onClick={openCreate}
           >
             <i className="fa-solid fa-plus"></i> Set Up Event Plan
@@ -468,7 +572,7 @@ export default function EventManagement() {
       {/* ── Filters bar ── */}
       <div className="card" style={{ marginBottom: '18px', padding: '12px 18px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
-          {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+          {[2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         <select value={filterQuarter} onChange={e => setFilterQuarter(e.target.value)} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
           <option value="">All Quarters</option>
@@ -476,7 +580,7 @@ export default function EventManagement() {
         </select>
         <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
           <option value="">All Teams</option>
-          {EVENT_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+          {listOptions.teams.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
           <option value="">All Statuses</option>
@@ -487,357 +591,491 @@ export default function EventManagement() {
         </button>
       </div>
 
-      {/* ══ EVENT TYPES MANAGEMENT PANEL ══ */}
-      {showTypes && (
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0, fontSize: '15px' }}><i className="fa-solid fa-tags" style={{ marginRight: '8px', color: 'var(--accent)' }}></i>Activity Types Master (SKU)</h3>
-            <button className="btn btn-ghost" onClick={() => setShowTypes(false)} style={{ fontSize: '11px' }}>Close</button>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-            <input value={newTypeName} onChange={e => setNewTypeName(e.target.value)} placeholder="New type name (e.g. Trade Fair, Sponsorship)" style={{ fontSize: '12px', padding: '6px 10px', flex: 1 }} />
-            <input value={newTypeDesc} onChange={e => setNewTypeDesc(e.target.value)} placeholder="Description (optional)" style={{ fontSize: '12px', padding: '6px 10px', flex: 2 }} />
-            <button className="btn btn-primary" onClick={handleAddType} style={{ fontSize: '12px', padding: '6px 14px' }}>Add Type</button>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {eventTypes.map(t => (
-              <span key={t.id} className="pill pill-blue" style={{ fontSize: '11px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                {t.name}
-                <button onClick={() => handleDeleteType(t)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0 }} title="Delete type">×</button>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ══ MONTHLY TARGETS PANEL ══ */}
-      {showTargets && (
-        <div className="card" style={{ marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0, fontSize: '15px' }}><i className="fa-solid fa-bullseye" style={{ marginRight: '8px', color: 'var(--accent)' }}></i>Monthly KPI Target Benchmarks</h3>
-            <button className="btn btn-ghost" onClick={() => setShowTargets(false)} style={{ fontSize: '11px' }}>Close</button>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table compact" style={{ marginTop: 0 }}>
-              <thead><tr><th>Year</th><th>Month</th><th>Team</th><th>Type</th><th>NC</th><th>EC</th><th>CPA</th><th>CPO</th><th>CPM</th><th>CPF</th><th>Buy Val</th></tr></thead>
-              <tbody>
-                {targets.map(t => (
-                  <tr key={t.id}>
-                    <td>{t.year}</td>
-                    <td>{MONTHS_SHORT[t.month - 1]}</td>
-                    <td><span className="pill pill-gold">{t.team}</span></td>
-                    <td>{t.activity_type}</td>
-                    <td>{t.nc_target}</td>
-                    <td>{t.ec_target}</td>
-                    <td>{fmtLAKShort(t.cpa_target)}</td>
-                    <td>{fmtLAKShort(t.cpo_target)}</td>
-                    <td>{fmtLAKShort(t.cpm_target)}</td>
-                    <td>{fmtLAKShort(t.cpf_target)}</td>
-                    <td>{fmtLAKShort(t.buy_value_target)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ══ EVENT PLAN FORM (CREATE / EDIT) ══ */}
-      {showForm && (
-        <div className="card" style={{ marginBottom: '24px', border: '2px solid var(--accent)', boxShadow: 'var(--shadow)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
-            <div>
-              <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 800 }}>
-                <i className={`fa-solid ${isCreating ? 'fa-plus-circle' : 'fa-pen'}`} style={{ marginRight: '8px', color: 'var(--accent)' }}></i>
-                {isCreating ? 'Set Up New Event Plan' : `Edit Event Plan — ${formData.event_name}`}
-              </h3>
-              <div style={{ fontSize: '12px', color: 'var(--txt-sub)' }}>
-                Configure event details, breakdown budgets, merch list, media channels, and target metrics. Defaults to status <strong>Pending</strong>.
+      {/* ══ DYNAMIC DROPDOWN LIST OPTIONS SETUP MODAL ══ */}
+      {showListSetup && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.8)', zIndex: 1250, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowListSetup(false); }}
+        >
+          <div style={{ background: 'var(--surface)', borderRadius: '14px', width: '100%', maxWidth: '780px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow)', border: '1px solid var(--border)' }}>
+            <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <i className="fa-solid fa-sliders" style={{ color: 'var(--accent)' }}></i>
+                  Dropdown Lists Configuration
+                </h3>
+                <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginTop: '2px' }}>
+                  Manage choices and options for all dropdown fields used across Event Management.
+                </div>
               </div>
+              <button onClick={() => setShowListSetup(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--txt-sub)' }}>×</button>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              {saveMsg && <span style={{ fontSize: '12px', color: 'var(--red)' }}>{saveMsg}</span>}
-              <button className="btn btn-ghost" onClick={() => { setIsCreating(false); setIsEditing(false); }} style={{ fontSize: '12px', padding: '7px 14px' }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSavePlan} disabled={saving} style={{ fontSize: '12px', padding: '7px 20px' }}>
-                {saving ? <><i className="fa-solid fa-spinner fa-spin"></i> Saving…</> : <><i className="fa-solid fa-floppy-disk"></i> Save Event Plan</>}
+
+            {/* List Selector Tabs */}
+            <div style={{ display: 'flex', gap: '6px', padding: '12px 22px', background: 'var(--ink)', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+              <button
+                className={`btn ${listTab === 'types' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => setListTab('types')}
+              >
+                Activity Types ({eventTypes.length})
+              </button>
+              <button
+                className={`btn ${listTab === 'scales' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => setListTab('scales')}
+              >
+                Scales ({listOptions.scales.length})
+              </button>
+              <button
+                className={`btn ${listTab === 'objectives' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => setListTab('objectives')}
+              >
+                Objectives ({listOptions.objectives.length})
+              </button>
+              <button
+                className={`btn ${listTab === 'teams' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => setListTab('teams')}
+              >
+                Teams ({listOptions.teams.length})
+              </button>
+              <button
+                className={`btn ${listTab === 'media' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+                onClick={() => setListTab('media')}
+              >
+                Media Channels ({listOptions.mediaSources.length})
               </button>
             </div>
-          </div>
 
-          {/* 1. Event Info */}
-          <SectionTitle icon="fa-circle-info" title="1. Event Info & Schedule" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px' }}>
-            <div style={{ gridColumn: 'span 2' }}>
-              <FF label="Event Name *">
-                <input value={formData.event_name} onChange={e => setField('event_name', e.target.value)} placeholder="e.g. LGF 2026, Lao Wisdom, Trade Fair" style={{ fontSize: '13px', padding: '8px 12px' }} />
-              </FF>
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <FF label="Location / Venue">
-                <input value={formData.location} onChange={e => setField('location', e.target.value)} placeholder="e.g. Lao-ITECC Exhibition Hall, Landmark Hotel" style={{ fontSize: '13px', padding: '8px 12px' }} />
-              </FF>
-            </div>
-
-            <FF label="Start Date *">
-              <input type="date" value={formData.start_date} onChange={e => setField('start_date', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
-            </FF>
-            <FF label="End Date">
-              <input type="date" value={formData.end_date} onChange={e => setField('end_date', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
-            </FF>
-            <FF label="Start Time (Optional)">
-              <input type="time" value={formData.start_time || ''} onChange={e => setField('start_time', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
-            </FF>
-            <FF label="End Time (Optional)">
-              <input type="time" value={formData.end_time || ''} onChange={e => setField('end_time', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
-            </FF>
-
-            <FF label="Team">
-              <select value={formData.team} onChange={e => setField('team', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
-                {EVENT_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </FF>
-            <FF label="Activity Type">
-              <select value={formData.activity_type} onChange={e => setField('activity_type', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
-                {eventTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-              </select>
-            </FF>
-            <FF label="Scale">
-              <select value={formData.scale} onChange={e => setField('scale', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
-                {EVENT_SCALES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </FF>
-            <FF label="Status (Defaults to Pending)">
-              <select value={formData.status} onChange={e => setField('status', e.target.value as any)} style={{ fontSize: '13px', padding: '8px 12px', fontWeight: 700, color: statusColor(formData.status) }}>
-                {EVENT_STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-              </select>
-            </FF>
-
-            <div style={{ gridColumn: 'span 2' }}>
-              <FF label="Objective">
-                <select value={formData.objective} onChange={e => setField('objective', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
-                  {EVENT_OBJECTIVES.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </FF>
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <FF label="Description / Objective Narrative">
-                <input value={formData.description} onChange={e => setField('description', e.target.value)} placeholder="Short pitch or narrative" style={{ fontSize: '13px', padding: '8px 12px' }} />
-              </FF>
-            </div>
-          </div>
-
-          {/* 2. Total Budget Plan */}
-          <SectionTitle
-            icon="fa-coins"
-            title="2. Total Budget Plan & Breakdown"
-            badge={`Total: ${fmtLAK(formData.budget_total)}`}
-          />
-          <div style={{ background: 'var(--ink)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)', marginBottom: '16px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '14px' }}>
-              <FF label="Media Cost (₭)">
-                <input type="number" min={0} value={formData.budget_media} onChange={e => setField('budget_media', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-              </FF>
-              <FF label="Production Cost (₭)">
-                <input type="number" min={0} value={formData.budget_production} onChange={e => setField('budget_production', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-              </FF>
-              <FF label="Sponsor Cost (₭)">
-                <input type="number" min={0} value={formData.budget_sponsor} onChange={e => setField('budget_sponsor', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-              </FF>
-              <FF label="Merch Cost (₭)">
-                <input type="number" min={0} value={formData.budget_merch} onChange={e => setField('budget_merch', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-              </FF>
-              <FF label="Operation Cost (₭)">
-                <input type="number" min={0} value={formData.budget_operation} onChange={e => setField('budget_operation', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-              </FF>
-              <FF label="Other Cost (₭)">
-                <input type="number" min={0} value={formData.budget_other} onChange={e => setField('budget_other', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-              </FF>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-              <div>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase' }}>Total Budget Plan Sum: </span>
-                <strong style={{ fontSize: '18px', color: 'var(--accent)', marginLeft: '8px' }}>{fmtLAK(formData.budget_total)}</strong>
-                <span style={{ fontSize: '12px', color: 'var(--txt-sub)', marginLeft: '8px' }}>({fmtLAKShort(formData.budget_total)})</span>
+            <div style={{ padding: '20px 22px' }}>
+              {/* Add item bar */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
+                <input
+                  value={newOptionVal}
+                  onChange={e => setNewOptionVal(e.target.value)}
+                  placeholder={`Add new ${listTab === 'types' ? 'Activity Type' : listTab === 'scales' ? 'Scale' : listTab === 'objectives' ? 'Objective' : listTab === 'teams' ? 'Team' : 'Media Channel'}…`}
+                  style={{ fontSize: '12px', padding: '8px 12px', flex: 1 }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddOption(); }}
+                />
+                {listTab === 'types' && (
+                  <input
+                    value={newOptionDesc}
+                    onChange={e => setNewOptionDesc(e.target.value)}
+                    placeholder="Description (optional)"
+                    style={{ fontSize: '12px', padding: '8px 12px', flex: 1 }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddOption(); }}
+                  />
+                )}
+                <button className="btn btn-primary" onClick={handleAddOption} style={{ fontSize: '12px', padding: '8px 16px', whiteSpace: 'nowrap' }}>
+                  <i className="fa-solid fa-plus"></i> Add
+                </button>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" className="btn btn-ghost" onClick={syncMerchToBudget} style={{ fontSize: '11px', padding: '5px 10px' }}>
-                  <i className="fa-solid fa-gift"></i> Pull Merch Cost from List
+
+              {/* Items List Chips */}
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '10px' }}>
+                Active Options:
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '22px' }}>
+                {listTab === 'types' ? (
+                  eventTypes.map(t => (
+                    <span key={t.id} className="pill pill-blue" style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <strong>{t.name}</strong>
+                      {t.description && <span style={{ opacity: 0.7, fontSize: '10px' }}>({t.description})</span>}
+                      <button onClick={() => handleDeleteOption(t.name)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, fontSize: '14px' }} title="Delete type">×</button>
+                    </span>
+                  ))
+                ) : (
+                  (listTab === 'scales' ? listOptions.scales :
+                   listTab === 'objectives' ? listOptions.objectives :
+                   listTab === 'teams' ? listOptions.teams :
+                   listOptions.mediaSources).map(item => (
+                    <span key={item} className="pill pill-gold" style={{ fontSize: '12px', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                      <strong>{item}</strong>
+                      <button onClick={() => handleDeleteOption(item)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: 0, fontSize: '14px' }} title="Delete option">×</button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '14px' }}>
+                {listTab !== 'types' ? (
+                  <button type="button" className="btn btn-ghost" onClick={handleResetDefaults} style={{ fontSize: '11px', color: 'var(--txt-sub)' }}>
+                    <i className="fa-solid fa-rotate-left"></i> Reset to defaults
+                  </button>
+                ) : <span />}
+                <button className="btn btn-primary" onClick={() => setShowListSetup(false)} style={{ fontSize: '12px', padding: '6px 18px' }}>
+                  Done
                 </button>
               </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* 3. Merch list and Items */}
-          <SectionTitle
-            icon="fa-box-archive"
-            title="3. Merch List & Items for the Event"
-            badge={`${formData.merch_items_list.length} item types`}
-          />
-          <div style={{ background: 'var(--surface)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border)', marginBottom: '16px' }}>
-            {formData.merch_items_list.length === 0 ? (
-              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: '12px' }}>
-                No merch items added yet. Click "+ Add Merch Item" to specify merchandise going to this event.
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto', marginBottom: '12px' }}>
-                <table className="data-table compact" style={{ marginTop: 0 }}>
-                  <thead>
-                    <tr><th>Item Name</th><th style={{ width: '120px' }}>Qty</th><th style={{ width: '150px' }}>Cost per Unit (₭)</th><th style={{ width: '160px' }}>Total (₭)</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {formData.merch_items_list.map((item, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <input
-                            list={`catalog-list-${idx}`}
-                            value={item.name}
-                            onChange={e => updateMerchRow(idx, { name: e.target.value })}
-                            placeholder="Select or enter item"
-                            style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
-                          />
-                          <datalist id={`catalog-list-${idx}`}>
-                            {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
-                          </datalist>
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={1}
-                            value={item.qty}
-                            onChange={e => updateMerchRow(idx, { qty: Number(e.target.value) })}
-                            style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min={0}
-                            value={item.cpu || 0}
-                            onChange={e => updateMerchRow(idx, { cpu: Number(e.target.value) })}
-                            style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
-                          />
-                        </td>
-                        <td>
-                          <strong style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{fmtLAK((item.qty || 0) * (item.cpu || 0))}</strong>
-                        </td>
-                        <td>
-                          <button type="button" className="btn btn-ghost" onClick={() => removeMerchRow(idx)} style={{ color: 'var(--red)', padding: '4px 8px', fontSize: '11px' }}>
-                            <i className="fa-solid fa-trash"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" className="btn btn-ghost" onClick={() => addMerchRow()} style={{ fontSize: '12px', padding: '6px 12px' }}>
-                <i className="fa-solid fa-plus"></i> Add Merch Item
-              </button>
-              {catalog.length > 0 && (
-                <select
-                  onChange={e => { if (e.target.value) { addMerchRow(e.target.value); e.target.value = ''; } }}
-                  style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}
-                  defaultValue=""
-                >
-                  <option value="" disabled>+ Add from Catalog…</option>
-                  {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
-                </select>
-              )}
-            </div>
-          </div>
-
-          {/* 4. Media Sources & Target Impressions */}
-          <SectionTitle icon="fa-bullhorn" title="4. Media Sources & Total Impression Target" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '16px' }}>
-            <div style={{ gridColumn: 'span 3' }}>
-              <FF label="Media Sources (Multi-select)">
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {MEDIA_SOURCES.map(src => {
-                    const active = formData.media_sources.includes(src);
-                    return (
-                      <button
-                        key={src}
-                        type="button"
-                        onClick={() => toggleMediaSource(src)}
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: '20px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
-                          background: active ? 'var(--accent-dim)' : 'var(--surface)',
-                          color: active ? 'var(--accent)' : 'var(--txt-sub)',
-                        }}
-                      >
-                        {active && <i className="fa-solid fa-check" style={{ marginRight: '6px' }}></i>}
-                        {src}
-                      </button>
-                    );
-                  })}
+      {/* ══ EVENT PLAN POPUP MODAL (CREATE / EDIT) WITH DRAFT AUTO-SAVE ══ */}
+      {showForm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(10, 15, 30, 0.82)',
+            zIndex: 1200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px',
+          }}
+          onClick={e => {
+            // Prevent accidental closure when clicking backdrop
+            if (e.target === e.currentTarget) {
+              if (window.confirm('Close Event Plan setup? Your draft is safely auto-saved.')) {
+                setIsCreating(false);
+                setIsEditing(false);
+              }
+            }
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '1060px',
+              maxHeight: '92vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.5)',
+              border: '1px solid var(--border)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, var(--ink), var(--surface))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <i className={`fa-solid ${isCreating ? 'fa-plus-circle' : 'fa-pen'}`} style={{ color: 'var(--accent)' }}></i>
+                    {isCreating ? 'Set Up New Event Plan' : `Edit Event Plan — ${formData.event_name}`}
+                  </h3>
+                  {isCreating && (
+                    <span style={{ fontSize: '11px', color: 'var(--green)', background: 'rgba(34,197,94,0.12)', padding: '2px 8px', borderRadius: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <i className="fa-solid fa-cloud-arrow-up"></i>
+                      {draftSavedAt ? `Auto-saved at ${draftSavedAt}` : 'Auto-saving draft'}
+                    </span>
+                  )}
                 </div>
-              </FF>
+                <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginTop: '2px' }}>
+                  Configure event details, breakdown budgets, merch list, media channels, and target metrics.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {saveMsg && <span style={{ fontSize: '12px', color: 'var(--red)', marginRight: '6px' }}>{saveMsg}</span>}
+                {isCreating && hasRestoredDraft && (
+                  <button type="button" className="btn btn-ghost" onClick={clearDraft} style={{ fontSize: '11px', padding: '6px 10px', color: 'var(--txt-sub)' }} title="Clear restored draft and start fresh">
+                    <i className="fa-solid fa-trash-can"></i> Clear Draft
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => { setIsCreating(false); setIsEditing(false); }}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSavePlan}
+                  disabled={saving}
+                  style={{ fontSize: '12px', padding: '7px 20px', background: 'linear-gradient(135deg, var(--accent), #2563eb)' }}
+                >
+                  {saving ? <><i className="fa-solid fa-spinner fa-spin"></i> Saving…</> : <><i className="fa-solid fa-floppy-disk"></i> Save Event Plan</>}
+                </button>
+              </div>
             </div>
-            <FF label="Target Media Total Impressions">
-              <input type="number" min={0} value={formData.total_media_impressions} onChange={e => setField('total_media_impressions', Number(e.target.value))} placeholder="e.g. 1,000,000" style={{ fontSize: '13px', padding: '8px 12px' }} />
-            </FF>
-          </div>
 
-          {/* 5. Target Metrics (Field Boxes) */}
-          <SectionTitle
-            icon="fa-crosshairs"
-            title="5. Target Metrics (Field Boxes — Target NC, EC, Buy Value, CPA, CPO, CPM, CPF)"
-            badge="Manual Input"
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-            <FF label="Target Buy Value Total (₭)">
-              <input type="number" min={0} value={formData.target_buy_value} onChange={e => setField('target_buy_value', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target Footfall">
-              <input type="number" min={0} value={formData.target_footfall} onChange={e => setField('target_footfall', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target NC (New Customers)">
-              <input type="number" min={0} value={formData.target_nc} onChange={e => setField('target_nc', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target NC Buyer (Optional)">
-              <input type="number" min={0} value={formData.target_nc_buyer || 0} onChange={e => setField('target_nc_buyer', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
+            {/* Scrollable Content Body with smooth scroll */}
+            <div style={{ padding: '22px 24px', overflowY: 'auto', flex: 1, scrollBehavior: 'smooth' }}>
+              {/* 1. Event Info & Schedule */}
+              <SectionTitle icon="fa-circle-info" title="1. Event Info & Schedule" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px' }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <FF label="Event Name *">
+                    <input value={formData.event_name} onChange={e => setField('event_name', e.target.value)} placeholder="e.g. LGF 2026, Lao Wisdom, Trade Fair" style={{ fontSize: '13px', padding: '8px 12px' }} />
+                  </FF>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <FF label="Location / Venue">
+                    <input value={formData.location} onChange={e => setField('location', e.target.value)} placeholder="e.g. Lao-ITECC Exhibition Hall, Landmark Hotel" style={{ fontSize: '13px', padding: '8px 12px' }} />
+                  </FF>
+                </div>
 
-            <FF label="Target EC (Existing Customers)">
-              <input type="number" min={0} value={formData.target_ec} onChange={e => setField('target_ec', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target Download">
-              <input type="number" min={0} value={formData.target_download || 0} onChange={e => setField('target_download', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target KYC">
-              <input type="number" min={0} value={formData.target_kyc || 0} onChange={e => setField('target_kyc', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target CPA (₭ / NC)">
-              <input type="number" min={0} value={formData.target_cpa} onChange={e => setField('target_cpa', Number(e.target.value))} placeholder="e.g. 740,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
+                <FF label="Start Date *">
+                  <input type="date" value={formData.start_date} onChange={e => setField('start_date', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
+                </FF>
+                <FF label="End Date">
+                  <input type="date" value={formData.end_date} onChange={e => setField('end_date', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
+                </FF>
+                <FF label="Start Time (Optional)">
+                  <input type="time" value={formData.start_time || ''} onChange={e => setField('start_time', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
+                </FF>
+                <FF label="End Time (Optional)">
+                  <input type="time" value={formData.end_time || ''} onChange={e => setField('end_time', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }} />
+                </FF>
 
-            <FF label="Target CPO (₭ / Order)">
-              <input type="number" min={0} value={formData.target_cpo} onChange={e => setField('target_cpo', Number(e.target.value))} placeholder="e.g. 259,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target CPM (₭ / 1k Imp)">
-              <input type="number" min={0} value={formData.target_cpm} onChange={e => setField('target_cpm', Number(e.target.value))} placeholder="e.g. 64" style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Target CPF (₭ / Footfall)">
-              <input type="number" min={0} value={formData.target_cpf} onChange={e => setField('target_cpf', Number(e.target.value))} placeholder="e.g. 43,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-            <FF label="Proposal Google Drive Link">
-              <input value={formData.proposal_link} onChange={e => setField('proposal_link', e.target.value)} placeholder="https://drive.google.com/..." style={{ fontSize: '13px', padding: '8px 10px' }} />
-            </FF>
-          </div>
+                <FF label="Team">
+                  <select value={formData.team} onChange={e => setField('team', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
+                    {listOptions.teams.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </FF>
+                <FF label="Activity Type">
+                  <select value={formData.activity_type} onChange={e => setField('activity_type', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
+                    {eventTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                  </select>
+                </FF>
+                <FF label="Scale">
+                  <select value={formData.scale} onChange={e => setField('scale', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
+                    {listOptions.scales.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </FF>
+                <FF label="Status (Defaults to Pending)">
+                  <select value={formData.status} onChange={e => setField('status', e.target.value as any)} style={{ fontSize: '13px', padding: '8px 12px', fontWeight: 700, color: statusColor(formData.status) }}>
+                    {EVENT_STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+                  </select>
+                </FF>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-            <button className="btn btn-ghost" onClick={() => { setIsCreating(false); setIsEditing(false); }} style={{ fontSize: '13px', padding: '8px 16px' }}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSavePlan} disabled={saving} style={{ fontSize: '13px', padding: '8px 24px' }}>
-              <i className="fa-solid fa-floppy-disk"></i> Save Event Plan
-            </button>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <FF label="Objective">
+                    <select value={formData.objective} onChange={e => setField('objective', e.target.value)} style={{ fontSize: '13px', padding: '8px 12px' }}>
+                      {listOptions.objectives.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </FF>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <FF label="Description / Objective Narrative">
+                    <input value={formData.description} onChange={e => setField('description', e.target.value)} placeholder="Short pitch or narrative" style={{ fontSize: '13px', padding: '8px 12px' }} />
+                  </FF>
+                </div>
+              </div>
+
+              {/* 2. Total Budget Plan & Breakdown */}
+              <SectionTitle
+                icon="fa-coins"
+                title="2. Total Budget Plan & Breakdown"
+                badge={`Total: ${fmtLAK(formData.budget_total)}`}
+              />
+              <div style={{ background: 'var(--ink)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)', marginBottom: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', marginBottom: '14px' }}>
+                  <FF label="Media Cost (₭)" preview={formData.budget_media ? fmtLAKShort(formData.budget_media) : undefined}>
+                    <input type="number" min={0} value={formData.budget_media} onChange={e => setField('budget_media', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  </FF>
+                  <FF label="Prod. Cost (₭)" preview={formData.budget_production ? fmtLAKShort(formData.budget_production) : undefined}>
+                    <input type="number" min={0} value={formData.budget_production} onChange={e => setField('budget_production', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  </FF>
+                  <FF label="Sponsor Cost (₭)" preview={formData.budget_sponsor ? fmtLAKShort(formData.budget_sponsor) : undefined}>
+                    <input type="number" min={0} value={formData.budget_sponsor} onChange={e => setField('budget_sponsor', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  </FF>
+                  <FF label="Merch Cost (₭)" preview={formData.budget_merch ? fmtLAKShort(formData.budget_merch) : undefined}>
+                    <input type="number" min={0} value={formData.budget_merch} onChange={e => setField('budget_merch', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  </FF>
+                  <FF label="Op. Cost (₭)" preview={formData.budget_operation ? fmtLAKShort(formData.budget_operation) : undefined}>
+                    <input type="number" min={0} value={formData.budget_operation} onChange={e => setField('budget_operation', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  </FF>
+                  <FF label="Other Cost (₭)" preview={formData.budget_other ? fmtLAKShort(formData.budget_other) : undefined}>
+                    <input type="number" min={0} value={formData.budget_other} onChange={e => setField('budget_other', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                  </FF>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', padding: '12px 16px', borderRadius: '8px', border: '1px solid var(--border)', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase' }}>Total Budget Plan Sum: </span>
+                    <strong style={{ fontSize: '18px', color: 'var(--accent)', marginLeft: '8px' }}>{fmtLAK(formData.budget_total)}</strong>
+                    <span style={{ fontSize: '12px', color: 'var(--txt-sub)', marginLeft: '8px' }}>({fmtLAKShort(formData.budget_total)})</span>
+                  </div>
+                  <button type="button" className="btn btn-ghost" onClick={syncMerchToBudget} style={{ fontSize: '11px', padding: '5px 12px', border: '1px solid var(--border)' }}>
+                    <i className="fa-solid fa-gift" style={{ color: 'var(--accent)' }}></i> Pull Merch Cost from List
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Merch list and Items */}
+              <SectionTitle
+                icon="fa-box-archive"
+                title="3. Merch List & Items for the Event"
+                badge={`${formData.merch_items_list.length} item types`}
+              />
+              <div style={{ background: 'var(--surface)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border)', marginBottom: '16px' }}>
+                {formData.merch_items_list.length === 0 ? (
+                  <div style={{ padding: '16px', textAlign: 'center', color: 'var(--txt-dim)', fontSize: '12px' }}>
+                    No merch items added yet. Click "+ Add Merch Item" to specify merchandise going to this event.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto', marginBottom: '12px' }}>
+                    <table className="data-table compact" style={{ marginTop: 0 }}>
+                      <thead>
+                        <tr><th>Item Name</th><th style={{ width: '120px' }}>Qty</th><th style={{ width: '150px' }}>Cost per Unit (₭)</th><th style={{ width: '160px' }}>Total (₭)</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        {formData.merch_items_list.map((item, idx) => (
+                          <tr key={idx}>
+                            <td>
+                              <input
+                                list={`catalog-list-${idx}`}
+                                value={item.name}
+                                onChange={e => updateMerchRow(idx, { name: e.target.value })}
+                                placeholder="Select or enter item"
+                                style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
+                              />
+                              <datalist id={`catalog-list-${idx}`}>
+                                {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
+                              </datalist>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.qty}
+                                onChange={e => updateMerchRow(idx, { qty: Number(e.target.value) })}
+                                style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min={0}
+                                value={item.cpu || 0}
+                                onChange={e => updateMerchRow(idx, { cpu: Number(e.target.value) })}
+                                style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
+                              />
+                            </td>
+                            <td>
+                              <strong style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{fmtLAK((item.qty || 0) * (item.cpu || 0))}</strong>
+                            </td>
+                            <td>
+                              <button type="button" className="btn btn-ghost" onClick={() => removeMerchRow(idx)} style={{ color: 'var(--red)', padding: '4px 8px', fontSize: '11px' }}>
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="btn btn-ghost" onClick={() => addMerchRow()} style={{ fontSize: '12px', padding: '6px 12px', border: '1px solid var(--border)' }}>
+                    <i className="fa-solid fa-plus"></i> Add Merch Item
+                  </button>
+                  {catalog.length > 0 && (
+                    <select
+                      onChange={e => { if (e.target.value) { addMerchRow(e.target.value); e.target.value = ''; } }}
+                      style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}
+                      defaultValue=""
+                    >
+                      <option value="" disabled>+ Add from Catalog…</option>
+                      {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Media Sources & Target Impressions */}
+              <SectionTitle icon="fa-bullhorn" title="4. Media Sources & Total Impression Target" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '14px', marginBottom: '16px' }}>
+                <div style={{ gridColumn: 'span 3' }}>
+                  <FF label="Media Sources (Multi-select)">
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {listOptions.mediaSources.map(src => {
+                        const active = formData.media_sources.includes(src);
+                        return (
+                          <button
+                            key={src}
+                            type="button"
+                            onClick={() => toggleMediaSource(src)}
+                            style={{
+                              padding: '6px 14px',
+                              borderRadius: '20px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
+                              background: active ? 'var(--accent-dim)' : 'var(--surface)',
+                              color: active ? 'var(--accent)' : 'var(--txt-sub)',
+                            }}
+                          >
+                            {active && <i className="fa-solid fa-check" style={{ marginRight: '6px' }}></i>}
+                            {src}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FF>
+                </div>
+                <FF label="Target Media Impressions" preview={formData.total_media_impressions ? fmtLAKShort(formData.total_media_impressions) : undefined}>
+                  <input type="number" min={0} value={formData.total_media_impressions} onChange={e => setField('total_media_impressions', Number(e.target.value))} placeholder="e.g. 1,000,000" style={{ fontSize: '13px', padding: '8px 12px' }} />
+                </FF>
+              </div>
+
+              {/* 5. Target Metrics (Field Boxes) */}
+              <SectionTitle
+                icon="fa-crosshairs"
+                title="5. Target Metrics (Target NC, EC, Buy Value, CPA, CPO, CPM, CPF)"
+                badge="Manual Benchmarks"
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                <FF label="Target Buy Value (₭)" preview={formData.target_buy_value ? fmtLAKShort(formData.target_buy_value) : undefined}>
+                  <input type="number" min={0} value={formData.target_buy_value} onChange={e => setField('target_buy_value', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target Footfall">
+                  <input type="number" min={0} value={formData.target_footfall} onChange={e => setField('target_footfall', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target NC (New Customers)">
+                  <input type="number" min={0} value={formData.target_nc} onChange={e => setField('target_nc', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target NC Buyer (Optional)">
+                  <input type="number" min={0} value={formData.target_nc_buyer || 0} onChange={e => setField('target_nc_buyer', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+
+                <FF label="Target EC (Existing Cust.)">
+                  <input type="number" min={0} value={formData.target_ec} onChange={e => setField('target_ec', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target Download">
+                  <input type="number" min={0} value={formData.target_download || 0} onChange={e => setField('target_download', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target KYC">
+                  <input type="number" min={0} value={formData.target_kyc || 0} onChange={e => setField('target_kyc', Number(e.target.value))} style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target CPA (₭ / NC)" preview={formData.target_cpa ? fmtLAKShort(formData.target_cpa) : undefined}>
+                  <input type="number" min={0} value={formData.target_cpa} onChange={e => setField('target_cpa', Number(e.target.value))} placeholder="e.g. 740,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+
+                <FF label="Target CPO (₭ / Order)" preview={formData.target_cpo ? fmtLAKShort(formData.target_cpo) : undefined}>
+                  <input type="number" min={0} value={formData.target_cpo} onChange={e => setField('target_cpo', Number(e.target.value))} placeholder="e.g. 259,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target CPM (₭ / 1k Imp)" preview={formData.target_cpm ? fmtLAKShort(formData.target_cpm) : undefined}>
+                  <input type="number" min={0} value={formData.target_cpm} onChange={e => setField('target_cpm', Number(e.target.value))} placeholder="e.g. 64" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Target CPF (₭ / Footfall)" preview={formData.target_cpf ? fmtLAKShort(formData.target_cpf) : undefined}>
+                  <input type="number" min={0} value={formData.target_cpf} onChange={e => setField('target_cpf', Number(e.target.value))} placeholder="e.g. 43,000" style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+                <FF label="Proposal Google Drive Link">
+                  <input value={formData.proposal_link} onChange={e => setField('proposal_link', e.target.value)} placeholder="https://drive.google.com/..." style={{ fontSize: '13px', padding: '8px 10px' }} />
+                </FF>
+              </div>
+            </div>
+
+            {/* Modal Sticky Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-ghost" onClick={() => { setIsCreating(false); setIsEditing(false); }} style={{ fontSize: '13px', padding: '8px 16px' }}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSavePlan} disabled={saving} style={{ fontSize: '13px', padding: '8px 24px', background: 'linear-gradient(135deg, var(--accent), #2563eb)' }}>
+                <i className="fa-solid fa-floppy-disk"></i> Save Event Plan
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -980,17 +1218,55 @@ export default function EventManagement() {
                   )}
                 </div>
 
-                {/* Card Actions */}
-                <div style={{ padding: '10px 18px', background: 'var(--ink)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => openActualsModal(ev)}
-                    style={{ fontSize: '11px', padding: '6px 14px', background: ev.actual_filled ? 'var(--surface)' : 'var(--accent)', border: '1px solid var(--border)' }}
-                  >
-                    <i className="fa-solid fa-clipboard-check"></i> {ev.actual_filled ? 'Edit Actuals' : 'Fill Actual Results'}
-                  </button>
+                {/* Card Actions (Fixed bottom-left buttons: View Details + Record/Edit Actuals with clear contrast) */}
+                <div style={{ padding: '10px 14px', background: 'var(--ink)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {/* View Details / Full Info Button */}
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setViewingEvent(ev)}
+                      style={{
+                        fontSize: '11px',
+                        padding: '6px 11px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--txt-main)',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                      title="View Full Event Info & Metrics"
+                    >
+                      <i className="fa-solid fa-file-lines" style={{ color: 'var(--accent)' }}></i>
+                      <span>Details</span>
+                    </button>
 
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {/* Record / Edit Actuals Button with crystal clear contrast */}
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => openActualsModal(ev)}
+                      style={{
+                        fontSize: '11px',
+                        padding: '6px 11px',
+                        background: ev.actual_filled ? '#0284c7' : 'linear-gradient(135deg, var(--accent), #2563eb)',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                      title={ev.actual_filled ? 'Edit Recorded Actuals' : 'Record Actual Results'}
+                    >
+                      <i className={`fa-solid ${ev.actual_filled ? 'fa-pen-to-square' : 'fa-bolt'}`}></i>
+                      <span>{ev.actual_filled ? 'Actuals' : 'Record'}</span>
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                     {ev.proposal_link && (
                       <a href={ev.proposal_link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost" style={{ fontSize: '11px', padding: '5px 8px' }} title="Proposal Link">
                         <i className="fa-solid fa-file-pdf"></i>
@@ -1065,7 +1341,8 @@ export default function EventManagement() {
                     <td>{fmtLAKShort(s.actual.cpo)} / {fmtLAKShort(ev.target_cpo)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px' }}>
-                        <button className="btn btn-ghost" onClick={() => openActualsModal(ev)} style={{ padding: '3px 8px', fontSize: '10px' }}>Actuals</button>
+                        <button className="btn btn-ghost" onClick={() => setViewingEvent(ev)} style={{ padding: '3px 8px', fontSize: '10px' }}>Details</button>
+                        <button className="btn btn-ghost" onClick={() => openActualsModal(ev)} style={{ padding: '3px 8px', fontSize: '10px', color: 'var(--accent)' }}>Actuals</button>
                         <button className="btn btn-ghost" onClick={() => startEdit(ev)} style={{ padding: '3px 8px', fontSize: '10px' }}>Edit</button>
                         <button className="btn btn-ghost" onClick={() => handleDelete(ev)} style={{ padding: '3px 6px', fontSize: '10px', color: 'var(--red)' }}><i className="fa-solid fa-trash"></i></button>
                       </div>
@@ -1078,55 +1355,235 @@ export default function EventManagement() {
         </div>
       )}
 
-      {/* ══ ACTUALS FILLING MODAL ══ */}
+      {/* ══ EXECUTIVE VIEW MODAL (EVENT DETAILS / FULL INFO) ══ */}
+      {viewingEvent && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.82)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          onClick={e => { if (e.target === e.currentTarget) setViewingEvent(null); }}
+        >
+          <div style={{ background: 'var(--surface)', borderRadius: '16px', width: '100%', maxWidth: '960px', maxHeight: '92vh', overflowY: 'auto', boxShadow: 'var(--shadow)', border: '1px solid var(--border)' }}>
+            {/* Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, var(--ink), var(--surface))', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                  <span className="pill" style={{ background: scaleColor(viewingEvent.scale), color: '#fff', fontSize: '10px', fontWeight: 800 }}>
+                    {viewingEvent.scale.toUpperCase()} — {viewingEvent.activity_type}
+                  </span>
+                  <span className="pill pill-gold">{viewingEvent.team}</span>
+                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px', background: `${statusColor(viewingEvent.status)}22`, color: statusColor(viewingEvent.status) }}>
+                    {statusLabel(viewingEvent.status)}
+                  </span>
+                </div>
+                <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 800 }}>{viewingEvent.event_name}</h2>
+                <div style={{ fontSize: '12px', color: 'var(--txt-sub)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  <span><i className="fa-regular fa-calendar" style={{ marginRight: '5px' }}></i>{labelDate(viewingEvent.start_date)} → {labelDate(viewingEvent.end_date)}</span>
+                  {viewingEvent.location && <span><i className="fa-solid fa-location-dot" style={{ marginRight: '5px' }}></i>{viewingEvent.location}</span>}
+                  {viewingEvent.objective && <span><i className="fa-solid fa-bullseye" style={{ marginRight: '5px' }}></i>{viewingEvent.objective}</span>}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {viewingEvent.proposal_link && (
+                  <a href={viewingEvent.proposal_link} target="_blank" rel="noopener noreferrer" className="btn btn-ghost" style={{ fontSize: '12px', padding: '6px 12px' }}>
+                    <i className="fa-solid fa-arrow-up-right-from-square"></i> Proposal Link
+                  </a>
+                )}
+                <button
+                  className="btn btn-primary"
+                  onClick={() => { const ev = viewingEvent; setViewingEvent(null); openActualsModal(ev); }}
+                  style={{ fontSize: '12px', padding: '6px 14px', background: viewingEvent.actual_filled ? '#0284c7' : 'linear-gradient(135deg, var(--accent), #2563eb)' }}
+                >
+                  <i className="fa-solid fa-bolt"></i> {viewingEvent.actual_filled ? 'Edit Actuals' : 'Record Actuals'}
+                </button>
+                <button onClick={() => setViewingEvent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: 'var(--txt-sub)', padding: '4px' }}>×</button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '22px 24px' }}>
+              {/* Executive KPI Scorecard */}
+              {(() => {
+                const s = computeEventHitSummary(viewingEvent);
+                const actual = s.actual;
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '22px' }}>
+                    <KpiChip
+                      label="Total Spend / Budget"
+                      value={fmtLAKShort(actual.cost)}
+                      sub={`Plan: ${fmtLAKShort(viewingEvent.budget_total || viewingEvent.media_cost || 0)}`}
+                      color={actual.cost <= (viewingEvent.budget_total || viewingEvent.media_cost || 0) ? 'var(--green)' : 'var(--orange)'}
+                    />
+                    <KpiChip
+                      label="New Customers (NC)"
+                      value={`${actual.nc} / ${viewingEvent.target_nc}`}
+                      sub={`${fmtPct(s.ncPct)} ${s.ncBeat ? '— beat target' : 'of target'}`}
+                      color={s.ncBeat ? 'var(--green)' : 'var(--orange)'}
+                    />
+                    <KpiChip
+                      label="Actual CPA (per NC)"
+                      value={fmtLAKShort(actual.cpa)}
+                      sub={`Target: ${fmtLAKShort(viewingEvent.target_cpa)}`}
+                      color={s.cpaBeat ? 'var(--green)' : 'var(--orange)'}
+                    />
+                    <KpiChip
+                      label="Actual CPO (per Buyer)"
+                      value={fmtLAKShort(actual.cpo)}
+                      sub={`Target: ${fmtLAKShort(viewingEvent.target_cpo)}`}
+                      color={s.cpoBeat ? 'var(--green)' : 'var(--blue)'}
+                    />
+                  </div>
+                );
+              })()}
+
+              {/* 2-Column Section: Budget Breakdown & Target vs Actual */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '20px', marginBottom: '22px' }}>
+                {/* Left: Plan Budget Breakdown */}
+                <div style={{ background: 'var(--ink)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><i className="fa-solid fa-coins" style={{ color: 'var(--accent)', marginRight: '6px' }}></i>Budget Plan Breakdown</span>
+                    <strong style={{ color: 'var(--txt-main)' }}>{fmtLAK(viewingEvent.budget_total)}</strong>
+                  </div>
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Media Cost</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtLAK(viewingEvent.budget_media)}</td></tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Production Cost</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtLAK(viewingEvent.budget_production)}</td></tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Sponsor Cost</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtLAK(viewingEvent.budget_sponsor)}</td></tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Merch Cost</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtLAK(viewingEvent.budget_merch)}</td></tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}><td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Operation Cost</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtLAK(viewingEvent.budget_operation)}</td></tr>
+                      <tr><td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Other Cost</td><td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtLAK(viewingEvent.budget_other)}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Right: Targets vs Actual Outcomes */}
+                <div style={{ background: 'var(--ink)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span><i className="fa-solid fa-chart-line" style={{ color: 'var(--accent)', marginRight: '6px' }}></i>Performance Targets</span>
+                    <span style={{ fontSize: '11px', color: viewingEvent.actual_filled ? 'var(--green)' : 'var(--gold)' }}>
+                      {viewingEvent.actual_filled ? 'Actuals Verified' : '100% Plan Default'}
+                    </span>
+                  </div>
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Buy Value</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtLAKShort(viewingEvent.actual_filled ? (viewingEvent.actual_buy_value || 0) : viewingEvent.target_buy_value)} <span style={{ color: 'var(--txt-dim)', fontSize: '10px' }}>(Tgt: {fmtLAKShort(viewingEvent.target_buy_value)})</span></td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Footfall</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{viewingEvent.actual_filled ? (viewingEvent.actual_footfall || 0) : (viewingEvent.target_footfall || 0)} <span style={{ color: 'var(--txt-dim)', fontSize: '10px' }}>(Tgt: {viewingEvent.target_footfall || '—'})</span></td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Media Impressions</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtLAKShort(viewingEvent.actual_filled ? (viewingEvent.actual_impressions || 0) : viewingEvent.total_media_impressions)}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Existing Cust. (EC)</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{viewingEvent.actual_filled ? (viewingEvent.actual_ec || 0) : viewingEvent.target_ec}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '6px 0', color: 'var(--txt-sub)' }}>Media Channels</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {(viewingEvent.media_sources || []).map(m => <span key={m} className="pill pill-blue" style={{ fontSize: '10px', marginLeft: '4px' }}>{m}</span>)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Photos Gallery */}
+              {viewingEvent.photo_urls && viewingEvent.photo_urls.filter(Boolean).length > 0 && (
+                <div style={{ marginBottom: '18px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '10px' }}>
+                    <i className="fa-solid fa-images" style={{ color: 'var(--accent)', marginRight: '6px' }}></i>
+                    Event Media Photos ({viewingEvent.photo_urls.filter(Boolean).length})
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                    {viewingEvent.photo_urls.filter(Boolean).map((p, i) => (
+                      <a key={i} href={p} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', height: '140px', background: '#000', border: '1px solid var(--border)' }}>
+                        <img src={p} alt={`event-photo-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Merch List Preview if present */}
+              {viewingEvent.merch_items_list && viewingEvent.merch_items_list.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '10px' }}>
+                    <i className="fa-solid fa-box-archive" style={{ color: 'var(--accent)', marginRight: '6px' }}></i>
+                    Merch Items Allocated ({viewingEvent.merch_items_list.length})
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {viewingEvent.merch_items_list.map((m, i) => (
+                      <span key={i} className="pill" style={{ background: 'var(--ink)', border: '1px solid var(--border)', fontSize: '11px', padding: '6px 12px' }}>
+                        <strong>{m.name}</strong>: {m.qty} pcs ({fmtLAK(m.total || (m.qty * (m.cpu || 0)))})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn btn-ghost" onClick={() => setViewingEvent(null)} style={{ fontSize: '13px', padding: '7px 18px' }}>Close</button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { const ev = viewingEvent; setViewingEvent(null); startEdit(ev); }}
+                style={{ fontSize: '13px', padding: '7px 18px', border: '1px solid var(--border)' }}
+              >
+                <i className="fa-solid fa-pen"></i> Edit Plan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ ACTUALS RECORDING MODAL (CLEANED UP & EXECUTIVE-READY) ══ */}
       {actualEvent && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.8)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.82)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
           onClick={e => { if (e.target === e.currentTarget) setActualEvent(null); }}
         >
-          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', width: '100%', maxWidth: '900px', maxHeight: '92vh', overflowY: 'auto', boxShadow: 'var(--shadow)', border: '1px solid var(--border)' }}>
-            {/* Modal Header */}
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, var(--ink), transparent)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: '16px', width: '100%', maxWidth: '920px', maxHeight: '92vh', overflowY: 'auto', boxShadow: 'var(--shadow)', border: '1px solid var(--border)' }}>
+            {/* Modal Header with clean Pre-fill button (no verbose text) */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, var(--ink), var(--surface))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <div>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
                   <span className="pill pill-gold">{actualEvent.team}</span>
                   <span className="pill" style={{ background: scaleColor(actualEvent.scale), color: '#fff', fontSize: '10px' }}>{actualEvent.scale} — {actualEvent.activity_type}</span>
                 </div>
-                <h2 style={{ margin: '0 0 4px', fontSize: '20px', fontWeight: 800 }}>Record Actual Results — {actualEvent.event_name}</h2>
+                <h2 style={{ margin: '0 0 2px', fontSize: '19px', fontWeight: 800 }}>Record Actual Results — {actualEvent.event_name}</h2>
                 <div style={{ fontSize: '12px', color: 'var(--txt-sub)' }}>
-                  When the event ends, fill in actual spending, outcomes, and up to 4 photos. Actual CP metrics are autocalculated.
+                  Record actual spending and results. Cost-per metrics are calculated live.
                 </div>
               </div>
-              <button onClick={() => setActualEvent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-sub)', fontSize: '22px', padding: '4px' }}>×</button>
-            </div>
 
-            <div style={{ padding: '20px 24px' }}>
-              {/* 100% Execution Info Banner & Quick Fill button */}
-              <div style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent)', borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>
-                    <i className="fa-solid fa-circle-info" style={{ marginRight: '6px' }}></i>Default Rule: If actual fields are not filled, the event defaults to 100% Plan Execution.
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--txt-sub)', marginTop: '2px' }}>
-                    Click below to pre-populate all actual fields with 100% of your targets for fast review.
-                  </div>
-                </div>
+              {/* Clean Pre-fill button without clutter */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={copy100PctFromPlan}
-                  style={{ fontSize: '11px', padding: '6px 14px' }}
+                  style={{ fontSize: '12px', padding: '7px 14px', background: 'linear-gradient(135deg, var(--accent), #2563eb)' }}
+                  title="Populate all fields with 100% of planned targets"
                 >
-                  <i className="fa-solid fa-bolt"></i> Pre-fill 100% From Plan
+                  <i className="fa-solid fa-bolt"></i> Pre-fill from Plan
                 </button>
+                <button onClick={() => setActualEvent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-sub)', fontSize: '22px', padding: '4px' }}>×</button>
               </div>
+            </div>
 
+            <div style={{ padding: '20px 24px' }}>
               {/* Actual Spending Cost */}
               <div style={{ marginBottom: '18px' }}>
                 <SectionTitle icon="fa-coins" title="Actual Spending Cost" badge={`Plan Budget: ${fmtLAK(actualEvent.budget_total || actualEvent.media_cost || 0)}`} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
                   <div style={{ gridColumn: 'span 2' }}>
-                    <FF label="Total Actual Spending Cost (₭) *" note="Main figure for slide reporting">
+                    <FF label="Total Actual Spending Cost (₭) *" preview={actualData.actual_cost ? fmtLAKShort(actualData.actual_cost) : undefined} note="Main figure for executive slides">
                       <input
                         type="number"
                         min={0}
@@ -1136,10 +1593,10 @@ export default function EventManagement() {
                       />
                     </FF>
                   </div>
-                  <FF label="Actual Media Cost (₭)">
+                  <FF label="Actual Media Cost (₭)" preview={actualData.actual_media_cost ? fmtLAKShort(actualData.actual_media_cost) : undefined}>
                     <input type="number" min={0} value={actualData.actual_media_cost} onChange={e => setActualData(d => ({ ...d, actual_media_cost: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
-                  <FF label="Actual Production Cost (₭)">
+                  <FF label="Actual Prod. Cost (₭)" preview={actualData.actual_production_cost ? fmtLAKShort(actualData.actual_production_cost) : undefined}>
                     <input type="number" min={0} value={actualData.actual_production_cost} onChange={e => setActualData(d => ({ ...d, actual_production_cost: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
                 </div>
@@ -1149,10 +1606,10 @@ export default function EventManagement() {
               <div style={{ marginBottom: '18px' }}>
                 <SectionTitle icon="fa-chart-pie" title="Actual Customer & Engagement Outcomes" />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
-                  <FF label="Actual NC (New Customers)" note={`Target: ${actualEvent.target_nc}`}>
+                  <FF label="Actual NC (New Cust.)" note={`Target: ${actualEvent.target_nc}`}>
                     <input type="number" min={0} value={actualData.actual_nc} onChange={e => setActualData(d => ({ ...d, actual_nc: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
-                  <FF label="Actual EC (Existing Customers)" note={`Target: ${actualEvent.target_ec}`}>
+                  <FF label="Actual EC (Existing)" note={`Target: ${actualEvent.target_ec}`}>
                     <input type="number" min={0} value={actualData.actual_ec} onChange={e => setActualData(d => ({ ...d, actual_ec: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
                   <FF label="Actual NC Buyer (Optional)" note={`Target: ${actualEvent.target_nc_buyer || '—'}`}>
@@ -1162,10 +1619,10 @@ export default function EventManagement() {
                     <input type="number" min={0} value={actualData.actual_footfall} onChange={e => setActualData(d => ({ ...d, actual_footfall: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
 
-                  <FF label="Actual Buy Value (₭)" note={`Target: ${fmtLAKShort(actualEvent.target_buy_value)}`}>
+                  <FF label="Actual Buy Value (₭)" preview={actualData.actual_buy_value ? fmtLAKShort(actualData.actual_buy_value) : undefined} note={`Target: ${fmtLAKShort(actualEvent.target_buy_value)}`}>
                     <input type="number" min={0} value={actualData.actual_buy_value} onChange={e => setActualData(d => ({ ...d, actual_buy_value: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
-                  <FF label="Actual Impressions" note={`Target: ${(actualEvent.total_media_impressions || 0).toLocaleString()}`}>
+                  <FF label="Actual Impressions" preview={actualData.actual_impressions ? fmtLAKShort(actualData.actual_impressions) : undefined} note={`Target: ${fmtLAKShort(actualEvent.total_media_impressions || 0)}`}>
                     <input type="number" min={0} value={actualData.actual_impressions} onChange={e => setActualData(d => ({ ...d, actual_impressions: Number(e.target.value) }))} style={{ fontSize: '13px', padding: '8px 10px' }} />
                   </FF>
                   <FF label="Actual Downloads">
@@ -1181,7 +1638,7 @@ export default function EventManagement() {
               <div style={{ background: 'var(--ink)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)', marginBottom: '20px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '10px' }}>
                   <i className="fa-solid fa-calculator" style={{ marginRight: '6px', color: 'var(--accent)' }}></i>
-                  Autocalculated Cost-Per Metrics (Live Derived from Actual Spending)
+                  Autocalculated Cost-Per Metrics (Derived Live from Actual Spending)
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
                   <KpiChip label="Actual CPA (per NC)" value={fmtLAK(liveCP.cpa)} sub={actualEvent.target_cpa ? `Target: ${fmtLAK(actualEvent.target_cpa)}` : undefined} color={liveCP.cpa <= actualEvent.target_cpa ? 'var(--green)' : 'var(--orange)'} />
@@ -1212,12 +1669,12 @@ export default function EventManagement() {
                       />
                     </FF>
                     {actualData.photo_urls[slot] && (
-                      <div style={{ height: '100px', borderRadius: '6px', overflow: 'hidden', background: '#000', marginTop: '6px' }}>
+                      <div style={{ height: '90px', borderRadius: '6px', overflow: 'hidden', background: '#000', marginTop: '6px' }}>
                         <img
                           src={actualData.photo_urls[slot]}
                           alt={`preview-${slot}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={e => { (e.currentTarget as HTMLImageElement).alt = 'Image failed to load (check URL)'; }}
+                          onError={e => { (e.currentTarget as HTMLImageElement).alt = 'Image failed to load'; }}
                         />
                       </div>
                     )}
@@ -1241,7 +1698,7 @@ export default function EventManagement() {
             {/* Modal Footer */}
             <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button className="btn btn-ghost" onClick={() => setActualEvent(null)} style={{ fontSize: '13px', padding: '8px 16px' }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSaveActuals} disabled={savingActuals} style={{ fontSize: '13px', padding: '8px 24px' }}>
+              <button className="btn btn-primary" onClick={handleSaveActuals} disabled={savingActuals} style={{ fontSize: '13px', padding: '8px 24px', background: 'linear-gradient(135deg, var(--accent), #2563eb)' }}>
                 {savingActuals ? <><i className="fa-solid fa-spinner fa-spin"></i> Saving…</> : <><i className="fa-solid fa-check"></i> Save & Confirm Actuals</>}
               </button>
             </div>

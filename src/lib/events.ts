@@ -193,6 +193,46 @@ export const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
 export const EVENT_STATUSES = ['pending', 'active', 'completed', 'cancelled'] as const;
 export const MEDIA_SOURCES = ['Facebook', 'Tiktok', 'Line', 'Youtube', 'inApp', 'Other'] as const;
 
+export interface CustomListOptions {
+  scales: string[];
+  objectives: string[];
+  teams: string[];
+  mediaSources: string[];
+}
+
+export const DEFAULT_LIST_OPTIONS: CustomListOptions = {
+  scales: [...EVENT_SCALES],
+  objectives: [...EVENT_OBJECTIVES],
+  teams: [...EVENT_TEAMS],
+  mediaSources: [...MEDIA_SOURCES],
+};
+
+const LIST_OPTIONS_STORAGE_KEY = 'easygold_list_options_v1';
+
+export function getCustomListOptions(): CustomListOptions {
+  try {
+    const raw = localStorage.getItem(LIST_OPTIONS_STORAGE_KEY);
+    if (!raw) return DEFAULT_LIST_OPTIONS;
+    const parsed = JSON.parse(raw);
+    return {
+      scales: Array.isArray(parsed.scales) && parsed.scales.length ? parsed.scales : DEFAULT_LIST_OPTIONS.scales,
+      objectives: Array.isArray(parsed.objectives) && parsed.objectives.length ? parsed.objectives : DEFAULT_LIST_OPTIONS.objectives,
+      teams: Array.isArray(parsed.teams) && parsed.teams.length ? parsed.teams : DEFAULT_LIST_OPTIONS.teams,
+      mediaSources: Array.isArray(parsed.mediaSources) && parsed.mediaSources.length ? parsed.mediaSources : DEFAULT_LIST_OPTIONS.mediaSources,
+    };
+  } catch {
+    return DEFAULT_LIST_OPTIONS;
+  }
+}
+
+export function saveCustomListOptions(opts: CustomListOptions): void {
+  try {
+    localStorage.setItem(LIST_OPTIONS_STORAGE_KEY, JSON.stringify(opts));
+  } catch (err) {
+    console.error('Failed to save custom list options:', err);
+  }
+}
+
 export const THIS_YEAR = new Date().getFullYear();
 
 export const blankEvent = (firstTypeName: string): Omit<Event, 'id' | 'created_at' | 'updated_at' | 'quarter'> => ({
