@@ -364,10 +364,6 @@ export default function EventManagement() {
     });
   };
 
-  const syncMerchToBudget = () => {
-    const total = recalculateMerchCost(formData.merch_items_list);
-    setField('budget_merch', total);
-  };
 
   // ── Plan CRUD handlers ──
   const openCreate = async () => {
