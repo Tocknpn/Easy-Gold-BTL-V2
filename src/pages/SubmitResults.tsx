@@ -5,6 +5,8 @@ import type { Submission, MerchItem } from '../lib/submissions';
 import { MERCH_CATALOG, fetchMerchCatalog, saveLocalSubmission, getLocalSubmissions, labelDate, fmtLAKShort, clearSubmissionsCache, DEFAULT_ACTIVITY_TYPE, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT } from '../lib/submissions';
 import { fetchCheckIns, fetchStaff, getCurrentUser, writeAuditLog } from '../lib/workflow';
 import type { CheckInRecord, StaffMember } from '../lib/workflow';
+import type { Event } from '../lib/events';
+import { fetchEvents } from '../lib/events';
 
 // Helper component for number inputs with comma formatting (e.g. 1,000)
 const NumberInput = ({ value, onChange, placeholder }: { value: number, onChange: (v: number) => void, placeholder?: string }) => {
@@ -42,21 +44,26 @@ export default function SubmitResults() {
 
   const [allCheckIns, setAllCheckIns] = useState<CheckInRecord[]>([]);
   const [kpvStaff, setKpvStaff] = useState<StaffMember[]>([]);
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
 
   React.useEffect(() => {
     const load = async () => {
-      const [checkIns, allStaff] = await Promise.all([
+      const [checkIns, allStaff, { data: evs }] = await Promise.all([
         fetchCheckIns(),
-        fetchStaff()
+        fetchStaff(),
+        fetchEvents(),
       ]);
       setAllCheckIns(checkIns);
       setKpvStaff(allStaff.filter(s => s.team === 'KPV'));
+      if (evs) setAllEvents(evs);
     };
     load();
   }, [user]);
 
   // Filter check-ins by the currently selected team
   const myCheckIns = allCheckIns.filter(c => c.team === selectedTeam);
+  const myEvents = allEvents.filter(e => (e.team || 'KPV').toUpperCase() === selectedTeam.toUpperCase());
 
   const [checkInId, setCheckInId] = useState('');
   // Booth (default) or Event — chosen next to the Activity Check-in selector.
@@ -156,6 +163,7 @@ export default function SubmitResults() {
       footfall,
       step_in: stepIn,
       status: 'active',
+      event_id: selectedEventId || null,
     };
 
     // Best-effort database write. We only save locally if the DB fails to avoid duplicate row glitches.
@@ -183,6 +191,7 @@ export default function SubmitResults() {
         footfall: record.footfall,
         step_in: record.step_in,
         status: record.status,
+        event_id: record.event_id || null,
       };
       let { error } = await supabase
         .from('submissions')
@@ -301,6 +310,34 @@ export default function SubmitResults() {
           <option value="booth">Booth</option>
           <option value="event">Event</option>
         </select>
+
+        {/* Link to Event Plan if Event is chosen or available */}
+        {activityType === 'event' && myEvents.length > 0 && (
+          <>
+            <span aria-hidden="true" style={{ width: '1px', height: '22px', background: 'rgba(124,58,237,0.4)' }}></span>
+            <strong style={{ fontSize: '13px', color: '#c084fc', whiteSpace: 'nowrap' }}>🎪 Event Plan:</strong>
+            <select
+              value={selectedEventId}
+              onChange={e => {
+                const evId = e.target.value;
+                setSelectedEventId(evId);
+                const ev = myEvents.find(x => x.id === evId);
+                if (ev) {
+                  if (!branch && (ev.location || ev.event_name)) setBranch(ev.location || ev.event_name);
+                  if (!date && ev.start_date) setDate(ev.start_date);
+                }
+              }}
+              style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid #a855f7', color: '#e9d5ff', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, width: 'auto', minWidth: '220px' }}
+            >
+              <option value="">— Link to Event Plan (Optional) —</option>
+              {myEvents.map(ev => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.event_name} ({ev.scale} · {ev.activity_type})
+                </option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
 
       <div className="card">

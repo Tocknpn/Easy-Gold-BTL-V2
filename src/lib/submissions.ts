@@ -34,6 +34,7 @@ export interface Submission {
   footfall: number;
   step_in: number;
   status: string;
+  event_id?: string | null;
   /** true when this row came from the lightweight summary fetch (no merch/staff
    *  JSON). Hydrate with fetchSubmissionById() before offering Edit — saving a
    *  light row as-is would overwrite merch_items / staff_in_charge with empty. */

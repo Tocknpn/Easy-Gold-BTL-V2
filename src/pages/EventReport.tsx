@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Event, EventKPIs, EventTarget, LinkedSubmission } from '../lib/events';
+import type { Event } from '../lib/events';
 import {
-  fetchEvents, fetchLinkedSubmissions, computeEventKPIs, fetchEventTargets, fetchEventTypes,
+  fetchEvents, fetchEventTypes,
+  computeEventHitSummary,
   EVENT_TEAMS, MONTHS,
-  currentMonth, fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel,
+  fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel, scaleColor,
 } from '../lib/events';
-
-// ── Helpers ────────────────────────────────────────────────────────────────
 
 const THIS_YEAR = new Date().getFullYear();
 const labelDate = (s: string) => {
@@ -41,391 +40,47 @@ function KpiPill({ label, value, color }: { label: string; value: string; color?
   );
 }
 
-// ── Event Card ─────────────────────────────────────────────────────────────
-
-interface EventCardProps {
-  event: Event;
-  kpis: EventKPIs | null;
-  targets: EventTarget[];
-  onClick: () => void;
-}
-
-function EventCard({ event, kpis, targets, onClick }: EventCardProps) {
-  const evMonth = event.start_date ? new Date(event.start_date + 'T00:00:00').getMonth() + 1 : 0;
-  const target = targets.find(t =>
-    t.team === event.team &&
-    t.activity_type === event.activity_type &&
-    t.month === evMonth &&
-    t.year === event.year
-  );
-
-  const teamColor = event.team === 'Agency' ? 'var(--blue)' : event.team === 'ESG' ? 'var(--green)' : 'var(--accent)';
-  const teamPillClass = event.team === 'Agency' ? 'pill-blue' : event.team === 'ESG' ? 'pill-green' : 'pill-gold';
-
-  return (
-    <div
-      className="card"
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }}}
-      style={{
-        cursor: 'pointer',
-        padding: 0,
-        overflow: 'hidden',
-        transition: 'transform 0.18s ease, box-shadow 0.18s ease',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow)';
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-sm)';
-      }}
-    >
-      {/* Card header — coloured by team */}
-      <div style={{
-        background: `linear-gradient(135deg, ${teamColor}22, ${teamColor}08)`,
-        borderBottom: `2px solid ${teamColor}44`,
-        padding: '16px 18px 12px',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-            <span className={`pill ${teamPillClass}`} style={{ fontSize: '9px' }}>{event.team}</span>
-            <span className="pill" style={{ fontSize: '9px', background: 'var(--border)', color: 'var(--txt-dim)' }}>{event.quarter} {event.year}</span>
-          </div>
-          <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', background: `${statusColor(event.status)}22`, color: statusColor(event.status), border: `1px solid ${statusColor(event.status)}44`, flexShrink: 0 }}>
-            {statusLabel(event.status)}
-          </span>
-        </div>
-
-        <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--txt-main)', marginBottom: '3px', lineHeight: 1.3 }}>
-          {event.event_name}
-        </div>
-        <div style={{ fontSize: '10px', color: 'var(--txt-sub)' }}>
-          <i className="fa-solid fa-tag" style={{ marginRight: '4px', fontSize: '9px' }}></i>{event.activity_type}
-          &nbsp;·&nbsp;
-          <i className="fa-regular fa-calendar" style={{ marginRight: '4px', fontSize: '9px' }}></i>
-          {labelDate(event.start_date)} → {labelDate(event.end_date)}
-        </div>
-      </div>
-
-      {/* KPI metrics grid */}
-      <div style={{ padding: '12px 18px', flex: 1 }}>
-        {kpis ? (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '1px solid var(--border)', marginBottom: '10px' }}>
-              <KpiPill label="NC" value={kpis.total_nc.toLocaleString()} color="var(--accent)" />
-              <KpiPill label="Cost" value={fmtLAKShort(kpis.total_cost)} color="var(--orange)" />
-              <KpiPill label="CPA" value={kpis.cpa > 0 ? fmtLAKShort(Math.round(kpis.cpa)) : '—'} color="var(--blue)" />
-              <KpiPill label="CPF" value={kpis.cpf > 0 ? fmtLAKShort(Math.round(kpis.cpf)) : '—'} color="var(--green)" />
-            </div>
-
-            {/* Progress bars (only if targets set) */}
-            {event.target_nc > 0 && (
-              <>
-                <MetricBar label="NC Target" pct={kpis.pct_nc} color="var(--accent)" />
-                {event.target_buy_value > 0 && <MetricBar label="Buy Value Target" pct={kpis.pct_buy_value} color="var(--green)" />}
-              </>
-            )}
-            {event.target_nc === 0 && (
-              <div style={{ fontSize: '11px', color: 'var(--txt-dim)', textAlign: 'center', padding: '6px 0' }}>
-                {kpis.linked_count} submission{kpis.linked_count !== 1 ? 's' : ''} linked · No targets set
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ fontSize: '11px', color: 'var(--txt-dim)', textAlign: 'center', padding: '12px 0' }}>
-            <i className="fa-solid fa-spinner fa-spin" style={{ marginRight: '6px' }}></i>Computing KPIs…
-          </div>
-        )}
-      </div>
-
-      {/* Footer links */}
-      {(event.photo_gallery_link || event.proposal_link || event.regional_approved) && (
-        <div style={{ padding: '8px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {event.regional_approved && (
-            <span style={{ fontSize: '10px', color: 'var(--green)', fontWeight: 700 }}>
-              <i className="fa-solid fa-circle-check" style={{ marginRight: '3px' }}></i>Approved
-            </span>
-          )}
-          {event.photo_gallery_link && (
-            <a href={event.photo_gallery_link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: '10px', color: 'var(--txt-sub)', textDecoration: 'none' }}>
-              <i className="fa-solid fa-images" style={{ marginRight: '3px' }}></i>Gallery
-            </a>
-          )}
-          {event.proposal_link && (
-            <a href={event.proposal_link} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: '10px', color: 'var(--txt-sub)', textDecoration: 'none' }}>
-              <i className="fa-solid fa-file-pdf" style={{ marginRight: '3px' }}></i>Proposal
-            </a>
-          )}
-          {target && (
-            <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--txt-dim)' }}>
-              CPF Tgt: {fmtLAKShort(target.cpf_target)}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Detail Modal ───────────────────────────────────────────────────────────
-
-interface ModalProps {
-  event: Event | null;
-  kpis: EventKPIs | null;
-  subs: LinkedSubmission[];
-  targets: EventTarget[];
-  onClose: () => void;
-}
-
-function EventDetailModal({ event, kpis, subs, targets, onClose }: ModalProps) {
-  if (!event) return null;
-
-  const evMonth2 = event.start_date ? new Date(event.start_date + 'T00:00:00').getMonth() + 1 : 0;
-  const target = targets.find(t =>
-    t.team === event.team &&
-    t.activity_type === event.activity_type &&
-    t.month === evMonth2 &&
-    t.year === event.year
-  );
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Event profile: ${event.event_name}`}
-    >
-      <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', width: '100%', maxWidth: '860px', maxHeight: '90vh', overflowY: 'auto', boxShadow: 'var(--shadow)', display: 'flex', flexDirection: 'column' }}>
-
-        {/* Modal Header */}
-        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, var(--accent-dim), transparent)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                <span className={`pill ${event.team === 'Agency' ? 'pill-blue' : 'pill-gold'}`}>{event.team}</span>
-                <span className="pill pill-blue" style={{ fontSize: '9px' }}>{event.activity_type}</span>
-                <span className="pill" style={{ fontSize: '9px', background: 'var(--border)', color: 'var(--txt-dim)' }}>{event.quarter} {event.year}</span>
-                {event.scale && <span className="pill" style={{ fontSize: '9px', background: 'var(--orange-dim)', color: 'var(--orange)' }}>{event.scale}</span>}
-                <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', background: `${statusColor(event.status)}22`, color: statusColor(event.status), border: `1px solid ${statusColor(event.status)}44` }}>{statusLabel(event.status)}</span>
-              </div>
-              <h2 style={{ margin: '0 0 4px', fontSize: '22px', fontWeight: 800 }}>{event.event_name}</h2>
-              <div style={{ fontSize: '12px', color: 'var(--txt-sub)' }}>
-                {labelDate(event.start_date)} → {labelDate(event.end_date)}
-                {event.regional_approved && <span style={{ marginLeft: '12px', color: 'var(--green)', fontWeight: 700 }}><i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i>Approved {event.approval_date ? labelDate(event.approval_date) : ''}</span>}
-              </div>
-            </div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--txt-sub)', fontSize: '20px', padding: '4px 8px', lineHeight: 1 }} aria-label="Close modal">×</button>
-          </div>
-          {event.description && (
-            <div style={{ marginTop: '12px', fontSize: '13px', color: 'var(--txt-sub)', lineHeight: 1.6, background: 'var(--ink)', borderRadius: '8px', padding: '10px 14px' }}>
-              {event.description}
-            </div>
-          )}
-        </div>
-
-        {/* KPI Dashboard */}
-        {kpis && (
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', background: 'var(--ink)' }}>
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
-              <i className="fa-solid fa-chart-mixed" style={{ marginRight: '6px', color: 'var(--accent)' }}></i>
-              Performance KPIs — {kpis.linked_count} Submission{kpis.linked_count !== 1 ? 's' : ''} Linked
-            </div>
-
-            {/* Main KPI row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '12px' }}>
-              {[
-                { label: 'TOTAL COST', val: fmtLAKShort(kpis.total_cost), sub: `Subs ₭${(kpis.total_cost_from_subs / 1e6).toFixed(1)}M + Media ₭${(event.media_cost / 1e6).toFixed(1)}M`, color: 'var(--accent)' },
-                { label: 'CPA (per NC)', val: kpis.cpa > 0 ? fmtLAK(Math.round(kpis.cpa)) : '—', sub: target ? `Target: ${fmtLAK(target.cpa_target)}` : undefined, color: kpis.cpa > 0 && target && kpis.cpa <= target.cpa_target ? 'var(--green)' : 'var(--orange)' },
-                { label: 'CPO (per Order)', val: kpis.cpo > 0 ? fmtLAK(Math.round(kpis.cpo)) : '—', sub: target ? `Target: ${fmtLAK(target.cpo_target)}` : undefined, color: 'var(--blue)' },
-                { label: 'CPM (per 1K imp)', val: kpis.cpm > 0 ? fmtLAK(Math.round(kpis.cpm)) : '—', sub: target ? `Target: ${fmtLAK(target.cpm_target)}` : undefined, color: 'var(--txt-main)' },
-              ].map(m => (
-                <div key={m.label} style={{ background: 'var(--surface)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '3px' }}>{m.label}</div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: m.color }}>{m.val}</div>
-                  {m.sub && <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '2px' }}>{m.sub}</div>}
-                </div>
-              ))}
-            </div>
-
-            {/* Volume row */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '12px' }}>
-              {[
-                { label: 'NC Achieved', val: kpis.total_nc.toLocaleString(), sub: `Target: ${event.target_nc.toLocaleString()}`, pct: kpis.pct_nc, color: 'var(--accent)' },
-                { label: 'EC Achieved', val: kpis.total_ec.toLocaleString(), sub: `Target: ${event.target_ec.toLocaleString()}`, pct: kpis.pct_ec, color: 'var(--blue)' },
-                { label: 'Buy Value', val: fmtLAKShort(kpis.total_buy_value), sub: `Target: ${fmtLAKShort(event.target_buy_value)}`, pct: kpis.pct_buy_value, color: 'var(--green)' },
-                { label: 'Footfall', val: kpis.total_footfall.toLocaleString(), sub: `CPF: ${kpis.cpf > 0 ? fmtLAK(Math.round(kpis.cpf)) : '—'}${target ? ` (Tgt: ${fmtLAK(target.cpf_target)})` : ''}`, pct: null as null, color: 'var(--txt-main)' },
-              ].map(m => (
-                <div key={m.label} style={{ background: 'var(--surface)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '3px' }}>{m.label}</div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: m.pct !== null && m.pct >= 100 ? 'var(--green)' : m.color }}>{m.val}</div>
-                  {m.sub && event.target_nc > 0 && <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '2px' }}>{m.sub}</div>}
-                  {m.pct !== null && event.target_nc > 0 && (
-                    <div style={{ height: '3px', background: 'var(--border)', borderRadius: '2px', overflow: 'hidden', marginTop: '5px' }}>
-                      <div style={{ height: '100%', width: `${Math.min(100, m.pct)}%`, background: m.pct >= 100 ? 'var(--green)' : m.color, borderRadius: '2px' }} />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* % targets summary */}
-            {event.target_nc > 0 && (
-              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '12px' }}>%NC Hit: <strong style={{ color: kpis.pct_nc >= 100 ? 'var(--green)' : kpis.pct_nc >= 70 ? 'var(--orange)' : 'var(--red)' }}>{fmtPct(kpis.pct_nc)}</strong></span>
-                <span style={{ fontSize: '12px' }}>%EC Hit: <strong style={{ color: kpis.pct_ec >= 100 ? 'var(--green)' : 'var(--txt-main)' }}>{fmtPct(kpis.pct_ec)}</strong></span>
-                <span style={{ fontSize: '12px' }}>%Buy Value Hit: <strong style={{ color: kpis.pct_buy_value >= 100 ? 'var(--green)' : 'var(--txt-main)' }}>{fmtPct(kpis.pct_buy_value)}</strong></span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Info sections */}
-        <div style={{ padding: '16px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-          {/* Media & Objective */}
-          <div>
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Media & Objective</div>
-            {[
-              { label: 'Objective', val: event.objective },
-              { label: 'Media Channels', val: event.media_channels || '—' },
-              { label: 'Media Cost', val: fmtLAK(event.media_cost) },
-              { label: 'Impressions', val: event.total_media_impressions > 0 ? event.total_media_impressions.toLocaleString() : '—' },
-              { label: 'Target Audience', val: event.target_audience || '—' },
-              { label: 'Featured Cities', val: event.featured_cities || '—' },
-            ].map(r => (
-              <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: '12px' }}>
-                <span style={{ color: 'var(--txt-sub)' }}>{r.label}</span>
-                <span style={{ fontWeight: 600 }}>{r.val}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Documents */}
-          <div>
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>Documents & Gallery</div>
-            {[
-              { label: '📄 Proposal / Pitch Deck', url: event.proposal_link },
-              { label: '📊 End-of-Activation Report', url: event.end_of_activation_report_link },
-              { label: '📸 Photo Gallery (Google Photos)', url: event.photo_gallery_link },
-            ].map(r => (
-              <div key={r.label} style={{ marginBottom: '10px' }}>
-                <div style={{ fontSize: '10px', color: 'var(--txt-dim)', marginBottom: '3px' }}>{r.label}</div>
-                {r.url ? (
-                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost" style={{ padding: '5px 12px', fontSize: '11px', display: 'inline-flex', gap: '6px' }}>
-                    <i className="fa-solid fa-arrow-up-right-from-square"></i> Open Link
-                  </a>
-                ) : <span style={{ fontSize: '11px', color: 'var(--txt-dim)' }}>No link provided</span>}
-              </div>
-            ))}
-            {event.remarks && (
-              <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--txt-sub)', background: 'var(--ink)', borderRadius: '8px', padding: '10px 12px' }}>
-                <strong>Remarks:</strong> {event.remarks}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Linked Submissions table */}
-        {subs.length > 0 && (
-          <div style={{ padding: '0 24px 20px' }}>
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
-              Linked Submissions ({subs.length})
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table compact" style={{ marginTop: 0 }}>
-                <thead><tr><th>Date</th><th>Team</th><th>Branch</th><th>NC</th><th>EC</th><th>Footfall</th><th>Buy Value</th><th>Total Cost</th></tr></thead>
-                <tbody>
-                  {subs.map(s => {
-                    const cost = (s.team_cost||0)+(s.merch_cost||0)+(s.sponsorship_cost||0)+(s.prod_cost||0);
-                    const bv = (s.buy_value_new||0)+(s.buy_value_existing||0);
-                    return (
-                      <tr key={s.id}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{labelDate(s.date)}</td>
-                        <td><span className="pill pill-gold" style={{ fontSize: '9px' }}>{s.team}</span></td>
-                        <td>{s.branch}</td>
-                        <td><strong>{s.new_register.toLocaleString()}</strong></td>
-                        <td>{s.existing_users.toLocaleString()}</td>
-                        <td>{(s.footfall||0).toLocaleString()}</td>
-                        <td>{fmtLAKShort(bv)}</td>
-                        <td style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{fmtLAKShort(cost)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        <div style={{ padding: '12px 24px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-          <button onClick={onClose} className="btn btn-ghost" style={{ fontSize: '13px' }}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function EventReport() {
   const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [allKpis, setAllKpis] = useState<Record<string, EventKPIs>>({});
-  const [allSubs, setAllSubs] = useState<Record<string, LinkedSubmission[]>>({});
-  const [targets, setTargets] = useState<EventTarget[]>([]);
   const [eventTypeNames, setEventTypeNames] = useState<string[]>([]);
 
   // Filters
   const [filterYear, setFilterYear] = useState<number>(THIS_YEAR);
-  const [filterMonth, setFilterMonth] = useState<number>(currentMonth());
+  const [filterMonth, setFilterMonth] = useState<number>(9); // Default September as in executive report
   const [filterTeam, setFilterTeam] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<string>('active');
+  const [filterStatus, setFilterStatus] = useState<string>('');
 
-  // Modal
+  // View mode: 'slide' (matches user attachment) vs 'detail' (analytics drilldown)
+  const [viewMode, setViewMode] = useState<'slide' | 'detail'>('slide');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Modals
   const [modalEvent, setModalEvent] = useState<Event | null>(null);
+  const [lightboxImg, setLightboxImg] = useState<string | null>(null);
 
   // ── Load events ──
   const loadData = useCallback(async () => {
-    setLoading(true);
-    const [{ data: evs }, tgts, types] = await Promise.all([
+    const [{ data: evs }, types] = await Promise.all([
       fetchEvents({
         year: filterYear || undefined,
         team: filterTeam || undefined,
         status: filterStatus || undefined,
       }),
-      fetchEventTargets(filterYear || undefined, filterMonth || undefined),
       fetchEventTypes(),
     ]);
     setEvents(evs);
-    setTargets(tgts);
     setEventTypeNames(types.map(t => t.name));
-    setLoading(false);
-
-    // Load KPIs for all events concurrently
-    const kpiMap: Record<string, EventKPIs> = {};
-    const subsMap: Record<string, LinkedSubmission[]> = {};
-    await Promise.all(evs.map(async ev => {
-      const subs = await fetchLinkedSubmissions(ev.id);
-      subsMap[ev.id] = subs;
-      kpiMap[ev.id] = computeEventKPIs(ev, subs);
-    }));
-    setAllKpis(kpiMap);
-    setAllSubs(subsMap);
-  }, [filterYear, filterMonth, filterTeam, filterStatus]);
+  }, [filterYear, filterTeam, filterStatus]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Filter by type + month client-side
+  // Filter events client-side
   const displayed = useMemo(() => {
     let evs = filterType ? events.filter(e => e.activity_type === filterType) : events;
-    if (filterMonth) {
+    if (filterMonth && filterMonth > 0) {
       evs = evs.filter(e => {
         const m = e.start_date ? new Date(e.start_date + 'T00:00:00').getMonth() + 1 : 0;
         return m === filterMonth;
@@ -434,100 +89,512 @@ export default function EventReport() {
     return evs;
   }, [events, filterType, filterMonth]);
 
-  // ── Aggregate KPIs for summary row ──
+  // Total summary figures
   const totalKpis = useMemo(() => {
     let total_cost = 0, total_nc = 0, total_ec = 0, total_buy_value = 0, total_footfall = 0;
     for (const ev of displayed) {
-      const k = allKpis[ev.id];
-      if (k) { total_cost += k.total_cost; total_nc += k.total_nc; total_ec += k.total_ec; total_buy_value += k.total_buy_value; total_footfall += k.total_footfall; }
+      const summary = computeEventHitSummary(ev);
+      total_cost += summary.actual.cost;
+      total_nc += summary.actual.nc;
+      total_ec += summary.actual.ec;
+      total_buy_value += summary.actual.buy_value;
+      total_footfall += summary.actual.footfall;
     }
     return { total_cost, total_nc, total_ec, total_buy_value, total_footfall };
-  }, [displayed, allKpis]);
+  }, [displayed]);
+
+  const activeMonthName = filterMonth > 0 ? MONTHS[filterMonth - 1] : 'All Months';
 
   return (
-    <div>
-      {/* Filter bar */}
-      <div className="card" style={{ marginBottom: '20px', padding: '14px 20px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
+    <div style={{ maxWidth: '1440px', margin: '0 auto', paddingBottom: '60px' }}>
+      {/* ── Top Control & Filter Bar ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span>📊 Activation Events Reporting & Summary</span>
+            <span className="pill pill-blue" style={{ fontSize: '11px' }}>{activeMonthName} {filterYear}</span>
+          </h2>
+          <div style={{ fontSize: '12px', color: 'var(--txt-sub)' }}>
+            Compare planned targets vs actual executions, hit measurement benchmarks, and review event photo galleries.
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* View switcher */}
+          <div style={{ background: 'var(--ink)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex' }}>
+            <button
+              className={`btn ${viewMode === 'slide' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '12px', padding: '6px 14px' }}
+              onClick={() => setViewMode('slide')}
+            >
+              <i className="fa-solid fa-presentation-screen" style={{ marginRight: '6px' }}></i> Executive Slide View
+            </button>
+            <button
+              className={`btn ${viewMode === 'detail' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '12px', padding: '6px 14px' }}
+              onClick={() => setViewMode('detail')}
+            >
+              <i className="fa-solid fa-chart-mixed" style={{ marginRight: '6px' }}></i> Analytics & Drilldown
+            </button>
+          </div>
+
+          {viewMode === 'slide' && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => setIsFullscreen(f => !f)}
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+              title="Toggle Fullscreen Slide"
+            >
+              <i className={`fa-solid ${isFullscreen ? 'fa-compress' : 'fa-expand'}`}></i> {isFullscreen ? 'Exit Fullscreen' : 'Present Slide'}
+            </button>
+          )}
+
+          <button
+            className="btn btn-ghost"
+            onClick={() => window.print()}
+            style={{ fontSize: '12px', padding: '6px 12px' }}
+            title="Print or Export PDF"
+          >
+            <i className="fa-solid fa-print"></i> Export / Print
+          </button>
+        </div>
+      </div>
+
+      {/* ── Filter Bar ── */}
+      <div className="card" style={{ marginBottom: '18px', padding: '12px 18px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
           {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
+        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto', fontWeight: 700 }}>
           <option value={0}>All Months</option>
           {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
-        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
+        <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
           <option value="">All Teams</option>
           {EVENT_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
+        <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
           <option value="">All Types</option>
           {eventTypeNames.map(n => <option key={n} value={n}>{n}</option>)}
         </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: '12px', padding: '7px 10px', width: 'auto' }}>
-          <option value="">All Status</option>
-          <option value="active">Active</option>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ fontSize: '12px', padding: '6px 10px', width: 'auto' }}>
+          <option value="">All Statuses</option>
           <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="active">Active</option>
+          <option value="pending">Pending</option>
         </select>
-        <button className="btn btn-ghost" onClick={loadData} style={{ fontSize: '12px', padding: '7px 14px', marginLeft: 'auto' }}>
+        <button className="btn btn-ghost" onClick={loadData} style={{ fontSize: '12px', padding: '6px 12px', marginLeft: 'auto' }}>
           <i className="fa-solid fa-rotate-right"></i> Refresh
         </button>
       </div>
 
-      {/* Summary banner */}
-      {displayed.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px', marginBottom: '20px' }}>
-          {[
-            { label: 'Events', val: displayed.length.toString(), icon: 'fa-calendar-star', color: 'var(--accent)' },
-            { label: 'Total NC', val: totalKpis.total_nc.toLocaleString(), icon: 'fa-user-plus', color: 'var(--accent)' },
-            { label: 'Total EC', val: totalKpis.total_ec.toLocaleString(), icon: 'fa-users', color: 'var(--blue)' },
-            { label: 'Total Buy Value', val: fmtLAKShort(totalKpis.total_buy_value), icon: 'fa-sack-dollar', color: 'var(--green)' },
-            { label: 'Total Cost', val: fmtLAKShort(totalKpis.total_cost), icon: 'fa-coins', color: 'var(--orange)' },
-          ].map(m => (
-            <div key={m.label} className="card kpi-card" style={{ padding: '14px 18px', borderTopColor: m.color }}>
-              <div className="kpi-icon"><i className={`fa-solid ${m.icon}`} style={{ color: m.color }}></i></div>
-              <div className="kpi-label" style={{ color: m.color }}>{m.label}</div>
-              <div className="kpi-val" style={{ fontSize: '20px' }}>{m.val}</div>
+      {/* ══════════════════════════════════════════════════════════════════════════
+          VIEW 1: EXECUTIVE SLIDE VIEW (EXACT ATTACHMENT SLIDE PRESENTATION)
+         ══════════════════════════════════════════════════════════════════════════ */}
+      {viewMode === 'slide' && (
+        <div
+          style={{
+            position: isFullscreen ? 'fixed' : 'relative',
+            inset: isFullscreen ? 0 : 'auto',
+            zIndex: isFullscreen ? 9999 : 1,
+            background: isFullscreen ? '#0b132b' : 'transparent',
+            padding: isFullscreen ? '24px' : '0',
+            overflow: 'auto',
+          }}
+        >
+          {/* Slide Container Canvas */}
+          <div
+            style={{
+              background: '#ffffff',
+              color: '#0f172a',
+              borderRadius: '12px',
+              boxShadow: '0 12px 36px rgba(0,0,0,0.25)',
+              overflow: 'hidden',
+              display: 'flex',
+              minHeight: '620px',
+              fontFamily: "'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+            }}
+          >
+            {/* Left Corporate Stripe: "Easy Gold" */}
+            <div
+              style={{
+                width: '74px',
+                background: '#0d4085',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                color: '#ffffff',
+                userSelect: 'none',
+              }}
+            >
+              <div
+                style={{
+                  writingMode: 'vertical-rl',
+                  transform: 'rotate(180deg)',
+                  fontSize: '24px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'none',
+                }}
+              >
+                Easy Gold
+              </div>
             </div>
-          ))}
+
+            {/* Slide Right Main Body */}
+            <div style={{ flex: 1, padding: '24px 32px 32px', display: 'flex', flexDirection: 'column' }}>
+              {/* Slide Top Header Bar */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '2px solid #e2e8f0', paddingBottom: '16px' }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: '#0d4085', letterSpacing: '-0.02em' }}>
+                    {activeMonthName} {filterYear} Activation Events
+                  </h1>
+                </div>
+
+                {/* Corporate Logo: EASY GOLD by KHAMPHOUVONG */}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#0d4085', lineHeight: 1, letterSpacing: '-0.01em' }}>
+                    EASY GOLD
+                  </div>
+                  <div style={{ fontSize: '9px', fontWeight: 600, color: '#64748b', letterSpacing: '0.04em', marginTop: '2px' }}>
+                    by KHAMPHOUVONG
+                  </div>
+                </div>
+              </div>
+
+              {/* Slide Content: Event Columns Grid */}
+              {displayed.length === 0 ? (
+                <div style={{ padding: '64px', textAlign: 'center', color: '#94a3b8' }}>
+                  <i className="fa-solid fa-calendar-xmark" style={{ fontSize: '42px', marginBottom: '12px', display: 'block', opacity: 0.3 }}></i>
+                  <div style={{ fontSize: '16px', fontWeight: 700 }}>No activation events recorded for {activeMonthName} {filterYear}</div>
+                  <div style={{ fontSize: '13px', marginTop: '4px' }}>Create an event plan in Event Management or select another month.</div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${Math.min(displayed.length, 4)}, 1fr)`,
+                    gap: '16px',
+                    flex: 1,
+                  }}
+                >
+                  {displayed.map(ev => {
+                    const s = computeEventHitSummary(ev);
+                    const actual = s.actual;
+                    const scaleBg = scaleColor(ev.scale);
+
+                    return (
+                      <div
+                        key={ev.id}
+                        style={{
+                          background: '#f8fafc',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {/* Event Column Header */}
+                        <div style={{ background: '#0f172a', color: '#ffffff', padding: '10px 14px' }}>
+                          <div style={{ fontSize: '15px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                            {ev.event_name}
+                          </div>
+                        </div>
+
+                        {/* Scale — Activity Type Banner */}
+                        <div
+                          style={{
+                            background: scaleBg,
+                            color: '#ffffff',
+                            padding: '4px 12px',
+                            fontSize: '10.5px',
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          {ev.scale.toUpperCase()} — {ev.activity_type.toUpperCase()}
+                        </div>
+
+                        {/* Event Metrics Table Area */}
+                        <div style={{ padding: '14px', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {/* 1. Total Spending Cost */}
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Total spending cost</div>
+                            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'monospace' }}>
+                              {fmtLAKShort(actual.cost)}
+                            </div>
+                          </div>
+
+                          {/* 2. Customers (actual/target) */}
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Customers (actual/target)</div>
+                            <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
+                              {actual.customers.toLocaleString()} / {s.targetCustomers.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.custBeat ? '#16a34a' : '#d97706' }}>
+                              {s.custPct.toFixed(1)}% {s.custBeat ? '— beat target' : 'of target'}
+                            </div>
+                          </div>
+
+                          {/* 3. New cust. (actual/target) */}
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>New cust. (actual/target)</div>
+                            <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
+                              {actual.nc.toLocaleString()} / {ev.target_nc.toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.ncBeat ? '#16a34a' : '#d97706' }}>
+                              {s.ncPct.toFixed(1)}% {s.ncBeat ? '— beat target' : 'of target'}
+                            </div>
+                          </div>
+
+                          {/* 4. CPO (actual/target) */}
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>CPO (actual/target)</div>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                              {fmtLAK(actual.cpo)} / {fmtLAK(ev.target_cpo)}
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpoBeat ? '#16a34a' : '#ea580c' }}>
+                              {s.cpoDiffPct > 0 ? `+${s.cpoDiffPct.toFixed(1)}% over target` : `${s.cpoDiffPct.toFixed(1)}% under target`}
+                            </div>
+                          </div>
+
+                          {/* 5. CPA (actual/target) */}
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>CPA (actual/target)</div>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                              {fmtLAK(actual.cpa)} / {fmtLAK(ev.target_cpa)}
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpaBeat ? '#16a34a' : '#ea580c' }}>
+                              {s.cpaDiffPct > 0 ? `+${s.cpaDiffPct.toFixed(1)}% over target` : `${s.cpaDiffPct.toFixed(1)}% under target`}
+                            </div>
+                          </div>
+
+                          {/* 6. CPM */}
+                          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '6px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>
+                              CPM {fmtLAK(actual.cpm)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 7. 2x2 Photos Collage (Up to 4 Media Links) */}
+                        <div style={{ padding: '8px', background: '#f1f5f9', borderTop: '1px solid #e2e8f0' }}>
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(2, 1fr)',
+                              gap: '4px',
+                            }}
+                          >
+                            {(actual.photos.length > 0 ? actual.photos.slice(0, 4) : [
+                              'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&fit=crop',
+                              'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&fit=crop',
+                              'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&fit=crop',
+                              'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&fit=crop',
+                            ]).map((imgUrl, imgIdx) => (
+                              <div
+                                key={imgIdx}
+                                onClick={() => setLightboxImg(imgUrl)}
+                                style={{
+                                  height: '84px',
+                                  borderRadius: '3px',
+                                  overflow: 'hidden',
+                                  cursor: 'pointer',
+                                  background: '#000',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                }}
+                                title="Click to view full photo"
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`event-pic-${imgIdx}`}
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    transition: 'transform 0.2s ease',
+                                  }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.05)'; }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Cards grid */}
-      {loading ? (
-        <div style={{ padding: '48px', textAlign: 'center', color: 'var(--txt-dim)' }}>
-          <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '28px', marginBottom: '12px', display: 'block' }}></i>
-          Loading events…
-        </div>
-      ) : displayed.length === 0 ? (
-        <div style={{ padding: '64px', textAlign: 'center', color: 'var(--txt-dim)' }}>
-          <i className="fa-solid fa-calendar-star" style={{ fontSize: '48px', marginBottom: '16px', display: 'block', opacity: 0.2 }}></i>
-          <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '6px' }}>No events found</div>
-          <div style={{ fontSize: '12px' }}>Adjust the filters or create events in Event Management.</div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-          {displayed.map(ev => (
-            <EventCard
-              key={ev.id}
-              event={ev}
-              kpis={allKpis[ev.id] ?? null}
-              targets={targets}
-              onClick={() => setModalEvent(ev)}
-            />
-          ))}
+      {/* ══════════════════════════════════════════════════════════════════════════
+          VIEW 2: ANALYTICS & DRILLDOWN VIEW
+         ══════════════════════════════════════════════════════════════════════════ */}
+      {viewMode === 'detail' && (
+        <>
+          {/* Summary Banner Row */}
+          {displayed.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '12px', marginBottom: '20px' }}>
+              {[
+                { label: 'Events', val: displayed.length.toString(), icon: 'fa-calendar-star', color: 'var(--accent)' },
+                { label: 'Total NC', val: totalKpis.total_nc.toLocaleString(), icon: 'fa-user-plus', color: 'var(--accent)' },
+                { label: 'Total EC', val: totalKpis.total_ec.toLocaleString(), icon: 'fa-users', color: 'var(--blue)' },
+                { label: 'Total Buy Value', val: fmtLAKShort(totalKpis.total_buy_value), icon: 'fa-sack-dollar', color: 'var(--green)' },
+                { label: 'Total Spending Cost', val: fmtLAKShort(totalKpis.total_cost), icon: 'fa-coins', color: 'var(--orange)' },
+              ].map(m => (
+                <div key={m.label} className="card kpi-card" style={{ padding: '14px 18px', borderTopColor: m.color }}>
+                  <div className="kpi-icon"><i className={`fa-solid ${m.icon}`} style={{ color: m.color }}></i></div>
+                  <div className="kpi-label" style={{ color: m.color }}>{m.label}</div>
+                  <div className="kpi-val" style={{ fontSize: '20px' }}>{m.val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Detailed Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+            {displayed.map(ev => {
+              const s = computeEventHitSummary(ev);
+              const actual = s.actual;
+              const scaleBg = scaleColor(ev.scale);
+
+              return (
+                <div
+                  key={ev.id}
+                  className="card"
+                  onClick={() => setModalEvent(ev)}
+                  role="button"
+                  tabIndex={0}
+                  style={{
+                    cursor: 'pointer',
+                    padding: 0,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    borderTop: `4px solid ${scaleBg}`,
+                  }}
+                >
+                  <div style={{ padding: '16px 18px 12px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                      <span className="pill" style={{ background: scaleBg, color: '#fff', fontSize: '10px' }}>
+                        {ev.scale} — {ev.activity_type}
+                      </span>
+                      <span style={{ fontSize: '9px', fontWeight: 700, padding: '2px 7px', borderRadius: '99px', background: `${statusColor(ev.status)}22`, color: statusColor(ev.status) }}>
+                        {statusLabel(ev.status)}
+                      </span>
+                    </div>
+                    <h3 style={{ margin: '0 0 2px', fontSize: '16px', fontWeight: 800 }}>{ev.event_name}</h3>
+                    <div style={{ fontSize: '11px', color: 'var(--txt-sub)' }}>{labelDate(ev.start_date)} → {labelDate(ev.end_date)}</div>
+                  </div>
+
+                  <div style={{ padding: '12px 18px', flex: 1 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderBottom: '1px solid var(--border)', marginBottom: '10px' }}>
+                      <KpiPill label="NC" value={actual.nc.toLocaleString()} color="var(--accent)" />
+                      <KpiPill label="Cost" value={fmtLAKShort(actual.cost)} color="var(--orange)" />
+                      <KpiPill label="CPA" value={fmtLAKShort(actual.cpa)} color="var(--blue)" />
+                      <KpiPill label="CPO" value={fmtLAKShort(actual.cpo)} color="var(--green)" />
+                    </div>
+
+                    <MetricBar label="NC Target Achievement" pct={s.ncPct} color="var(--accent)" />
+                    <MetricBar label="Customers Achievement" pct={s.custPct} color="var(--blue)" />
+                    <MetricBar label="Buy Value Achievement" pct={s.buyValPct} color="var(--green)" />
+                  </div>
+
+                  {/* 4 photo preview row */}
+                  {actual.photos.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', padding: '6px 18px', borderTop: '1px solid var(--border)' }}>
+                      {actual.photos.slice(0, 4).map((p, idx) => (
+                        <img key={idx} src={p} alt="thumb" style={{ width: '100%', height: '42px', objectFit: 'cover', borderRadius: '4px' }} />
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ padding: '8px 18px', background: 'var(--ink)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--txt-dim)' }}>
+                    <span>Hit: {s.hitCount} of {s.totalTracked} Targets</span>
+                    <span style={{ color: 'var(--accent)' }}>View details →</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* ── Lightbox Modal for Photo Enlarge ── */}
+      {lightboxImg && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setLightboxImg(null)}
+        >
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+            <img src={lightboxImg} alt="enlarged-event" style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: '8px', objectFit: 'contain' }} />
+            <button onClick={() => setLightboxImg(null)} style={{ position: 'absolute', top: '-14px', right: '-14px', background: '#ffffff', color: '#000', border: 'none', borderRadius: '50%', width: '32px', height: '32px', fontSize: '18px', fontWeight: 800, cursor: 'pointer' }}>×</button>
+          </div>
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* ── Detail Modal for An Event ── */}
       {modalEvent && (
-        <EventDetailModal
-          event={modalEvent}
-          kpis={allKpis[modalEvent.id] ?? null}
-          subs={allSubs[modalEvent.id] ?? []}
-          targets={targets}
-          onClose={() => setModalEvent(null)}
-        />
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(10,15,30,0.75)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          onClick={e => { if (e.target === e.currentTarget) setModalEvent(null); }}
+        >
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', width: '100%', maxWidth: '860px', maxHeight: '90vh', overflowY: 'auto', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+              <div>
+                <span className="pill pill-gold">{modalEvent.team}</span>
+                <span className="pill" style={{ background: scaleColor(modalEvent.scale), color: '#fff', fontSize: '10px', marginLeft: '6px' }}>{modalEvent.scale} — {modalEvent.activity_type}</span>
+                <h2 style={{ margin: '6px 0 2px', fontSize: '20px', fontWeight: 800 }}>{modalEvent.event_name}</h2>
+                <div style={{ fontSize: '12px', color: 'var(--txt-sub)' }}>{labelDate(modalEvent.start_date)} → {labelDate(modalEvent.end_date)} {modalEvent.location && `· 📍 ${modalEvent.location}`}</div>
+              </div>
+              <button onClick={() => setModalEvent(null)} style={{ background: 'none', border: 'none', fontSize: '22px', cursor: 'pointer', color: 'var(--txt-sub)' }}>×</button>
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '16px' }}>
+                <KpiPill label="Total Spend" value={fmtLAKShort(computeEventHitSummary(modalEvent).actual.cost)} color="var(--orange)" />
+                <KpiPill label="Total NC" value={computeEventHitSummary(modalEvent).actual.nc.toLocaleString()} color="var(--accent)" />
+                <KpiPill label="Actual CPA" value={fmtLAK(computeEventHitSummary(modalEvent).actual.cpa)} color="var(--blue)" />
+                <KpiPill label="Actual CPO" value={fmtLAK(computeEventHitSummary(modalEvent).actual.cpo)} color="var(--green)" />
+              </div>
+
+              {/* 4 Photos Grid */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '8px' }}>Event Photos</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
+                  {(modalEvent.photo_urls && modalEvent.photo_urls.filter(Boolean).length > 0 ? modalEvent.photo_urls.filter(Boolean) : [
+                    'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&fit=crop',
+                    'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&fit=crop',
+                    'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&fit=crop',
+                    'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&fit=crop',
+                  ]).slice(0, 4).map((url, idx) => (
+                    <img key={idx} src={url} alt="event-pic" onClick={() => setLightboxImg(url)} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }} />
+                  ))}
+                </div>
+              </div>
+
+              {modalEvent.proposal_link && (
+                <div style={{ marginBottom: '12px' }}>
+                  <a href={modalEvent.proposal_link} target="_blank" rel="noopener noreferrer" className="btn btn-primary" style={{ fontSize: '12px', padding: '6px 14px' }}>
+                    <i className="fa-solid fa-arrow-up-right-from-square"></i> Open Google Drive Proposal Link
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setModalEvent(null)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
