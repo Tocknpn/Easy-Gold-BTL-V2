@@ -23,6 +23,7 @@ import {
 } from '../lib/submissions';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+ChartJS.defaults.font.family = "'Montserrat', sans-serif";
 
 // ── Fallback KPI targets ──────────────────────────────────────────────────
 const FALLBACK_TARGETS = {
@@ -53,7 +54,7 @@ const pctChange = (curr: number, prev: number): number | null => {
 };
 
 // ── Year and Week helper (Saturday to Sunday 52 weeks) ──────────────────────
-interface WeekOption {
+export interface WeekOption {
   key: string;
   label: string;
   startDate: string;
@@ -61,9 +62,8 @@ interface WeekOption {
   weekNum: number;
 }
 
-const generate52Weeks = (year: number): WeekOption[] => {
+export const generate52Weeks = (year: number): WeekOption[] => {
   const weeks: WeekOption[] = [];
-  // Find first Saturday of the year
   const d = new Date(year, 0, 1);
   while (d.getDay() !== 6) { // 6 = Saturday
     d.setDate(d.getDate() + 1);
@@ -71,7 +71,6 @@ const generate52Weeks = (year: number): WeekOption[] => {
 
   for (let w = 1; w <= 52; w++) {
     const sDate = new Date(d);
-    // End date is Sunday (the following Sunday: 8 days later, or next Sunday)
     const eDate = new Date(d);
     eDate.setDate(eDate.getDate() + 8); // Sat to next Sun inclusive (9-day roadshow window)
 
@@ -88,13 +87,12 @@ const generate52Weeks = (year: number): WeekOption[] => {
       weekNum: w,
     });
 
-    // Advance 7 days for next week's Saturday
     d.setDate(d.getDate() + 7);
   }
   return weeks;
 };
 
-interface QuarterOption {
+export interface QuarterOption {
   key: string;
   label: string;
   startDate: string;
@@ -102,21 +100,21 @@ interface QuarterOption {
   months: string[];
 }
 
-const generateQuarters = (year: number): QuarterOption[] => [
+export const generateQuarters = (year: number): QuarterOption[] => [
   { key: `Q4'${String(year).slice(2)}`, label: `Q4'${String(year).slice(2)} (Oct – Dec)`, startDate: `${year}-10-01`, endDate: `${year}-12-31`, months: ['Oct', 'Nov', 'Dec'] },
   { key: `Q3'${String(year).slice(2)}`, label: `Q3'${String(year).slice(2)} (Jul – Sep)`, startDate: `${year}-07-01`, endDate: `${year}-09-30`, months: ['Jul', 'Aug', 'Sep'] },
   { key: `Q2'${String(year).slice(2)}`, label: `Q2'${String(year).slice(2)} (Apr – Jun)`, startDate: `${year}-04-01`, endDate: `${year}-06-30`, months: ['Apr', 'May', 'Jun'] },
   { key: `Q1'${String(year).slice(2)}`, label: `Q1'${String(year).slice(2)} (Jan – Mar)`, startDate: `${year}-01-01`, endDate: `${year}-03-31`, months: ['Jan', 'Feb', 'Mar'] },
 ];
 
-interface MonthOption {
+export interface MonthOption {
   key: string;
   label: string;
   startDate: string;
   endDate: string;
 }
 
-const generateMonths = (year: number): MonthOption[] => {
+export const generateMonths = (year: number): MonthOption[] => {
   const months: MonthOption[] = [];
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   for (let m = 11; m >= 0; m--) {
@@ -195,7 +193,7 @@ function CostTypeFilter({ selected, onChange }: { selected: CostTypeKey[]; onCha
                 type="checkbox"
                 checked={selected.includes(c.key)}
                 onChange={() => toggle(c.key)}
-                style={{ width: '13px', height: '13px', accentColor: 'var(--accent)' }}
+                style={{ width: '13px', height: '13px', accentColor: '#0b53ac' }}
               />
               {c.label}
             </label>
@@ -265,8 +263,8 @@ function LocationFilter({
         style={{
           padding: '6px 11px', fontSize: '11px', width: 'auto', fontWeight: 600,
           maxWidth: '220px', height: '34px',
-          borderColor: isActive ? 'var(--accent)' : undefined,
-          color: isActive ? 'var(--accent)' : undefined,
+          borderColor: isActive ? '#0b53ac' : undefined,
+          color: isActive ? '#0b53ac' : undefined,
         }}
       >
         <i className="fa-solid fa-location-dot" style={{ fontSize: '11px', opacity: 0.8 }}></i>
@@ -302,7 +300,7 @@ function LocationFilter({
                   type="checkbox"
                   checked={selected.includes(v)}
                   onChange={() => toggle(v)}
-                  style={{ width: '13px', height: '13px', accentColor: 'var(--accent)' }}
+                  style={{ width: '13px', height: '13px', accentColor: '#0b53ac' }}
                 />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {locationLabel(v)}
@@ -330,6 +328,136 @@ function LocationFilter({
   );
 }
 
+// ── Chart.js Inline Plugin for Inside-End Data Labels ─────────────────────
+const barDataLabelsPlugin = {
+  id: 'barDataLabels',
+  afterDatasetsDraw(chart: any) {
+    const { ctx } = chart;
+    const datasets = chart.data.datasets;
+    if (!datasets || datasets.length === 0) return;
+
+    datasets.forEach((dataset: any, datasetIndex: number) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+
+      meta.data.forEach((bar: any, index: number) => {
+        const val = dataset.data[index];
+        if (val === null || val === undefined || val === 0) return;
+
+        let text = '';
+        const chartType = chart.options?.plugins?.barDataLabels?.chartType;
+        if (chartType === 'currency') {
+          // CPA / CPO in LAK
+          if (val >= 1_000_000) {
+            text = `₭${(val / 1_000_000).toFixed(1)}M`;
+          } else if (val >= 1_000) {
+            text = `₭${Math.round(val / 1_000)}k`;
+          } else {
+            text = `₭${Math.round(val)}`;
+          }
+        } else if (chartType === 'revenue') {
+          // Revenue in Mil LAK
+          if (val >= 1_000) {
+            text = `₭${(val / 1_000).toFixed(1)}B`;
+          } else {
+            text = `₭${Number(val).toFixed(1)}M`;
+          }
+        } else if (chartType === 'cost') {
+          // Cost in Mil LAK
+          if (val >= 1_000) {
+            text = `₭${(val / 1_000).toFixed(1)}B`;
+          } else {
+            text = `₭${Number(val).toFixed(1)}M`;
+          }
+        } else {
+          // Customer Acquisition (NC / EC)
+          if (val >= 1_000) {
+            text = `${(val / 1_000).toFixed(1)}k`;
+          } else {
+            text = `${Math.round(val)}`;
+          }
+        }
+
+        ctx.save();
+        ctx.font = '700 9px Montserrat, sans-serif';
+        ctx.textAlign = 'center';
+
+        const barHeight = Math.abs(bar.base - bar.y);
+        // "inside end" positioning: inside top of bar if tall enough, otherwise just above
+        if (barHeight >= 18) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.textBaseline = 'top';
+          ctx.fillText(text, bar.x, bar.y + 4);
+        } else {
+          ctx.fillStyle = '#475569';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(text, bar.x, bar.y - 2);
+        }
+        ctx.restore();
+      });
+    });
+  },
+};
+
+// ── Chart Option Generator (No gridlines, No vertical axis, Inside-end labels) ─
+const createChartOptions = (chartType: 'count' | 'currency' | 'revenue' | 'cost'): any => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'top' as const,
+      align: 'end' as const,
+      labels: {
+        boxWidth: 8,
+        boxHeight: 8,
+        font: { family: "'Montserrat', sans-serif", size: 9, weight: 'bold' },
+        color: '#64748B',
+        padding: 6,
+      },
+    },
+    tooltip: {
+      backgroundColor: '#0F172A',
+      titleFont: { family: "'Montserrat', sans-serif", size: 11, weight: 'bold' },
+      bodyFont: { family: "'Montserrat', sans-serif", size: 10 },
+      padding: 8,
+      cornerRadius: 6,
+    },
+    barDataLabels: {
+      chartType,
+    },
+  },
+  scales: {
+    x: {
+      grid: { display: false },
+      ticks: {
+        font: { family: "'Montserrat', sans-serif", size: 10, weight: 'bold' },
+        color: '#64748B',
+      },
+      border: { display: false },
+    },
+    y: {
+      display: false,
+      grid: { display: false },
+      ticks: { display: false },
+      border: { display: false },
+    },
+  },
+});
+
+// ── Custom Chart Timeline Setting Interface ──────────────────────────────
+export interface ChartCustomTimeline {
+  active: boolean; // false = sync with main report date filter, true = custom range
+  granularity: 'quarter' | 'month' | 'week' | 'date';
+  quarterFrom: string;
+  quarterTo: string;
+  monthFrom: string;
+  monthTo: string;
+  weekFrom: number;
+  weekTo: number;
+  dateFrom: string;
+  dateTo: string;
+}
+
 // ── Main Marketing Report Component ───────────────────────────────────────
 export default function MarketingReport({
   submissions,
@@ -352,14 +480,69 @@ export default function MarketingReport({
   const [locationFilter, setLocationFilter] = useState<string[]>([]);
   const [costTypes, setCostTypes] = useState<CostTypeKey[]>(ALL_COST_TYPES);
 
-  // Insights custom note state (defaults to blank as requested)
+  // Insights custom note state (defaults to blank space for Google Slides)
   const [insightNote, setInsightNote] = useState<string>('');
   const [isSlideFullscreen, setIsSlideFullscreen] = useState(false);
+
+  // ── Requirement 7: Interactive Chart Timeline Setting State ──────────────
+  const [isChartModalOpen, setIsChartModalOpen] = useState(false);
+  const [chartTimeline, setChartTimeline] = useState<ChartCustomTimeline>({
+    active: false,
+    granularity: 'month',
+    quarterFrom: `Q1'${String(currentYear).slice(2)}`,
+    quarterTo: `Q3'${String(currentYear).slice(2)}`,
+    monthFrom: `${currentYear}-07`,
+    monthTo: `${currentYear}-09`,
+    weekFrom: 36,
+    weekTo: 40,
+    dateFrom: `${currentYear}-09-01`,
+    dateTo: `${currentYear}-09-30`,
+  });
+
+  // Modal draft state
+  const [modalDraft, setModalDraft] = useState<ChartCustomTimeline>({ ...chartTimeline });
+
+  // Open modal with fresh draft
+  const handleOpenChartModal = () => {
+    setModalDraft({ ...chartTimeline });
+    setIsChartModalOpen(true);
+  };
 
   // Pre-calculated options
   const quarters = useMemo(() => generateQuarters(currentYear), [currentYear]);
   const months = useMemo(() => generateMonths(currentYear), [currentYear]);
   const weeks52 = useMemo(() => generate52Weeks(currentYear), [currentYear]);
+
+  // Extended quarters list (2025 - 2026) for chart timeline selection
+  const allTimelineQuarters = useMemo(() => [
+    { key: "Q1'25", label: "Q1'25 (Jan – Mar 2025)", start: '2025-01-01', end: '2025-03-31' },
+    { key: "Q2'25", label: "Q2'25 (Apr – Jun 2025)", start: '2025-04-01', end: '2025-06-30' },
+    { key: "Q3'25", label: "Q3'25 (Jul – Sep 2025)", start: '2025-07-01', end: '2025-09-30' },
+    { key: "Q4'25", label: "Q4'25 (Oct – Dec 2025)", start: '2025-10-01', end: '2025-12-31' },
+    { key: "Q1'26", label: "Q1'26 (Jan – Mar 2026)", start: '2026-01-01', end: '2026-03-31' },
+    { key: "Q2'26", label: "Q2'26 (Apr – Jun 2026)", start: '2026-04-01', end: '2026-06-30' },
+    { key: "Q3'26", label: "Q3'26 (Jul – Sep 2026)", start: '2026-07-01', end: '2026-09-30' },
+    { key: "Q4'26", label: "Q4'26 (Oct – Dec 2026)", start: '2026-10-01', end: '2026-12-31' },
+  ], []);
+
+  // Extended months list (Jan 2025 - Dec 2026)
+  const allTimelineMonths = useMemo(() => {
+    const list: { key: string; label: string; start: string; end: string }[] = [];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    for (const yr of [2025, 2026]) {
+      for (let m = 0; m < 12; m++) {
+        const mm = String(m + 1).padStart(2, '0');
+        const lastDay = new Date(yr, m + 1, 0).getDate();
+        list.push({
+          key: `${yr}-${mm}`,
+          label: `${monthNames[m]}'${String(yr).slice(2)}`,
+          start: `${yr}-${mm}-01`,
+          end: `${yr}-${mm}-${String(lastDay).padStart(2, '0')}`,
+        });
+      }
+    }
+    return list;
+  }, []);
 
   // Derive Current Start & End Date based on Date Mode
   const { startDate, endDate, periodTitle, prevPeriodLabel, prevStartDate, prevEndDate } = useMemo(() => {
@@ -376,7 +559,6 @@ export default function MarketingReport({
       end = q.endDate;
       title = selectedQuarter;
 
-      // Determine previous quarter
       const qIndex = quarters.findIndex(item => item.key === selectedQuarter);
       if (qIndex !== -1 && qIndex + 1 < quarters.length) {
         const pq = quarters[qIndex + 1];
@@ -419,7 +601,6 @@ export default function MarketingReport({
         prevLabel = 'vs prev W';
       }
     } else {
-      // Custom
       start = customStart;
       end = customEnd;
       title = `${start.slice(5)} to ${end.slice(5)}`;
@@ -506,7 +687,6 @@ export default function MarketingReport({
       + (types.includes('prod') ? prodCost : 0);
 
     const totalAcq = nc + ec;
-    // Activation cost = Service (team) + Production + Sponsorship
     const activationCost = (types.includes('service') ? teamCost : 0)
       + (types.includes('prod') ? prodCost : 0)
       + (types.includes('sponsorship') ? sponsorCost : 0);
@@ -560,9 +740,9 @@ export default function MarketingReport({
     };
   }, [targetsData, startDate, endDate, teamFilter]);
 
-  // ── Color Mood & Tone Theme ─────────────────────────────────────────────
-  // When team is KPV: Sophisticated light warm wine/rose crimson (NOT negative/danger red).
-  // When All or Agency: Executive navy & royal blue.
+  // ── Requirement 2: Color Mood & Tone Theme ──────────────────────────────
+  // Overall and Agency mood and tone: #0b53acff (#0b53ac), especially top right card (Avg. CPA CPO)
+  // KPV theme: Warm burgundy/rose wine tone
   const isKPV = teamFilter === 'KPV';
   const theme = useMemo(() => {
     if (isKPV) {
@@ -590,36 +770,40 @@ export default function MarketingReport({
         kpiNumColor: '#0F172A',
         iconColor: '#9E1B32',
         subHighlight: '#9E1B32',
+        activePill: '#9E1B32',
       };
     }
+    // Overall & Agency Theme centered around #0b53ac
     return {
       brandName: teamFilter === 'Agency' ? 'Agency' : 'Overview',
-      bannerGradient: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #2563EB 100%)',
-      accentSidebar: 'linear-gradient(180deg, #0F172A 0%, #1E3A8A 100%)',
-      headerTitleColor: '#0F2C59',
-      subStripBg: '#F0F7FF',
-      subStripBorder: '#DBEAFE',
-      subStripHeaderBg: '#1E3A8A',
+      bannerGradient: 'linear-gradient(135deg, #073a78 0%, #0b53ac 60%, #1565c0 100%)',
+      accentSidebar: 'linear-gradient(180deg, #073a78 0%, #0b53ac 100%)',
+      headerTitleColor: '#0b53ac',
+      subStripBg: '#F3F7FD',
+      subStripBorder: '#D9E6F7',
+      subStripHeaderBg: '#0b53ac',
       subStripHeaderTxt: '#FFFFFF',
-      heroCardBg: 'linear-gradient(135deg, #0A1931 0%, #153462 50%, #1E3A8A 100%)',
-      heroCardBorder: '#1E3A8A',
-      chartNC: '#1E3A8A',
-      chartEC: '#93C5FD',
-      chartCPA: '#0A1931',
-      chartCPO: '#3B82F6',
-      chartRevNC: '#1E3A8A',
-      chartRevEC: '#93C5FD',
-      chartCostAct: '#0A1931',
-      chartCostMerch: '#93C5FD',
+      // Top Right Card (Avg. CPA CPO) Hero Mood & Tone in #0b53ac
+      heroCardBg: 'linear-gradient(135deg, #073a78 0%, #0b53ac 60%, #1664bf 100%)',
+      heroCardBorder: '#0b53ac',
+      chartNC: '#0b53ac',
+      chartEC: '#73A9EB',
+      chartCPA: '#0b53ac',
+      chartCPO: '#388BFD',
+      chartRevNC: '#0b53ac',
+      chartRevEC: '#73A9EB',
+      chartCostAct: '#0b53ac',
+      chartCostMerch: '#73A9EB',
       cardBg: '#FFFFFF',
-      cardBorder: '#D4DDF0',
+      cardBorder: '#D4E2F5',
       kpiNumColor: '#0F172A',
-      iconColor: '#1E3A8A',
-      subHighlight: '#1E3A8A',
+      iconColor: '#0b53ac',
+      subHighlight: '#0b53ac',
+      activePill: '#0b53ac',
     };
   }, [isKPV, teamFilter]);
 
-  // ── Delta Badge Helpers ──────────────────────────────────────────────────
+  // ── Delta Badge Helpers (Top KPI Metrics) ────────────────────────────────
   const renderDelta = (
     currentVal: number,
     compareVal: number,
@@ -636,11 +820,9 @@ export default function MarketingReport({
       );
     }
     const delta = currentVal - compareVal;
-    // For cost metrics (CPA/CPO/Cost): lower is good (negative change = green).
-    // For Customer/Revenue: higher is good (positive change = green).
     const isGood = isCostMetric ? chg <= 0 : chg >= 0;
     const arrow = chg >= 0 ? '▲' : '▼';
-    const color = isGood ? '#10B981' : '#E11D48'; // vibrant emerald green vs elegant ruby red
+    const color = isGood ? '#10B981' : '#E11D48';
     const absPct = Math.abs(chg).toFixed(1);
     const sign = delta > 0 ? '+' : '−';
     const gapStr = isCurrency
@@ -648,34 +830,157 @@ export default function MarketingReport({
       : Math.abs(Math.round(delta)).toLocaleString();
 
     return (
-      <div style={{ fontSize: '11px', fontWeight: 600, color, display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <div style={{ fontSize: '12px', fontWeight: 600, color, display: 'flex', alignItems: 'center', gap: '4px' }}>
         <span>{arrow} {absPct}% {label}</span>
         <span style={{ opacity: 0.85, fontWeight: 500 }}>({sign}{gapStr})</span>
       </div>
     );
   };
 
-  // ── 2x2 Sub-Interval Charts Data ─────────────────────────────────────────
-  const chartIntervals = useMemo(() => {
-    // Generate buckets depending on dateMode
+  // ── Requirement 3: Mini Delta for NC/EC, Activation, Merch (Show Green for Growth, Red for Decline) ─
+  const renderMiniDelta = (currVal: number, prevVal: number, isCostMetric = false) => {
+    const chg = pctChange(currVal, prevVal);
+    if (chg === null) {
+      return <span style={{ color: '#94A3B8' }}>—</span>;
+    }
+    const isGood = isCostMetric ? chg <= 0 : chg >= 0;
+    const color = isGood ? '#10B981' : '#E11D48';
+    const arrow = chg >= 0 ? '▲' : '▼';
+    return (
+      <span style={{ color, fontWeight: 700 }}>
+        {prevPeriodLabel} {arrow}{Math.abs(chg).toFixed(0)}%
+      </span>
+    );
+  };
+
+  // ── Requirement 7: Calculate 2x2 Charts Timeline Data ─────────────────────
+  // Can be configured dynamically via chartTimeline state or automatically sync with main filter
+  const { chartIntervals, chartTitlePrefix, chartTimelineLabel, chartTimelineSummary } = useMemo(() => {
+    const effectiveRows = submissions.filter(s => {
+      const sTeam = normalizeTeam(s.team);
+      const inTeam = teamFilter === 'All' || sTeam === teamFilter;
+      const inActivity = activityFilter === 'All Types' || normalizeActivityType(s.activity_type) === activityFilter;
+      const inLocation = inLocationFilter(s.branch, locationFilter);
+      return inTeam && inActivity && inLocation;
+    });
+
+    // Case 1: Custom Chart Timeline is active
+    if (chartTimeline.active) {
+      const mode = chartTimeline.granularity;
+
+      if (mode === 'quarter') {
+        const fromIdx = allTimelineQuarters.findIndex(q => q.key === chartTimeline.quarterFrom);
+        const toIdx = allTimelineQuarters.findIndex(q => q.key === chartTimeline.quarterTo);
+        const minIdx = Math.min(fromIdx === -1 ? 0 : fromIdx, toIdx === -1 ? allTimelineQuarters.length - 1 : toIdx);
+        const maxIdx = Math.max(fromIdx === -1 ? 0 : fromIdx, toIdx === -1 ? allTimelineQuarters.length - 1 : toIdx);
+        const selected = allTimelineQuarters.slice(minIdx, maxIdx + 1);
+
+        const intervals = selected.map(q => {
+          const rows = effectiveRows.filter(s => s.date >= q.start && s.date <= q.end);
+          const agg = aggregate(rows, costTypes);
+          return { label: q.key, agg };
+        });
+
+        return {
+          chartIntervals: intervals,
+          chartTitlePrefix: 'QoQ',
+          chartTimelineLabel: `QoQ (${selected[0]?.key || ''} – ${selected[selected.length - 1]?.key || ''})`,
+          chartTimelineSummary: `Quarterly (${selected[0]?.key || ''} to ${selected[selected.length - 1]?.key || ''})`,
+        };
+      }
+
+      if (mode === 'month') {
+        const fromIdx = allTimelineMonths.findIndex(m => m.key === chartTimeline.monthFrom);
+        const toIdx = allTimelineMonths.findIndex(m => m.key === chartTimeline.monthTo);
+        const minIdx = Math.min(fromIdx === -1 ? 0 : fromIdx, toIdx === -1 ? allTimelineMonths.length - 1 : toIdx);
+        const maxIdx = Math.max(fromIdx === -1 ? 0 : fromIdx, toIdx === -1 ? allTimelineMonths.length - 1 : toIdx);
+        const selected = allTimelineMonths.slice(minIdx, maxIdx + 1);
+
+        const intervals = selected.map(m => {
+          const rows = effectiveRows.filter(s => s.date >= m.start && s.date <= m.end);
+          const agg = aggregate(rows, costTypes);
+          return { label: m.label, agg };
+        });
+
+        return {
+          chartIntervals: intervals,
+          chartTitlePrefix: 'MoM',
+          chartTimelineLabel: `MoM (${selected[0]?.label || ''} – ${selected[selected.length - 1]?.label || ''})`,
+          chartTimelineSummary: `Monthly (${selected[0]?.label || ''} to ${selected[selected.length - 1]?.label || ''})`,
+        };
+      }
+
+      if (mode === 'week') {
+        const minW = Math.min(chartTimeline.weekFrom, chartTimeline.weekTo);
+        const maxW = Math.max(chartTimeline.weekFrom, chartTimeline.weekTo);
+        const selected = weeks52.filter(w => w.weekNum >= minW && w.weekNum <= maxW);
+
+        const intervals = selected.map(w => {
+          const rows = effectiveRows.filter(s => s.date >= w.startDate && s.date <= w.endDate);
+          const agg = aggregate(rows, costTypes);
+          return { label: w.key, agg };
+        });
+
+        return {
+          chartIntervals: intervals,
+          chartTitlePrefix: 'WoW',
+          chartTimelineLabel: `WoW (W${minW} – W${maxW})`,
+          chartTimelineSummary: `Weekly (W${minW} to W${maxW})`,
+        };
+      }
+
+      if (mode === 'date') {
+        const sIso = chartTimeline.dateFrom || `${currentYear}-09-01`;
+        const eIso = chartTimeline.dateTo || `${currentYear}-09-30`;
+        const d1 = new Date(sIso + 'T00:00:00');
+        const d2 = new Date(eIso + 'T00:00:00');
+        const daysDiff = Math.min(31, Math.max(1, Math.round((d2.getTime() - d1.getTime()) / 86400000) + 1));
+
+        const intervals = [];
+        for (let i = 0; i < daysDiff; i++) {
+          const curD = new Date(d1);
+          curD.setDate(curD.getDate() + i);
+          const iso = curD.toISOString().slice(0, 10);
+          const dayLabel = curD.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+          const rows = effectiveRows.filter(s => s.date === iso);
+          const agg = aggregate(rows, costTypes);
+          intervals.push({ label: dayLabel, agg });
+        }
+
+        return {
+          chartIntervals: intervals,
+          chartTitlePrefix: 'DoD',
+          chartTimelineLabel: `DoD (${sIso.slice(5)} – ${eIso.slice(5)})`,
+          chartTimelineSummary: `Daily (${sIso} to ${eIso})`,
+        };
+      }
+    }
+
+    // Case 2: Auto sync with main Date Filter
     if (dateMode === 'quarter') {
       const q = quarters.find(item => item.key === selectedQuarter) || quarters[1];
-      const monthNames = q.months; // ['Jul', 'Aug', 'Sep']
+      const monthNames = q.months;
       const qYear = selectedQuarter.split("'")[1] ? `20${selectedQuarter.split("'")[1]}` : `${currentYear}`;
 
-      return monthNames.map(mName => {
+      const intervals = monthNames.map(mName => {
         const mIdx = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(mName) + 1;
         const prefix = `${qYear}-${String(mIdx).padStart(2, '0')}`;
         const rows = filtered.filter(s => s.date.startsWith(prefix));
         const agg = aggregate(rows, costTypes);
         return { label: mName, agg };
       });
+
+      return {
+        chartIntervals: intervals,
+        chartTitlePrefix: 'MoM',
+        chartTimelineLabel: 'MoM (Quarterly Filter)',
+        chartTimelineSummary: `Default: Months of ${selectedQuarter}`,
+      };
     }
 
     if (dateMode === 'month') {
-      // 4 weekly blocks in the month
       const m = months.find(item => item.key === selectedMonth) || months[0];
-      const [mPrefix] = m.startDate.split('-'); // year
+      const [mPrefix] = m.startDate.split('-');
       const mIdx = m.startDate.slice(5, 7);
       const blocks = [
         { label: 'W1', start: `${mPrefix}-${mIdx}-01`, end: `${mPrefix}-${mIdx}-07` },
@@ -684,15 +989,21 @@ export default function MarketingReport({
         { label: 'W4', start: `${mPrefix}-${mIdx}-22`, end: `${mPrefix}-${mIdx}-28` },
         { label: 'W5', start: `${mPrefix}-${mIdx}-29`, end: m.endDate },
       ];
-      return blocks.map(b => {
+      const intervals = blocks.map(b => {
         const rows = filtered.filter(s => s.date >= b.start && s.date <= b.end);
         const agg = aggregate(rows, costTypes);
         return { label: b.label, agg };
       });
+
+      return {
+        chartIntervals: intervals,
+        chartTitlePrefix: 'WoW',
+        chartTimelineLabel: 'WoW (Monthly Filter)',
+        chartTimelineSummary: `Default: Weeks of ${selectedMonth}`,
+      };
     }
 
     if (dateMode === 'week') {
-      // 7 daily buckets (Sat to Fri/Sun)
       const sD = new Date(startDate + 'T00:00:00');
       const buckets = [];
       for (let i = 0; i < 7; i++) {
@@ -704,57 +1015,46 @@ export default function MarketingReport({
         const agg = aggregate(rows, costTypes);
         buckets.push({ label: `${dayLabel} ${curD.getDate()}`, agg });
       }
-      return buckets;
+
+      return {
+        chartIntervals: buckets,
+        chartTitlePrefix: 'DoD',
+        chartTimelineLabel: 'DoD (Weekly Filter)',
+        chartTimelineSummary: `Default: Days of ${selectedWeek}`,
+      };
     }
 
-    // Custom fallback: split into up to 5 even slices
-    return [
-      { label: 'Period', agg: curr },
-    ];
-  }, [dateMode, selectedQuarter, selectedMonth, startDate, filtered, costTypes, quarters, months, currentYear, curr]);
+    return {
+      chartIntervals: [{ label: 'Period', agg: curr }],
+      chartTitlePrefix: 'Period',
+      chartTimelineLabel: 'Custom Period',
+      chartTimelineSummary: 'Default: Custom Period',
+    };
+  }, [
+    chartTimeline,
+    submissions,
+    teamFilter,
+    activityFilter,
+    locationFilter,
+    costTypes,
+    dateMode,
+    selectedQuarter,
+    selectedMonth,
+    selectedWeek,
+    startDate,
+    filtered,
+    curr,
+    quarters,
+    months,
+    weeks52,
+    allTimelineQuarters,
+    allTimelineMonths,
+    currentYear,
+  ]);
 
   const chartLabels = chartIntervals.map(c => c.label);
 
-  const chartOptions: any = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        align: 'end' as const,
-        labels: {
-          boxWidth: 9,
-          boxHeight: 9,
-          font: { size: 10, weight: '600' },
-          color: '#64748B',
-          padding: 8,
-        },
-      },
-      tooltip: {
-        backgroundColor: '#0F172A',
-        titleFont: { size: 11, weight: 'bold' },
-        bodyFont: { size: 11 },
-        padding: 8,
-        cornerRadius: 6,
-      },
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-        ticks: { font: { size: 10, weight: '600' }, color: '#64748B' },
-      },
-      y: {
-        grid: { color: 'rgba(203, 213, 225, 0.4)' },
-        ticks: {
-          font: { size: 9 },
-          color: '#64748B',
-          callback: (val: any) => (val >= 1000 ? `${Math.round(val / 1000)}k` : val),
-        },
-      },
-    },
-  };
-
-  // 1. Acquisition Chart
+  // 1. Acquisition Chart Data
   const chartAcqData = {
     labels: chartLabels,
     datasets: [
@@ -773,7 +1073,7 @@ export default function MarketingReport({
     ],
   };
 
-  // 2. CPA / CPO Chart
+  // 2. CPA / CPO Chart Data
   const chartCpaCpoData = {
     labels: chartLabels,
     datasets: [
@@ -792,7 +1092,7 @@ export default function MarketingReport({
     ],
   };
 
-  // 3. Revenue Chart (in Mil LAK)
+  // 3. Revenue Chart Data (in Mil LAK)
   const chartRevData = {
     labels: chartLabels,
     datasets: [
@@ -811,7 +1111,7 @@ export default function MarketingReport({
     ],
   };
 
-  // 4. Cost Chart (in Mil LAK)
+  // 4. Cost Chart Data (in Mil LAK)
   const chartCostData = {
     labels: chartLabels,
     datasets: [
@@ -830,23 +1130,8 @@ export default function MarketingReport({
     ],
   };
 
-  // Auto-generate draft bullet points if user clicks draft button
-  const handleAutoDraftInsights = () => {
-    const acqDelta = pctChange(curr.totalAcq, prev.totalAcq);
-    const revDelta = pctChange(curr.totalBuy, prev.totalBuy);
-    const cpaDelta = pctChange(curr.cpa, prev.cpa);
-
-    const draft = [
-      `1. Total customer acquisition reached ${curr.totalAcq.toLocaleString()} (${acqDelta !== null ? `${acqDelta >= 0 ? '+' : ''}${acqDelta.toFixed(1)}% ${prevPeriodLabel}` : 'steady'}), with NC at ${curr.nc.toLocaleString()} and EC at ${curr.ec.toLocaleString()}.`,
-      `2. Revenue generated was ${fmtDeckLAK(curr.totalBuy)} (${revDelta !== null ? `${revDelta >= 0 ? '+' : ''}${revDelta.toFixed(1)}% ${prevPeriodLabel}` : ''}) against total operational spending of ${fmtDeckLAK(curr.totalCost)}.`,
-      `3. Efficiency metrics: Average CPA closed at ${fmtLAK(Math.round(curr.cpa))} (${cpaDelta !== null ? `${cpaDelta <= 0 ? 'favorable' : 'increased'} vs prev` : ''}) and CPO at ${fmtLAK(Math.round(curr.cpo))}.`,
-    ].join('\n\n');
-
-    setInsightNote(draft);
-  };
-
   return (
-    <div style={{ paddingBottom: '30px' }}>
+    <div style={{ paddingBottom: '30px', fontFamily: "'Montserrat', sans-serif" }}>
       {/* ── Filter Bar ── */}
       <div
         className="card"
@@ -868,7 +1153,6 @@ export default function MarketingReport({
           <div style={{ display: 'flex', background: 'var(--input-bg)', padding: '2px', borderRadius: '8px', border: '1px solid var(--border)' }}>
             {(['All', 'Agency', 'KPV'] as const).map(t => {
               const active = teamFilter === t;
-              const isKpvTab = t === 'KPV';
               return (
                 <button
                   key={t}
@@ -882,7 +1166,7 @@ export default function MarketingReport({
                     border: 'none',
                     cursor: 'pointer',
                     background: active
-                      ? (isKpvTab ? '#9E1B32' : 'var(--accent)')
+                      ? (t === 'KPV' ? '#9E1B32' : '#0b53ac')
                       : 'transparent',
                     color: active ? '#FFFFFF' : 'var(--txt-sub)',
                     transition: 'all 0.15s ease',
@@ -913,7 +1197,7 @@ export default function MarketingReport({
                     borderRadius: '6px',
                     border: 'none',
                     cursor: 'pointer',
-                    background: active ? (isKPV ? '#9E1B32' : 'var(--accent)') : 'transparent',
+                    background: active ? (isKPV ? '#9E1B32' : '#0b53ac') : 'transparent',
                     color: active ? '#FFFFFF' : 'var(--txt-sub)',
                     transition: 'all 0.15s ease',
                     textTransform: 'capitalize',
@@ -1035,6 +1319,7 @@ export default function MarketingReport({
               setActivityFilter('All Types');
               setLocationFilter([]);
               setCostTypes([...ALL_COST_TYPES]);
+              setChartTimeline(prev => ({ ...prev, active: false }));
             }}
             style={{ padding: '6px 12px', fontSize: '11px', height: '34px' }}
             title="Reset to default filters"
@@ -1049,8 +1334,8 @@ export default function MarketingReport({
               padding: '6px 14px',
               fontSize: '11px',
               height: '34px',
-              borderColor: isKPV ? '#9E1B32' : 'var(--accent)',
-              color: isKPV ? '#9E1B32' : 'var(--accent)',
+              borderColor: isKPV ? '#9E1B32' : '#0b53ac',
+              color: isKPV ? '#9E1B32' : '#0b53ac',
               fontWeight: 700,
             }}
             title="Toggle presentation deck view for screenshotting"
@@ -1068,20 +1353,20 @@ export default function MarketingReport({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 14px',
-        background: isKPV ? '#FFF1F2' : '#F0F7FF',
-        border: `1px solid ${isKPV ? '#FECDD3' : '#DBEAFE'}`,
+        background: isKPV ? '#FFF1F2' : '#F3F7FD',
+        border: `1px solid ${isKPV ? '#FECDD3' : '#D9E6F7'}`,
         borderRadius: '8px',
         fontSize: '11px',
-        color: isKPV ? '#9E1B32' : '#1E3A8A',
+        color: isKPV ? '#9E1B32' : '#0b53ac',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <i className="fa-solid fa-camera"></i>
           <span>
-            <strong>Google Slides Ready:</strong> Perfect 16:9 layout. Press <strong>Win + Shift + S</strong> on Windows to snip the frame below and paste directly into your presentation slide.
+            <strong>Google Slides Ready:</strong> Perfect 16:9 layout in <strong>Montserrat</strong> font. Press <strong>Win + Shift + S</strong> on Windows to snip the frame below and paste directly into your presentation slide.
           </span>
         </div>
-        <span style={{ fontSize: '10px', opacity: 0.8 }}>
-          {isKPV ? '🌹 KPV Brand Tone Active (Light Red)' : '🔷 Executive Navy Theme Active'}
+        <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.9 }}>
+          {isKPV ? '🌹 KPV Brand Tone Active (Rose Wine)' : '🔷 Executive Palette Active (#0b53ac)'}
         </span>
       </div>
 
@@ -1100,6 +1385,7 @@ export default function MarketingReport({
           maxWidth: isSlideFullscreen ? '100%' : '1400px',
           margin: '0 auto',
           transition: 'all 0.3s ease',
+          fontFamily: "'Montserrat', sans-serif",
         }}
       >
         {/* ── Left Vertical Accent Banner ── */}
@@ -1126,7 +1412,7 @@ export default function MarketingReport({
               fontSize: '11px',
               fontWeight: 800,
               textTransform: 'uppercase',
-              opacity: 0.9,
+              opacity: 0.95,
               marginTop: '10px',
             }}>
               EASY GOLD
@@ -1140,7 +1426,7 @@ export default function MarketingReport({
             fontSize: '9px',
             fontWeight: 700,
             letterSpacing: '0.2em',
-            opacity: 0.6,
+            opacity: 0.7,
           }}>
             {teamFilter === 'KPV' ? 'KPV DIVISION' : 'BTL TRACKER'}
           </div>
@@ -1167,7 +1453,7 @@ export default function MarketingReport({
                   padding: '3px 9px',
                   borderRadius: '14px',
                   background: isKPV ? '#FFF1F2' : '#EFF6FF',
-                  color: isKPV ? '#9E1B32' : '#1D4ED8',
+                  color: isKPV ? '#9E1B32' : '#0b53ac',
                   border: `1px solid ${isKPV ? '#FECDD3' : '#BFDBFE'}`,
                 }}>
                   {activityFilter}
@@ -1182,7 +1468,7 @@ export default function MarketingReport({
             <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 900, color: '#0F1E3C', letterSpacing: '0.05em', lineHeight: 1.1 }}>
-                  EASY <span style={{ color: isKPV ? '#9E1B32' : '#1B56C8' }}>GOLD</span>
+                  EASY <span style={{ color: isKPV ? '#9E1B32' : '#0b53ac' }}>GOLD</span>
                 </div>
                 <div style={{ fontSize: '8px', fontWeight: 800, color: '#64748B', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                   by KHAMPHOUVONG
@@ -1193,7 +1479,7 @@ export default function MarketingReport({
 
           {/* ── Top Row: 4 Hero Metric Cards ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-            {/* Card 1: Total Customer */}
+            {/* Card 1: Total Customer (Requirement 5: enhanced font size & spacing) */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '12px',
@@ -1203,58 +1489,60 @@ export default function MarketingReport({
               display: 'flex',
               flexDirection: 'column',
             }}>
-              <div style={{ padding: '16px 18px', flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
-                    Total Customer
-                  </span>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '8px',
-                    background: isKPV ? '#FFF1F2' : '#EFF6FF',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: theme.iconColor, fontSize: '13px',
-                  }}>
-                    <i className="fa-solid fa-users"></i>
+              <div style={{ padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
+                      Total Customer
+                    </span>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '8px',
+                      background: isKPV ? '#FFF1F2' : '#EFF6FF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: theme.iconColor, fontSize: '13px',
+                    }}>
+                      <i className="fa-solid fa-users"></i>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '36px', fontWeight: 800, color: theme.kpiNumColor, margin: '8px 0 10px', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+                    {curr.totalAcq.toLocaleString()}
                   </div>
                 </div>
 
-                <div style={{ fontSize: '28px', fontWeight: 800, color: theme.kpiNumColor, margin: '6px 0 8px', letterSpacing: '-0.02em' }}>
-                  {curr.totalAcq.toLocaleString()}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
                   {renderDelta(curr.totalAcq, prev.totalAcq, prevPeriodLabel, false, false)}
                   {renderDelta(curr.totalAcq, targets.acq, 'vs Target', false, false)}
                 </div>
               </div>
 
-              {/* Bottom Strip: NC / EC */}
+              {/* Bottom Strip: NC / EC (Requirement 3: mini delta shows green/red) */}
               <div style={{
                 background: theme.subStripBg,
                 borderTop: `1px solid ${theme.subStripBorder}`,
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
-                padding: '8px 14px',
+                padding: '10px 16px',
                 fontSize: '11px',
               }}>
                 <div>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>NC</div>
-                  <strong style={{ color: theme.subHighlight, fontSize: '13px' }}>{curr.nc.toLocaleString()}</strong>
-                  <div style={{ fontSize: '9px', color: '#64748B' }}>
-                    {pctChange(curr.nc, prev.nc) !== null ? `${prevPeriodLabel} ${pctChange(curr.nc, prev.nc)! >= 0 ? '▲' : '▼'}${Math.abs(pctChange(curr.nc, prev.nc)!).toFixed(0)}%` : '—'}
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>NC</div>
+                  <strong style={{ color: theme.subHighlight, fontSize: '15px' }}>{curr.nc.toLocaleString()}</strong>
+                  <div style={{ fontSize: '9px', marginTop: '2px' }}>
+                    {renderMiniDelta(curr.nc, prev.nc, false)}
                   </div>
                 </div>
-                <div style={{ borderLeft: `1px solid ${theme.subStripBorder}`, paddingLeft: '10px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>EC</div>
-                  <strong style={{ color: '#0F172A', fontSize: '13px' }}>{curr.ec.toLocaleString()}</strong>
-                  <div style={{ fontSize: '9px', color: '#64748B' }}>
-                    {pctChange(curr.ec, prev.ec) !== null ? `${prevPeriodLabel} ${pctChange(curr.ec, prev.ec)! >= 0 ? '▲' : '▼'}${Math.abs(pctChange(curr.ec, prev.ec)!).toFixed(0)}%` : '—'}
+                <div style={{ borderLeft: `1px solid ${theme.subStripBorder}`, paddingLeft: '12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>EC</div>
+                  <strong style={{ color: '#0F172A', fontSize: '15px' }}>{curr.ec.toLocaleString()}</strong>
+                  <div style={{ fontSize: '9px', marginTop: '2px' }}>
+                    {renderMiniDelta(curr.ec, prev.ec, false)}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Card 2: Revenue (mil LAK) */}
+            {/* Card 2: Revenue (mil LAK) (Requirement 5: enhanced font size & spacing) */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '12px',
@@ -1264,60 +1552,62 @@ export default function MarketingReport({
               display: 'flex',
               flexDirection: 'column',
             }}>
-              <div style={{ padding: '16px 18px', flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
-                    Revenue (mil LAK)
-                  </span>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '8px',
-                    background: isKPV ? '#FFF1F2' : '#EFF6FF',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: theme.iconColor, fontSize: '13px',
-                  }}>
-                    <i className="fa-solid fa-sack-dollar"></i>
+              <div style={{ padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
+                      Revenue (mil LAK)
+                    </span>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '8px',
+                      background: isKPV ? '#FFF1F2' : '#EFF6FF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: theme.iconColor, fontSize: '13px',
+                    }}>
+                      <i className="fa-solid fa-sack-dollar"></i>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '36px', fontWeight: 800, color: theme.kpiNumColor, margin: '8px 0 10px', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+                    {fmtDeckLAK(curr.totalBuy)}
                   </div>
                 </div>
 
-                <div style={{ fontSize: '28px', fontWeight: 800, color: theme.kpiNumColor, margin: '6px 0 8px', letterSpacing: '-0.02em' }}>
-                  {fmtDeckLAK(curr.totalBuy)}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
                   {renderDelta(curr.totalBuy, prev.totalBuy, prevPeriodLabel, false, true)}
-                  <div style={{ fontSize: '10px', color: '#64748B' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>
                     Avg/Acq: <strong style={{ color: '#0F172A' }}>{fmtLAK(Math.round(curr.totalAcq > 0 ? curr.totalBuy / curr.totalAcq : 0))}</strong>
                   </div>
                 </div>
               </div>
 
-              {/* Bottom Strip: NC / EC Revenue */}
+              {/* Bottom Strip: NC / EC Revenue (Requirement 3: mini delta shows green/red) */}
               <div style={{
                 background: theme.subStripBg,
                 borderTop: `1px solid ${theme.subStripBorder}`,
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
-                padding: '8px 14px',
+                padding: '10px 16px',
                 fontSize: '11px',
               }}>
                 <div>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>NC</div>
-                  <strong style={{ color: theme.subHighlight, fontSize: '13px' }}>{fmtDeckLAK(curr.buyNew)}</strong>
-                  <div style={{ fontSize: '9px', color: '#64748B' }}>
-                    {pctChange(curr.buyNew, prev.buyNew) !== null ? `${prevPeriodLabel} ${pctChange(curr.buyNew, prev.buyNew)! >= 0 ? '▲' : '▼'}${Math.abs(pctChange(curr.buyNew, prev.buyNew)!).toFixed(0)}%` : '—'}
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>NC</div>
+                  <strong style={{ color: theme.subHighlight, fontSize: '15px' }}>{fmtDeckLAK(curr.buyNew)}</strong>
+                  <div style={{ fontSize: '9px', marginTop: '2px' }}>
+                    {renderMiniDelta(curr.buyNew, prev.buyNew, false)}
                   </div>
                 </div>
-                <div style={{ borderLeft: `1px solid ${theme.subStripBorder}`, paddingLeft: '10px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>EC</div>
-                  <strong style={{ color: '#0F172A', fontSize: '13px' }}>{fmtDeckLAK(curr.buyExisting)}</strong>
-                  <div style={{ fontSize: '9px', color: '#64748B' }}>
-                    {pctChange(curr.buyExisting, prev.buyExisting) !== null ? `${prevPeriodLabel} ${pctChange(curr.buyExisting, prev.buyExisting)! >= 0 ? '▲' : '▼'}${Math.abs(pctChange(curr.buyExisting, prev.buyExisting)!).toFixed(0)}%` : '—'}
+                <div style={{ borderLeft: `1px solid ${theme.subStripBorder}`, paddingLeft: '12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>EC</div>
+                  <strong style={{ color: '#0F172A', fontSize: '15px' }}>{fmtDeckLAK(curr.buyExisting)}</strong>
+                  <div style={{ fontSize: '9px', marginTop: '2px' }}>
+                    {renderMiniDelta(curr.buyExisting, prev.buyExisting, false)}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Card 3: Total Cost (mil LAK) */}
+            {/* Card 3: Total Cost (mil LAK) (Requirement 5: enhanced font size & spacing) */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '12px',
@@ -1327,66 +1617,68 @@ export default function MarketingReport({
               display: 'flex',
               flexDirection: 'column',
             }}>
-              <div style={{ padding: '16px 18px', flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
-                    Total Cost (mil LAK)
-                  </span>
-                  <div style={{
-                    width: '28px', height: '28px', borderRadius: '8px',
-                    background: isKPV ? '#FFF1F2' : '#EFF6FF',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: theme.iconColor, fontSize: '13px',
-                  }}>
-                    <i className="fa-solid fa-receipt"></i>
+              <div style={{ padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: '#64748B', letterSpacing: '0.05em' }}>
+                      Total Cost (mil LAK)
+                    </span>
+                    <div style={{
+                      width: '28px', height: '28px', borderRadius: '8px',
+                      background: isKPV ? '#FFF1F2' : '#EFF6FF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: theme.iconColor, fontSize: '13px',
+                    }}>
+                      <i className="fa-solid fa-receipt"></i>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '36px', fontWeight: 800, color: theme.kpiNumColor, margin: '8px 0 10px', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+                    {fmtDeckLAK(curr.totalCost)}
                   </div>
                 </div>
 
-                <div style={{ fontSize: '28px', fontWeight: 800, color: theme.kpiNumColor, margin: '6px 0 8px', letterSpacing: '-0.02em' }}>
-                  {fmtDeckLAK(curr.totalCost)}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
                   {renderDelta(curr.totalCost, prev.totalCost, prevPeriodLabel, true, true)}
-                  <div style={{ fontSize: '10px', color: '#64748B' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>
                     {costTypes.length === ALL_COST_TYPES.length ? 'All 4 cost bases' : `${costTypes.length} components`}
                   </div>
                 </div>
               </div>
 
-              {/* Bottom Strip: Activation / Merch Cost */}
+              {/* Bottom Strip: Activation / Merch Cost (Requirement 3: mini delta shows green/red) */}
               <div style={{
                 background: theme.subStripBg,
                 borderTop: `1px solid ${theme.subStripBorder}`,
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
-                padding: '8px 14px',
+                padding: '10px 16px',
                 fontSize: '11px',
               }}>
                 <div>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Activation</div>
-                  <strong style={{ color: theme.subHighlight, fontSize: '13px' }}>{fmtDeckLAK(curr.activationCost)}</strong>
-                  <div style={{ fontSize: '9px', color: '#64748B' }}>
-                    {pctChange(curr.activationCost, prev.activationCost) !== null ? `${prevPeriodLabel} ${pctChange(curr.activationCost, prev.activationCost)! >= 0 ? '▲' : '▼'}${Math.abs(pctChange(curr.activationCost, prev.activationCost)!).toFixed(0)}%` : '—'}
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Activation</div>
+                  <strong style={{ color: theme.subHighlight, fontSize: '15px' }}>{fmtDeckLAK(curr.activationCost)}</strong>
+                  <div style={{ fontSize: '9px', marginTop: '2px' }}>
+                    {renderMiniDelta(curr.activationCost, prev.activationCost, true)}
                   </div>
                 </div>
-                <div style={{ borderLeft: `1px solid ${theme.subStripBorder}`, paddingLeft: '10px' }}>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Merch</div>
-                  <strong style={{ color: '#0F172A', fontSize: '13px' }}>{fmtDeckLAK(curr.merchCost)}</strong>
-                  <div style={{ fontSize: '9px', color: '#64748B' }}>
-                    {pctChange(curr.merchCost, prev.merchCost) !== null ? `${prevPeriodLabel} ${pctChange(curr.merchCost, prev.merchCost)! >= 0 ? '▲' : '▼'}${Math.abs(pctChange(curr.merchCost, prev.merchCost)!).toFixed(0)}%` : '—'}
+                <div style={{ borderLeft: `1px solid ${theme.subStripBorder}`, paddingLeft: '12px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>Merch</div>
+                  <strong style={{ color: '#0F172A', fontSize: '15px' }}>{fmtDeckLAK(curr.merchCost)}</strong>
+                  <div style={{ fontSize: '9px', marginTop: '2px' }}>
+                    {renderMiniDelta(curr.merchCost, prev.merchCost, true)}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Card 4: Average CPA & CPO Hero Banner */}
+            {/* Card 4: Average CPA & CPO Hero Banner (Requirement 2: #0b53ac mood & tone) */}
             <div style={{
               background: theme.heroCardBg,
               borderRadius: '12px',
               border: `1px solid ${theme.heroCardBorder}`,
-              boxShadow: '0 8px 20px rgba(15, 23, 42, 0.15)',
-              padding: '16px 18px',
+              boxShadow: '0 8px 24px rgba(11, 83, 172, 0.25)',
+              padding: '18px 20px',
               color: '#FFFFFF',
               display: 'flex',
               flexDirection: 'column',
@@ -1395,35 +1687,35 @@ export default function MarketingReport({
               {/* Top Section: CPA */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.9 }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.95 }}>
                     Average CPA
                   </span>
-                  <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.15)', padding: '2px 6px', borderRadius: '4px' }}>Cost / NC</span>
+                  <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.2)', padding: '2px 7px', borderRadius: '4px', fontWeight: 700 }}>Cost / NC</span>
                 </div>
-                <div style={{ fontSize: '24px', fontWeight: 800, margin: '4px 0 6px', letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: '26px', fontWeight: 800, margin: '6px 0 6px', letterSpacing: '-0.02em' }}>
                   {fmtLAK(Math.round(curr.cpa))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px' }}>
                   {renderDelta(curr.cpa, prev.cpa, prevPeriodLabel, true, true)}
                   {renderDelta(curr.cpa, targets.cpa, 'vs Target', true, true)}
                 </div>
               </div>
 
               {/* Dividing Line */}
-              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.2)', margin: '10px 0' }} />
+              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.25)', margin: '12px 0' }} />
 
               {/* Bottom Section: CPO */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.9 }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', opacity: 0.95 }}>
                     Average CPO
                   </span>
-                  <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.15)', padding: '2px 6px', borderRadius: '4px' }}>Cost / Buyer</span>
+                  <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.2)', padding: '2px 7px', borderRadius: '4px', fontWeight: 700 }}>Cost / Buyer</span>
                 </div>
-                <div style={{ fontSize: '24px', fontWeight: 800, margin: '4px 0 6px', letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: '26px', fontWeight: 800, margin: '6px 0 6px', letterSpacing: '-0.02em' }}>
                   {fmtLAK(Math.round(curr.cpo))}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px' }}>
                   {renderDelta(curr.cpo, prev.cpo, prevPeriodLabel, true, true)}
                   {renderDelta(curr.cpo, targets.cpo, 'vs Target', true, true)}
                 </div>
@@ -1433,78 +1725,189 @@ export default function MarketingReport({
 
           {/* ── Middle/Lower Row: 2x2 Charts + Insights Box ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '65% 35%', gap: '16px', flex: 1 }}>
-            {/* Left 2x2 Charts Container */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {/* Chart 1: Acquisition (NC vs EC) */}
+            {/* Left: 2x2 Charts Container */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Requirement 7: Interactive Timeline indicator button bar */}
               <div style={{
-                background: '#FFFFFF',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                padding: '12px 14px',
                 display: 'flex',
-                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '6px 12px',
+                background: '#FFFFFF',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                fontSize: '11px',
               }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  {dateMode === 'quarter' ? 'MoM' : dateMode === 'month' ? 'WoW' : 'DoD'} Acquisition
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569' }}>
+                  <i className="fa-solid fa-chart-simple" style={{ color: '#0b53ac' }}></i>
+                  <span>
+                    <strong>4 Trend Charts:</strong> {chartTimelineSummary}
+                  </span>
                 </div>
-                <div style={{ height: '140px', flex: 1 }}>
-                  <Bar data={chartAcqData} options={chartOptions} />
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  {chartTimeline.active && (
+                    <button
+                      type="button"
+                      onClick={() => setChartTimeline(prev => ({ ...prev, active: false }))}
+                      className="btn btn-ghost"
+                      style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
+                      title="Sync timeline back to main date filter"
+                    >
+                      <i className="fa-solid fa-rotate-left"></i> Sync with Filter
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleOpenChartModal}
+                    className="btn btn-ghost"
+                    style={{
+                      padding: '2px 10px',
+                      fontSize: '10px',
+                      height: '22px',
+                      color: '#0b53ac',
+                      borderColor: '#0b53ac',
+                      fontWeight: 700,
+                    }}
+                    title="Click to change timeline for all 4 charts"
+                  >
+                    <i className="fa-solid fa-sliders"></i> Chart Timeline Setting
+                  </button>
                 </div>
               </div>
 
-              {/* Chart 2: CPA / CPO */}
-              <div style={{
-                background: '#FFFFFF',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                padding: '12px 14px',
-                display: 'flex',
-                flexDirection: 'column',
-              }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  {dateMode === 'quarter' ? 'MoM' : dateMode === 'month' ? 'WoW' : 'DoD'} CPA / CPO
+              {/* 2x2 Charts Grid (Clickable to open Chart Timeline Modal) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flex: 1 }}>
+                {/* Chart 1: Acquisition (NC vs EC) */}
+                <div
+                  onClick={handleOpenChartModal}
+                  style={{
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    cursor: 'pointer',
+                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                  }}
+                  title="Click to customize timeline for all 4 charts"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
+                      {chartTitlePrefix} Acquisition
+                    </div>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
+                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
+                    </span>
+                  </div>
+                  <div style={{ height: '145px', flex: 1 }}>
+                    <Bar
+                      data={chartAcqData}
+                      options={createChartOptions('count')}
+                      plugins={[barDataLabelsPlugin]}
+                    />
+                  </div>
                 </div>
-                <div style={{ height: '140px', flex: 1 }}>
-                  <Bar data={chartCpaCpoData} options={chartOptions} />
-                </div>
-              </div>
 
-              {/* Chart 3: Revenue (mil LAK) */}
-              <div style={{
-                background: '#FFFFFF',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                padding: '12px 14px',
-                display: 'flex',
-                flexDirection: 'column',
-              }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  {dateMode === 'quarter' ? 'MoM' : dateMode === 'month' ? 'WoW' : 'DoD'} Revenue (M LAK)
+                {/* Chart 2: CPA / CPO */}
+                <div
+                  onClick={handleOpenChartModal}
+                  style={{
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    cursor: 'pointer',
+                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                  }}
+                  title="Click to customize timeline for all 4 charts"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
+                      {chartTitlePrefix} CPA / CPO
+                    </div>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
+                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
+                    </span>
+                  </div>
+                  <div style={{ height: '145px', flex: 1 }}>
+                    <Bar
+                      data={chartCpaCpoData}
+                      options={createChartOptions('currency')}
+                      plugins={[barDataLabelsPlugin]}
+                    />
+                  </div>
                 </div>
-                <div style={{ height: '140px', flex: 1 }}>
-                  <Bar data={chartRevData} options={chartOptions} />
-                </div>
-              </div>
 
-              {/* Chart 4: Cost (mil LAK) */}
-              <div style={{
-                background: '#FFFFFF',
-                borderRadius: '12px',
-                border: '1px solid #E2E8F0',
-                padding: '12px 14px',
-                display: 'flex',
-                flexDirection: 'column',
-              }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  {dateMode === 'quarter' ? 'MoM' : dateMode === 'month' ? 'WoW' : 'DoD'} Cost (M LAK)
+                {/* Chart 3: Revenue (mil LAK) */}
+                <div
+                  onClick={handleOpenChartModal}
+                  style={{
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    cursor: 'pointer',
+                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                  }}
+                  title="Click to customize timeline for all 4 charts"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
+                      {chartTitlePrefix} Revenue (M LAK)
+                    </div>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
+                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
+                    </span>
+                  </div>
+                  <div style={{ height: '145px', flex: 1 }}>
+                    <Bar
+                      data={chartRevData}
+                      options={createChartOptions('revenue')}
+                      plugins={[barDataLabelsPlugin]}
+                    />
+                  </div>
                 </div>
-                <div style={{ height: '140px', flex: 1 }}>
-                  <Bar data={chartCostData} options={chartOptions} />
+
+                {/* Chart 4: Cost (mil LAK) */}
+                <div
+                  onClick={handleOpenChartModal}
+                  style={{
+                    background: '#FFFFFF',
+                    borderRadius: '12px',
+                    border: '1px solid #E2E8F0',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    cursor: 'pointer',
+                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                  }}
+                  title="Click to customize timeline for all 4 charts"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
+                      {chartTitlePrefix} Cost (M LAK)
+                    </div>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
+                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
+                    </span>
+                  </div>
+                  <div style={{ height: '145px', flex: 1 }}>
+                    <Bar
+                      data={chartCostData}
+                      options={createChartOptions('cost')}
+                      plugins={[barDataLabelsPlugin]}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Right: The Insights Box (Left Blank by default for Google Slides capture) */}
+            {/* Right: The Insights Box (Requirement 6: Clean blank space for Google Slides, removed draft button & placeholders) */}
             <div style={{
               background: '#FFFFFF',
               borderRadius: '12px',
@@ -1516,51 +1919,28 @@ export default function MarketingReport({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <i className="fa-solid fa-lightbulb" style={{ color: isKPV ? '#9E1B32' : 'var(--accent)', fontSize: '13px' }}></i>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F1E3C', letterSpacing: '0.02em' }}>
+                  <i className="fa-solid fa-lightbulb" style={{ color: isKPV ? '#9E1B32' : '#0b53ac', fontSize: '14px' }}></i>
+                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F1E3C', letterSpacing: '0.02em' }}>
                     Insights:
                   </span>
                 </div>
-
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={handleAutoDraftInsights}
-                    className="btn btn-ghost"
-                    style={{ padding: '3px 8px', fontSize: '10px', height: '24px' }}
-                    title="Auto-fill with key findings from current figures"
-                  >
-                    Draft
-                  </button>
-                  {insightNote && (
-                    <button
-                      type="button"
-                      onClick={() => setInsightNote('')}
-                      className="btn btn-ghost"
-                      style={{ padding: '3px 8px', fontSize: '10px', height: '24px' }}
-                      title="Clear to blank as required for capture"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
               </div>
 
-              {/* Note / Blank Workspace */}
+              {/* Clean blank space for Google Slide user overlay */}
               <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <textarea
                   value={insightNote}
                   onChange={e => setInsightNote(e.target.value)}
-                  placeholder="[Blank workspace — leave clean to capture onto Google Slides, or type presentation bullet points here]"
+                  placeholder=""
                   style={{
                     width: '100%',
                     flex: 1,
-                    minHeight: '260px',
+                    minHeight: '280px',
                     padding: '10px 12px',
                     borderRadius: '8px',
-                    border: '1px dashed #CBD5E1',
-                    background: '#F8FAFC',
-                    fontFamily: 'inherit',
+                    border: 'none',
+                    background: 'transparent',
+                    fontFamily: "'Montserrat', sans-serif",
                     fontSize: '12px',
                     lineHeight: '1.6',
                     color: '#1E293B',
@@ -1568,42 +1948,280 @@ export default function MarketingReport({
                     outline: 'none',
                   }}
                 />
-
-                {!insightNote && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '20px',
-                    left: '16px',
-                    right: '16px',
-                    pointerEvents: 'none',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '24px',
-                    opacity: 0.35,
-                  }}>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-                      <span style={{ fontWeight: 700, fontSize: '12px' }}>1.</span>
-                      <div style={{ flex: 1, borderBottom: '1px dotted #94A3B8', height: '14px' }}></div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-                      <span style={{ fontWeight: 700, fontSize: '12px' }}>2.</span>
-                      <div style={{ flex: 1, borderBottom: '1px dotted #94A3B8', height: '14px' }}></div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
-                      <span style={{ fontWeight: 700, fontSize: '12px' }}>3.</span>
-                      <div style={{ flex: 1, borderBottom: '1px dotted #94A3B8', height: '14px' }}></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginTop: '8px', fontSize: '10px', color: '#94A3B8', textAlign: 'right' }}>
-                {insightNote.length > 0 ? `${insightNote.length} characters` : 'Blank for Google Slide insertion'}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* ── Requirement 7: Modal for Chart Timeline & Granularity Settings ── */}
+      {isChartModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            fontFamily: "'Montserrat', sans-serif",
+          }}
+          onClick={() => setIsChartModalOpen(false)}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              boxShadow: '0 24px 48px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #D9E6F7',
+              width: '100%',
+              maxWidth: '560px',
+              padding: '24px 28px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '18px',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', borderBottom: '1px solid #E2E8F0', paddingBottom: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#F0F7FF', color: '#0b53ac', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <i className="fa-solid fa-sliders"></i>
+                  </div>
+                  <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F1E3C', margin: 0 }}>
+                    Chart Timeline Setting
+                  </h2>
+                </div>
+                <p style={{ fontSize: '11px', color: '#64748B', margin: '4px 0 0 40px' }}>
+                  Interactively customize the timeline and range across all 4 charts simultaneously.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setIsChartModalOpen(false)}
+                style={{ padding: '4px 8px', fontSize: '12px' }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Step 1: Choose Granularity */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: '8px', letterSpacing: '0.04em' }}>
+                1. Show 4 Charts By Timeline Scale:
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                {(['quarter', 'month', 'week', 'date'] as const).map(scale => {
+                  const active = modalDraft.granularity === scale;
+                  const labels = {
+                    quarter: 'Quarter (QoQ)',
+                    month: 'Month (MoM)',
+                    week: 'Week (WoW)',
+                    date: 'Date (DoD)',
+                  };
+                  return (
+                    <button
+                      key={scale}
+                      type="button"
+                      onClick={() => setModalDraft(prev => ({ ...prev, granularity: scale }))}
+                      style={{
+                        padding: '10px 8px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        borderRadius: '8px',
+                        border: `1.5px solid ${active ? '#0b53ac' : '#E2E8F0'}`,
+                        background: active ? '#0b53ac' : '#F8FAFC',
+                        color: active ? '#FFFFFF' : '#334155',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {labels[scale]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Step 2: Show from where to where */}
+            <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '16px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#475569', marginBottom: '10px', letterSpacing: '0.04em' }}>
+                2. Show From Where To Where:
+              </label>
+
+              {/* By Quarter */}
+              {modalDraft.granularity === 'quarter' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>From Quarter (Qa)</label>
+                    <select
+                      value={modalDraft.quarterFrom}
+                      onChange={e => setModalDraft(prev => ({ ...prev, quarterFrom: e.target.value }))}
+                      style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600 }}
+                    >
+                      {allTimelineQuarters.map(q => (
+                        <option key={q.key} value={q.key}>{q.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>To Quarter (Qb)</label>
+                    <select
+                      value={modalDraft.quarterTo}
+                      onChange={e => setModalDraft(prev => ({ ...prev, quarterTo: e.target.value }))}
+                      style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600 }}
+                    >
+                      {allTimelineQuarters.map(q => (
+                        <option key={q.key} value={q.key}>{q.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* By Month */}
+              {modalDraft.granularity === 'month' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>From Month</label>
+                    <select
+                      value={modalDraft.monthFrom}
+                      onChange={e => setModalDraft(prev => ({ ...prev, monthFrom: e.target.value }))}
+                      style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600 }}
+                    >
+                      {allTimelineMonths.map(m => (
+                        <option key={m.key} value={m.key}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>To Month</label>
+                    <select
+                      value={modalDraft.monthTo}
+                      onChange={e => setModalDraft(prev => ({ ...prev, monthTo: e.target.value }))}
+                      style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600 }}
+                    >
+                      {allTimelineMonths.map(m => (
+                        <option key={m.key} value={m.key}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* By Week */}
+              {modalDraft.granularity === 'week' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>From Week</label>
+                    <select
+                      value={modalDraft.weekFrom}
+                      onChange={e => setModalDraft(prev => ({ ...prev, weekFrom: Number(e.target.value) }))}
+                      style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600 }}
+                    >
+                      {weeks52.map(w => (
+                        <option key={w.weekNum} value={w.weekNum}>{w.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>To Week</label>
+                    <select
+                      value={modalDraft.weekTo}
+                      onChange={e => setModalDraft(prev => ({ ...prev, weekTo: Number(e.target.value) }))}
+                      style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600 }}
+                    >
+                      {weeks52.map(w => (
+                        <option key={w.weekNum} value={w.weekNum}>{w.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* By Date */}
+              {modalDraft.granularity === 'date' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>From Date</label>
+                    <input
+                      type="date"
+                      value={modalDraft.dateFrom}
+                      onChange={e => setModalDraft(prev => ({ ...prev, dateFrom: e.target.value }))}
+                      style={{ padding: '8px 12px', fontSize: '12px' }}
+                    />
+                  </div>
+                  <div className="form-field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B' }}>To Date</label>
+                    <input
+                      type="date"
+                      value={modalDraft.dateTo}
+                      onChange={e => setModalDraft(prev => ({ ...prev, dateTo: e.target.value }))}
+                      style={{ padding: '8px 12px', fontSize: '12px' }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '16px' }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setChartTimeline(prev => ({ ...prev, active: false }));
+                  setIsChartModalOpen(false);
+                }}
+                style={{ fontSize: '11px', color: '#64748B' }}
+              >
+                <i className="fa-solid fa-rotate-left"></i> Sync with Date Filter
+              </button>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setIsChartModalOpen(false)}
+                  style={{ fontSize: '11px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartTimeline({
+                      ...modalDraft,
+                      active: true,
+                    });
+                    setIsChartModalOpen(false);
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#0b53ac',
+                    color: '#FFFFFF',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(11, 83, 172, 0.3)',
+                  }}
+                >
+                  <i className="fa-solid fa-check" style={{ marginRight: '6px' }}></i> Apply to 4 Charts
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
