@@ -809,12 +809,13 @@ export default function MarketingReport({
     compareVal: number,
     label: string,
     isCostMetric = false,
-    isCurrency = false
+    isCurrency = false,
+    isHeroCard = false
   ) => {
     const chg = pctChange(currentVal, compareVal);
     if (chg === null) {
       return (
-        <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <div style={{ fontSize: '11px', color: isHeroCard ? 'rgba(255,255,255,0.8)' : '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <span>—</span> {label}
         </div>
       );
@@ -822,7 +823,9 @@ export default function MarketingReport({
     const delta = currentVal - compareVal;
     const isGood = isCostMetric ? chg <= 0 : chg >= 0;
     const arrow = chg >= 0 ? '▲' : '▼';
-    const color = isGood ? '#10B981' : '#E11D48';
+    const badgeColor = isHeroCard
+      ? (isGood ? '#4ADE80' : '#FDA4AF')
+      : (isGood ? '#10B981' : '#E11D48');
     const absPct = Math.abs(chg).toFixed(1);
     const sign = delta > 0 ? '+' : '−';
     const gapStr = isCurrency
@@ -830,9 +833,16 @@ export default function MarketingReport({
       : Math.abs(Math.round(delta)).toLocaleString();
 
     return (
-      <div style={{ fontSize: '12px', fontWeight: 600, color, display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <div style={{ fontSize: isHeroCard ? '11px' : '12px', fontWeight: 700, color: badgeColor, display: 'flex', alignItems: 'center', gap: '5px' }}>
         <span>{arrow} {absPct}% {label}</span>
-        <span style={{ opacity: 0.85, fontWeight: 500 }}>({sign}{gapStr})</span>
+        <span style={{
+          fontWeight: 800,
+          opacity: 1,
+          color: isHeroCard ? '#FFFFFF' : badgeColor,
+          letterSpacing: '0.02em',
+        }}>
+          ({sign}{gapStr})
+        </span>
       </div>
     );
   };
@@ -855,7 +865,7 @@ export default function MarketingReport({
 
   // ── Requirement 7: Calculate 2x2 Charts Timeline Data ─────────────────────
   // Can be configured dynamically via chartTimeline state or automatically sync with main filter
-  const { chartIntervals, chartTitlePrefix, chartTimelineLabel, chartTimelineSummary } = useMemo(() => {
+  const { chartIntervals, chartTitlePrefix, chartTimelineSummary } = useMemo(() => {
     const effectiveRows = submissions.filter(s => {
       const sTeam = normalizeTeam(s.team);
       const inTeam = teamFilter === 'All' || sTeam === teamFilter;
@@ -1326,6 +1336,34 @@ export default function MarketingReport({
           >
             <i className="fa-solid fa-rotate-left"></i> Reset
           </button>
+          {chartTimeline.active && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setChartTimeline(prev => ({ ...prev, active: false }))}
+              style={{ padding: '6px 11px', fontSize: '11px', height: '34px', color: '#64748B' }}
+              title="Reset 4 charts back to follow main report date filter"
+            >
+              <i className="fa-solid fa-rotate-left"></i> Sync Charts
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleOpenChartModal}
+            style={{
+              padding: '6px 12px',
+              fontSize: '11px',
+              height: '34px',
+              borderColor: isKPV ? '#9E1B32' : '#0b53ac',
+              color: isKPV ? '#9E1B32' : '#0b53ac',
+              fontWeight: 700,
+            }}
+            title="Configure timeline for all 4 charts"
+          >
+            <i className="fa-solid fa-sliders"></i>
+            {chartTimeline.active ? `Chart: ${chartTimelineSummary}` : 'Chart Timeline Setting'}
+          </button>
           <button
             type="button"
             className="btn btn-ghost"
@@ -1696,8 +1734,8 @@ export default function MarketingReport({
                   {fmtLAK(Math.round(curr.cpa))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px' }}>
-                  {renderDelta(curr.cpa, prev.cpa, prevPeriodLabel, true, true)}
-                  {renderDelta(curr.cpa, targets.cpa, 'vs Target', true, true)}
+                  {renderDelta(curr.cpa, prev.cpa, prevPeriodLabel, true, true, true)}
+                  {renderDelta(curr.cpa, targets.cpa, 'vs Target', true, true, true)}
                 </div>
               </div>
 
@@ -1716,8 +1754,8 @@ export default function MarketingReport({
                   {fmtLAK(Math.round(curr.cpo))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px' }}>
-                  {renderDelta(curr.cpo, prev.cpo, prevPeriodLabel, true, true)}
-                  {renderDelta(curr.cpo, targets.cpo, 'vs Target', true, true)}
+                  {renderDelta(curr.cpo, prev.cpo, prevPeriodLabel, true, true, true)}
+                  {renderDelta(curr.cpo, targets.cpo, 'vs Target', true, true, true)}
                 </div>
               </div>
             </div>
@@ -1725,184 +1763,113 @@ export default function MarketingReport({
 
           {/* ── Middle/Lower Row: 2x2 Charts + Insights Box ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '65% 35%', gap: '16px', flex: 1 }}>
-            {/* Left: 2x2 Charts Container */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {/* Requirement 7: Interactive Timeline indicator button bar */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '6px 12px',
-                background: '#FFFFFF',
-                borderRadius: '8px',
-                border: '1px solid #E2E8F0',
-                fontSize: '11px',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569' }}>
-                  <i className="fa-solid fa-chart-simple" style={{ color: '#0b53ac' }}></i>
-                  <span>
-                    <strong>4 Trend Charts:</strong> {chartTimelineSummary}
-                  </span>
+            {/* Left: 2x2 Charts Container (Clicking any chart opens Chart Timeline Modal) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              {/* Chart 1: Acquisition (NC vs EC) */}
+              <div
+                onClick={handleOpenChartModal}
+                style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                }}
+                title="Click to customize timeline for all 4 charts"
+              >
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155', marginBottom: '8px' }}>
+                  {chartTitlePrefix} Acquisition
                 </div>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  {chartTimeline.active && (
-                    <button
-                      type="button"
-                      onClick={() => setChartTimeline(prev => ({ ...prev, active: false }))}
-                      className="btn btn-ghost"
-                      style={{ padding: '2px 8px', fontSize: '10px', height: '22px' }}
-                      title="Sync timeline back to main date filter"
-                    >
-                      <i className="fa-solid fa-rotate-left"></i> Sync with Filter
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleOpenChartModal}
-                    className="btn btn-ghost"
-                    style={{
-                      padding: '2px 10px',
-                      fontSize: '10px',
-                      height: '22px',
-                      color: '#0b53ac',
-                      borderColor: '#0b53ac',
-                      fontWeight: 700,
-                    }}
-                    title="Click to change timeline for all 4 charts"
-                  >
-                    <i className="fa-solid fa-sliders"></i> Chart Timeline Setting
-                  </button>
+                <div style={{ height: '160px', flex: 1 }}>
+                  <Bar
+                    data={chartAcqData}
+                    options={createChartOptions('count')}
+                    plugins={[barDataLabelsPlugin]}
+                  />
                 </div>
               </div>
 
-              {/* 2x2 Charts Grid (Clickable to open Chart Timeline Modal) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flex: 1 }}>
-                {/* Chart 1: Acquisition (NC vs EC) */}
-                <div
-                  onClick={handleOpenChartModal}
-                  style={{
-                    background: '#FFFFFF',
-                    borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    cursor: 'pointer',
-                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-                  }}
-                  title="Click to customize timeline for all 4 charts"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
-                      {chartTitlePrefix} Acquisition
-                    </div>
-                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
-                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
-                    </span>
-                  </div>
-                  <div style={{ height: '145px', flex: 1 }}>
-                    <Bar
-                      data={chartAcqData}
-                      options={createChartOptions('count')}
-                      plugins={[barDataLabelsPlugin]}
-                    />
-                  </div>
+              {/* Chart 2: CPA / CPO */}
+              <div
+                onClick={handleOpenChartModal}
+                style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                }}
+                title="Click to customize timeline for all 4 charts"
+              >
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155', marginBottom: '8px' }}>
+                  {chartTitlePrefix} CPA / CPO
                 </div>
-
-                {/* Chart 2: CPA / CPO */}
-                <div
-                  onClick={handleOpenChartModal}
-                  style={{
-                    background: '#FFFFFF',
-                    borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    cursor: 'pointer',
-                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-                  }}
-                  title="Click to customize timeline for all 4 charts"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
-                      {chartTitlePrefix} CPA / CPO
-                    </div>
-                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
-                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
-                    </span>
-                  </div>
-                  <div style={{ height: '145px', flex: 1 }}>
-                    <Bar
-                      data={chartCpaCpoData}
-                      options={createChartOptions('currency')}
-                      plugins={[barDataLabelsPlugin]}
-                    />
-                  </div>
+                <div style={{ height: '160px', flex: 1 }}>
+                  <Bar
+                    data={chartCpaCpoData}
+                    options={createChartOptions('currency')}
+                    plugins={[barDataLabelsPlugin]}
+                  />
                 </div>
+              </div>
 
-                {/* Chart 3: Revenue (mil LAK) */}
-                <div
-                  onClick={handleOpenChartModal}
-                  style={{
-                    background: '#FFFFFF',
-                    borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    cursor: 'pointer',
-                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-                  }}
-                  title="Click to customize timeline for all 4 charts"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
-                      {chartTitlePrefix} Revenue (M LAK)
-                    </div>
-                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
-                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
-                    </span>
-                  </div>
-                  <div style={{ height: '145px', flex: 1 }}>
-                    <Bar
-                      data={chartRevData}
-                      options={createChartOptions('revenue')}
-                      plugins={[barDataLabelsPlugin]}
-                    />
-                  </div>
+              {/* Chart 3: Revenue (mil LAK) */}
+              <div
+                onClick={handleOpenChartModal}
+                style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                }}
+                title="Click to customize timeline for all 4 charts"
+              >
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155', marginBottom: '8px' }}>
+                  {chartTitlePrefix} Revenue (M LAK)
                 </div>
+                <div style={{ height: '160px', flex: 1 }}>
+                  <Bar
+                    data={chartRevData}
+                    options={createChartOptions('revenue')}
+                    plugins={[barDataLabelsPlugin]}
+                  />
+                </div>
+              </div>
 
-                {/* Chart 4: Cost (mil LAK) */}
-                <div
-                  onClick={handleOpenChartModal}
-                  style={{
-                    background: '#FFFFFF',
-                    borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
-                    padding: '12px 14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    cursor: 'pointer',
-                    transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-                  }}
-                  title="Click to customize timeline for all 4 charts"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>
-                      {chartTitlePrefix} Cost (M LAK)
-                    </div>
-                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#0b53ac', background: '#F0F7FF', padding: '1px 6px', borderRadius: '4px' }}>
-                      <i className="fa-solid fa-sliders" style={{ marginRight: '3px' }}></i>{chartTimelineLabel}
-                    </span>
-                  </div>
-                  <div style={{ height: '145px', flex: 1 }}>
-                    <Bar
-                      data={chartCostData}
-                      options={createChartOptions('cost')}
-                      plugins={[barDataLabelsPlugin]}
-                    />
-                  </div>
+              {/* Chart 4: Cost (mil LAK) */}
+              <div
+                onClick={handleOpenChartModal}
+                style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+                }}
+                title="Click to customize timeline for all 4 charts"
+              >
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#334155', marginBottom: '8px' }}>
+                  {chartTitlePrefix} Cost (M LAK)
+                </div>
+                <div style={{ height: '160px', flex: 1 }}>
+                  <Bar
+                    data={chartCostData}
+                    options={createChartOptions('cost')}
+                    plugins={[barDataLabelsPlugin]}
+                  />
                 </div>
               </div>
             </div>
