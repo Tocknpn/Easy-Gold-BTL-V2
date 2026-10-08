@@ -524,7 +524,8 @@ export default function EventManagement() {
       actualData.actual_ec,
       actualData.actual_nc_buyer,
       actualData.actual_impressions,
-      actualData.actual_footfall
+      actualData.actual_footfall,
+      actualEvent?.target_cpm
     );
 
     const payload: Partial<Event> = {
@@ -570,9 +571,10 @@ export default function EventManagement() {
       actualData.actual_ec,
       actualData.actual_nc_buyer,
       actualData.actual_impressions,
-      actualData.actual_footfall
+      actualData.actual_footfall,
+      actualEvent?.target_cpm
     );
-  }, [actualData]);
+  }, [actualData, actualEvent]);
 
   // ── Custom Dropdown List Management Handlers ──
   const handleAddOption = async () => {
@@ -640,6 +642,79 @@ export default function EventManagement() {
     saveCustomListOptions(next);
   };
 
+  // ── Export Event Plans & Actuals to CSV (Excel Compatible with UTF-8 BOM) ──
+  const exportEventsCSV = () => {
+    if (events.length === 0) return;
+    const headers = [
+      'Event Name', 'Location', 'Start Date', 'End Date', 'Year', 'Quarter', 'Team', 'Type', 'Scale', 'Objective', 'Status',
+      'Budget Total (LAK)', 'Budget Media', 'Budget Production', 'Budget Sponsor', 'Budget Merch', 'Budget Operation', 'Budget Other',
+      'Target NC', 'Target EC', 'Target Customers', 'Target Footfall', 'Target Buy Value (LAK)', 'Target CPA', 'Target CPO', 'Target CPM', 'Target CPF',
+      'Actual Recorded', 'Actual Cost (LAK)', 'Actual NC', 'Actual EC', 'Actual Customers', 'Actual Footfall', 'Actual Buy Value (LAK)',
+      'Actual CPA', 'Actual CPO', 'Actual CPM', 'Actual CPF', 'Targets Hit', 'Proposal Link'
+    ];
+
+    const escapeCsv = (str: any) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+
+    const rows = events.map(ev => {
+      const s = computeEventHitSummary(ev);
+      const act = s.actual;
+      return [
+        escapeCsv(ev.event_name),
+        escapeCsv(ev.location),
+        escapeCsv(ev.start_date),
+        escapeCsv(ev.end_date),
+        escapeCsv(ev.year),
+        escapeCsv(ev.quarter),
+        escapeCsv(ev.team),
+        escapeCsv(ev.activity_type),
+        escapeCsv(ev.scale),
+        escapeCsv(ev.objective),
+        escapeCsv(statusLabel(ev.status)),
+        ev.budget_total || 0,
+        ev.budget_media || 0,
+        ev.budget_production || 0,
+        ev.budget_sponsor || 0,
+        ev.budget_merch || 0,
+        ev.budget_operation || 0,
+        ev.budget_other || 0,
+        ev.target_nc || 0,
+        ev.target_ec || 0,
+        (ev.target_nc || 0) + (ev.target_ec || 0),
+        ev.target_footfall || 0,
+        ev.target_buy_value || 0,
+        ev.target_cpa || 0,
+        ev.target_cpo || 0,
+        ev.target_cpm || 0,
+        ev.target_cpf || 0,
+        ev.actual_filled ? 'Yes' : 'No (100% Plan Default)',
+        act.cost || 0,
+        act.nc || 0,
+        act.ec || 0,
+        act.customers || 0,
+        act.footfall || 0,
+        act.buy_value || 0,
+        act.cpa || 0,
+        act.cpo || 0,
+        act.cpm || 0,
+        act.cpf || 0,
+        escapeCsv(`${s.hitCount}/${s.totalTracked}`),
+        escapeCsv(ev.proposal_link || '')
+      ].join(',');
+    });
+
+    const csvContent = '\ufeff' + [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.setAttribute('download', `Event_Plans_Export_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const showForm = isCreating || isEditing;
 
   return (
@@ -672,6 +747,17 @@ export default function EventManagement() {
             title="Table View"
           >
             <i className="fa-solid fa-list"></i> Table
+          </button>
+
+          {/* Export CSV Button */}
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: '12px', padding: '6px 13px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--txt-main)', fontWeight: 600 }}
+            onClick={exportEventsCSV}
+            disabled={events.length === 0}
+            title="Export filtered event plans and actuals to Excel / CSV"
+          >
+            <i className="fa-solid fa-file-csv" style={{ color: 'var(--green)', marginRight: '5px' }}></i> Export CSV
           </button>
 
           {/* List Options Setup Modal Button (Replaces Event Types & removed unused KPI Targets button) */}

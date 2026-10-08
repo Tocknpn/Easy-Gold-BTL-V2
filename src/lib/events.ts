@@ -757,14 +757,35 @@ export function computeCPMetrics(
   ec: number,
   ncBuyer: number,
   impressions: number,
-  footfall: number
+  footfall: number,
+  targetCpm?: number
 ) {
   const buyers = (ncBuyer > 0 ? ncBuyer : nc) + ec;
   const customers = nc + ec;
+
+  // In Lao executive reporting, CPO measures cost per activated customer (NC + EC).
+  const cpoBase = customers > 0 ? customers : (buyers > 0 ? buyers : 0);
+
+  // CPM: In Lao BTL reporting, CPM is sometimes entered as cost per single impression
+  // (e.g. 64 or 20 LAK) and sometimes as international Cost Per Mille (x1000).
+  // If targetCpm is specified and < 500 LAK, preserve cost-per-impression scaling;
+  // otherwise default to standard Cost Per Mille (per 1,000 impressions).
+  let cpm = 0;
+  if (impressions > 0) {
+    const rawPerImpression = totalCost / impressions;
+    if (targetCpm && targetCpm > 0 && targetCpm < 500) {
+      cpm = Math.round(rawPerImpression);
+    } else if (rawPerImpression >= 1000) {
+      cpm = Math.round(rawPerImpression);
+    } else {
+      cpm = Math.round(rawPerImpression * 1000);
+    }
+  }
+
   return {
     cpa: nc > 0 ? Math.round(totalCost / nc) : 0,
-    cpo: buyers > 0 ? Math.round(totalCost / buyers) : (customers > 0 ? Math.round(totalCost / customers) : 0),
-    cpm: impressions > 0 ? Math.round((totalCost / impressions) * 1000) : 0,
+    cpo: cpoBase > 0 ? Math.round(totalCost / cpoBase) : 0,
+    cpm,
     cpf: footfall > 0 ? Math.round(totalCost / footfall) : 0,
   };
 }
@@ -787,7 +808,7 @@ export function getEffectiveActuals(event: Event) {
     const impressions = event.actual_impressions ?? event.total_media_impressions ?? 0;
     const buyVal = event.actual_buy_value ?? 0;
 
-    const calc = computeCPMetrics(cost, nc, ec, event.actual_nc_buyer ?? 0, impressions, footfall);
+    const calc = computeCPMetrics(cost, nc, ec, event.actual_nc_buyer ?? 0, impressions, footfall, event.target_cpm);
 
     return {
       is100PctDefault: false,
@@ -818,7 +839,7 @@ export function getEffectiveActuals(event: Event) {
   const impressions = event.total_media_impressions || 0;
   const buyVal = event.target_buy_value || 0;
 
-  const calc = computeCPMetrics(cost, nc, ec, event.target_nc_buyer ?? 0, impressions, footfall);
+  const calc = computeCPMetrics(cost, nc, ec, event.target_nc_buyer ?? 0, impressions, footfall, event.target_cpm);
 
   return {
     is100PctDefault: true,
@@ -1218,7 +1239,7 @@ export async function deleteEvent(id: string): Promise<{ error: any }> {
     const { error } = await supabase.from('events').delete().eq('id', id);
     if (error) console.warn('DB deleteEvent:', error);
     return { error: null };
-  } catch (err) {
+  } catch {
     return { error: null };
   }
 }

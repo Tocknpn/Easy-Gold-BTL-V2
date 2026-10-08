@@ -105,6 +105,8 @@ export const generateQuarters = (year: number): QuarterOption[] => [
   { key: `Q3'${String(year).slice(2)}`, label: `Q3'${String(year).slice(2)} (Jul – Sep)`, startDate: `${year}-07-01`, endDate: `${year}-09-30`, months: ['Jul', 'Aug', 'Sep'] },
   { key: `Q2'${String(year).slice(2)}`, label: `Q2'${String(year).slice(2)} (Apr – Jun)`, startDate: `${year}-04-01`, endDate: `${year}-06-30`, months: ['Apr', 'May', 'Jun'] },
   { key: `Q1'${String(year).slice(2)}`, label: `Q1'${String(year).slice(2)} (Jan – Mar)`, startDate: `${year}-01-01`, endDate: `${year}-03-31`, months: ['Jan', 'Feb', 'Mar'] },
+  // Trailing previous year Q4 for seamless Q1 vs prev Q comparison
+  { key: `Q4'${String(year - 1).slice(2)}`, label: `Q4'${String(year - 1).slice(2)} (Oct – Dec)`, startDate: `${year - 1}-10-01`, endDate: `${year - 1}-12-31`, months: ['Oct', 'Nov', 'Dec'] },
 ];
 
 export interface MonthOption {
@@ -128,6 +130,13 @@ export const generateMonths = (year: number): MonthOption[] => {
       endDate: eDate,
     });
   }
+  // Trailing previous year December for seamless Jan vs prev M comparison
+  months.push({
+    key: `Dec'${String(year - 1).slice(2)}`,
+    label: `Dec'${String(year - 1).slice(2)}`,
+    startDate: `${year - 1}-12-01`,
+    endDate: `${year - 1}-12-31`,
+  });
   return months;
 };
 
@@ -1015,8 +1024,10 @@ export default function MarketingReport({
 
     if (dateMode === 'week') {
       const sD = new Date(startDate + 'T00:00:00');
+      const eD = new Date(endDate + 'T00:00:00');
+      const numDays = Math.min(14, Math.max(1, Math.round((eD.getTime() - sD.getTime()) / 86400000) + 1));
       const buckets = [];
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < numDays; i++) {
         const curD = new Date(sD);
         curD.setDate(curD.getDate() + i);
         const iso = curD.toISOString().slice(0, 10);
@@ -1052,6 +1063,7 @@ export default function MarketingReport({
     selectedMonth,
     selectedWeek,
     startDate,
+    endDate,
     filtered,
     curr,
     quarters,
@@ -1229,7 +1241,7 @@ export default function MarketingReport({
               onChange={e => setSelectedQuarter(e.target.value)}
               style={{ padding: '6px 11px', fontSize: '12px', width: 'auto', height: '34px', fontWeight: 600 }}
             >
-              {quarters.map(q => (
+              {quarters.slice(0, 4).map(q => (
                 <option key={q.key} value={q.key}>{q.label}</option>
               ))}
             </select>
@@ -1244,7 +1256,7 @@ export default function MarketingReport({
               onChange={e => setSelectedMonth(e.target.value)}
               style={{ padding: '6px 11px', fontSize: '12px', width: 'auto', height: '34px', fontWeight: 600 }}
             >
-              {months.map(m => (
+              {months.slice(0, 12).map(m => (
                 <option key={m.key} value={m.key}>{m.label}</option>
               ))}
             </select>

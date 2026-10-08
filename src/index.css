@@ -372,3 +372,54 @@ input:checked + .slider:before {
   color: var(--orange);
   border: 1px solid rgba(244,148,58,0.3);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   EXECUTIVE PDF & PRESENTATION PRINT STYLES
+   Hides sidebar, header, buttons, and control panels during Print / PDF Export
+   ══════════════════════════════════════════════════════════════════════════════ */
+@media print {
+  /* Hide application shell navigation, topbar, buttons, and filter bars */
+  #sidebar,
+  .topbar,
+  .skip-link,
+  .btn,
+  select,
+  input,
+  header,
+  nav,
+  aside,
+  button {
+    display: none !important;
+  }
+
+  body,
+  #main,
+  #content,
+  .page,
+  .page-wide {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+  }
+
+  /* Slide canvas full-bleed isolation */
+  #event-report-slide-canvas,
+  #marketing-report-slide {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+}

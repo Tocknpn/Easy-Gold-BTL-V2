@@ -204,6 +204,7 @@ export default function EventReport() {
         >
           {/* Slide Container Canvas */}
           <div
+            id="event-report-slide-canvas"
             style={{
               background: '#ffffff',
               color: '#0f172a',
