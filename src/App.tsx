@@ -36,12 +36,19 @@ function Layout({ children }: { children: React.ReactNode }) {
     if (storedUser) {
       const u = JSON.parse(storedUser);
       setUser(u);
-      const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health', '/diagnostic', '/event-management', '/event-report'];
-      const privileged = u.role === 'admin' || u.role === 'manager';
-      if (!privileged && ADMIN_ONLY.includes(location.pathname)) {
-        navigate('/calendar', { replace: true });
-      } else if (!privileged && location.pathname === '/staff-report' && u.team !== 'KPV') {
-        navigate('/calendar', { replace: true });
+      const ATL_ALLOWED = ['/', '/calendar', '/event-management', '/event-report'];
+      if (u.role === 'atl') {
+        if (!ATL_ALLOWED.includes(location.pathname)) {
+          navigate('/', { replace: true });
+        }
+      } else {
+        const ADMIN_ONLY = ['/', '/report', '/merch-report', '/route-map', '/cost-manager', '/plan-setting', '/settings', '/health', '/diagnostic', '/event-management', '/event-report'];
+        const privileged = u.role === 'admin' || u.role === 'manager';
+        if (!privileged && ADMIN_ONLY.includes(location.pathname)) {
+          navigate('/calendar', { replace: true });
+        } else if (!privileged && location.pathname === '/staff-report' && u.team !== 'KPV') {
+          navigate('/calendar', { replace: true });
+        }
       }
     } else {
       navigate('/login');
@@ -137,9 +144,9 @@ function Layout({ children }: { children: React.ReactNode }) {
             <button className="btn btn-ghost" onClick={() => window.location.reload()} style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px' }} title="Refresh Page">
               <i className="fa-solid fa-rotate-right"></i>
             </button>
-            {(user.role === 'admin' || user.role === 'manager') && (
-              <button className="pill pill-blue" style={{ fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}>
-                MANAGEMENT
+            {(user.role === 'admin' || user.role === 'manager' || user.role === 'atl') && (
+              <button className={`pill ${user.role === 'atl' ? 'pill-purple' : 'pill-blue'}`} style={{ fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}>
+                {user.role === 'atl' ? 'ATL' : user.role === 'manager' ? 'EVENT MANAGER' : 'MANAGEMENT'}
               </button>
             )}
           </div>

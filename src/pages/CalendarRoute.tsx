@@ -88,26 +88,28 @@ export default function CalendarRoute() {
 
   const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
 
+  const isPrivileged = !user || user.role === 'admin' || user.role === 'manager' || user.role === 'atl';
+
   const subsForMonth = submissions.filter(s =>
     s.date.startsWith(currentMonthStr) &&
-    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (s.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
+    (isPrivileged || !user.team || (s.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
     (teamFilter === 'All' || (s.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
 
   const checkinsForMonth = checkins.filter(c =>
     c.date.startsWith(currentMonthStr) &&
-    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (c.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
+    (isPrivileged || !user.team || (c.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
     (teamFilter === 'All' || (c.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
 
   const routesForMonth = routePlans.filter(r =>
     r.date.startsWith(currentMonthStr) &&
-    (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (r.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
+    (isPrivileged || !user.team || (r.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
     (teamFilter === 'All' || (r.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()))
   );
 
   const eventsForMonth = events.filter(e => {
-    const isTeamMatch = (!user || user.role === 'admin' || user.role === 'manager' || !user.team || (e.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
+    const isTeamMatch = (isPrivileged || !user.team || (e.team || 'KPV').toUpperCase() === user.team.toUpperCase()) &&
       (teamFilter === 'All' || (e.team || 'KPV').toUpperCase().includes(teamFilter.toUpperCase()));
     return isTeamMatch;
   });
@@ -144,7 +146,7 @@ export default function CalendarRoute() {
         </div>
 
         <div style={{ display: 'flex', gap: '12px', fontSize: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {(!user || user.role === 'admin' || user.role === 'manager') && (
+          {(!user || user.role === 'admin' || user.role === 'manager' || user.role === 'atl') && (
             <select value={teamFilter} onChange={e => setTeamFilter(e.target.value as any)} style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--txt-main)' }}>
               <option value="All">All Teams</option>
               <option value="KPV">KPV</option>
@@ -254,13 +256,17 @@ export default function CalendarRoute() {
                               className="cal-ticket plan"
                               role="button"
                               tabIndex={0}
-                              onClick={() => {
+                                onClick={() => {
                                 if (checkedIn) {
                                   if (daySubs.length === 1) openModal(daySubs[0]);
                                   else if (daySubs.length > 1) setDayModal({ date: r.date, subs: daySubs });
                                   else alert('No submission recorded yet for this location.');
                                 } else {
-                                  navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}&team=${encodeURIComponent(r.team)}`);
+                                  if (user?.role === 'atl') {
+                                    alert(`Planned Route: ${loc} (${r.team})`);
+                                  } else {
+                                    navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}&team=${encodeURIComponent(r.team)}`);
+                                  }
                                 }
                               }}
                               onKeyDown={(e) => {
@@ -271,7 +277,11 @@ export default function CalendarRoute() {
                                     else if (daySubs.length > 1) setDayModal({ date: r.date, subs: daySubs });
                                     else alert('No submission recorded yet for this location.');
                                   } else {
-                                    navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}&team=${encodeURIComponent(r.team)}`);
+                                    if (user?.role === 'atl') {
+                                      alert(`Planned Route: ${loc} (${r.team})`);
+                                    } else {
+                                      navigate(`/checkin?date=${r.date}&location=${encodeURIComponent(loc)}&team=${encodeURIComponent(r.team)}`);
+                                    }
                                   }
                                 }
                               }}
@@ -452,6 +462,7 @@ export default function CalendarRoute() {
       <SubmissionModal
         open={!!modalSub}
         submission={modalSub}
+        readOnly={user?.role === 'atl'}
         onClose={() => setModalSub(null)}
         onSave={handleSave}
         onDelete={handleDelete}

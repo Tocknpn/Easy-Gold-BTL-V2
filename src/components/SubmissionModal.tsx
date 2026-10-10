@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Submission, MerchItem } from '../lib/submissions';
 import { fmtLAK, fmtLAKShort, MERCH_CATALOG, fetchMerchCatalog, STAFF_NAMES, clearSubmissionsCache, normalizeActivityType, activityLabel, isMissingColumnError, MISSING_ACTIVITY_COLUMN_HINT, MISSING_SPONSORSHIP_COLUMN_HINT, MISSING_PROD_COST_COLUMN_HINT, totalCostOf } from '../lib/submissions';
-import { fetchStaff } from '../lib/workflow';
+import { fetchStaff, writeAuditLog } from '../lib/workflow';
 import type { StaffMember } from '../lib/workflow';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   onClose: () => void;
   onSave: (saved: Submission) => void;
   onDelete: (id: string) => void;
+  readOnly?: boolean;
 }
 
 // ── Render helpers (pic2–pic3 view mode) ─────────────────────────────────
@@ -38,7 +39,7 @@ const resolveCpu = (name: string, storedCpu: number, catalog: MerchItem[]) =>
 const merchTotalCost = (items: MerchItem[] | undefined, catalog: MerchItem[]) =>
   (items || []).reduce((a, i) => a + Number(i.qty) * resolveCpu(i.name, i.cpu, catalog), 0);
 
-export default function SubmissionModal({ open, submission, onClose, onSave, onDelete }: Props) {
+export default function SubmissionModal({ open, submission, onClose, onSave, onDelete, readOnly = false }: Props) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Submission | null>(null);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -187,6 +188,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
 
       if (error) throw error;
       clearSubmissionsCache();
+      void writeAuditLog('submission.update', { id: updated.id, branch: updated.branch, date: updated.date, team: updated.team }, 'success', updated.team);
       onSave(updated);
       setIsEditing(false);
     } catch (err: any) {
@@ -207,6 +209,7 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
 
       if (error) throw error;
       clearSubmissionsCache();
+      void writeAuditLog('submission.delete', { id: editData.id, branch: editData.branch, date: editData.date, team: editData.team }, 'success', editData.team);
       onDelete(editData.id);
     } catch (err: any) {
       window.alert('Failed to delete: ' + err.message);
@@ -228,13 +231,21 @@ export default function SubmissionModal({ open, submission, onClose, onSave, onD
             <div style={{ fontSize: '12px', color: 'var(--txt-sub)', marginTop: '4px' }}>{editData.branch} · {editData.date}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--gold-dim)', color: 'var(--gold)', border: '1px solid rgba(167,123,39,0.3)' }} onClick={() => setIsEditing(true)} title="Edit"><i className="fa-solid fa-pen-to-square"></i> Edit</button>
-            <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} onClick={handleDeleteClick} disabled={submitting} title="Delete"><i className="fa-solid fa-trash"></i> Delete</button>
+            {readOnly ? (
+              <span className="pill pill-blue" style={{ fontSize: '11px', padding: '4px 10px' }}>
+                <i className="fa-solid fa-eye" style={{ marginRight: '5px' }}></i> Read Only
+              </span>
+            ) : (
+              <>
+                <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--gold-dim)', color: 'var(--gold)', border: '1px solid rgba(167,123,39,0.3)' }} onClick={() => setIsEditing(true)} title="Edit"><i className="fa-solid fa-pen-to-square"></i> Edit</button>
+                <button className="btn" style={{ padding: '6px 14px', borderRadius: '6px', fontSize: '12px', background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid rgba(232,84,84,0.3)' }} onClick={handleDeleteClick} disabled={submitting} title="Delete"><i className="fa-solid fa-trash"></i> Delete</button>
+              </>
+            )}
             <button onClick={onClose} className="btn btn-ghost" style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px', lineHeight: 1, fontSize: '14px' }} title="Close">✕</button>
           </div>
         </div>
 
-        {isEditing ? (
+        {isEditing && !readOnly ? (
           /* ── Edit form (pic4–pic5) ── */
           <div>
             <div className="grid-3" style={{ marginBottom: '16px', gap: '14px' }}>

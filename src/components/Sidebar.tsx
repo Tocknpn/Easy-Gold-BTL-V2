@@ -112,31 +112,31 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
       <nav style={{ padding: collapsed ? '12px 6px' : undefined }}>
         {/* ── Team section ── */}
         <div className="nav-group">
-          {!collapsed && <div className="nav-label">{user.role === 'staff' ? 'My Workflow' : 'Team'}</div>}
+          {!collapsed && <div className="nav-label">{user.role === 'staff' ? 'My Workflow' : user.role === 'atl' ? 'Field & Route' : 'Team'}</div>}
           <NavLink to="/calendar" icon="fa-regular fa-calendar-alt" label="Calendar & Route" />
-          <NavLink to="/checkin" icon="fa-solid fa-location-dot" label="Check-In" />
-          <NavLink to="/submit" icon="fa-solid fa-file-invoice" label="Submit Results" />
-          {user.role !== 'staff' && (
+          {user.role !== 'atl' && <NavLink to="/checkin" icon="fa-solid fa-location-dot" label="Check-In" />}
+          {user.role !== 'atl' && <NavLink to="/submit" icon="fa-solid fa-file-invoice" label="Submit Results" />}
+          {user.role !== 'staff' && user.role !== 'atl' && (
             <NavLink to="/targets" icon="fa-solid fa-bullseye" label="My Targets" />
           )}
-          {(user.role !== 'staff' || user.team === 'KPV') && (
+          {user.role !== 'atl' && (user.role !== 'staff' || user.team === 'KPV') && (
             <NavLink to="/staff-report" icon="fa-solid fa-users" label="Staff Report" />
           )}
         </div>
 
         {/* ── Event Manager section ── */}
-        {(user.role === 'manager' || user.role === 'admin') && (
+        {(user.role === 'manager' || user.role === 'admin' || user.role === 'atl') && (
           <div className="nav-group">
-            {!collapsed && <div className="nav-label">Event Manager</div>}
+            {!collapsed && <div className="nav-label">{user.role === 'atl' ? 'Events & Overview' : 'Event Manager'}</div>}
             <NavLink
               to="/"
               icon="fa-solid fa-chart-line"
               label="Dashboard"
               badge={<div className="pill pill-gold" style={{ fontSize: '8px' }}>Live</div>}
             />
-            <NavLink to="/report" icon="fa-solid fa-file-lines" label="Submission History" />
-            <NavLink to="/merch-report" icon="fa-solid fa-box-open" label="Merch Report" />
-            <NavLink to="/route-map" icon="fa-solid fa-map-location-dot" label="Route Map" />
+            {user.role !== 'atl' && <NavLink to="/report" icon="fa-solid fa-file-lines" label="Submission History" />}
+            {user.role !== 'atl' && <NavLink to="/merch-report" icon="fa-solid fa-box-open" label="Merch Report" />}
+            {user.role !== 'atl' && <NavLink to="/route-map" icon="fa-solid fa-map-location-dot" label="Route Map" />}
             <NavLink to="/event-management" icon="fa-solid fa-calendar-check" label="Event Management" />
             <NavLink to="/event-report" icon="fa-solid fa-chart-pie" label="Event Report" />
           </div>
@@ -198,7 +198,7 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
         {!collapsed && (
           <div className="user-info" style={{ flex: 1 }}>
             <strong>{user.name}</strong>
-            <span>{user.role === 'admin' ? 'Administrator' : user.role === 'manager' ? 'Event Manager' : `Staff · ${user.team || 'Field'}`}</span>
+            <span>{user.role === 'admin' ? 'Administrator' : user.role === 'manager' ? 'Event Manager' : user.role === 'atl' ? 'Area Team Lead (ATL)' : `Staff · ${user.team || 'Field'}`}</span>
           </div>
         )}
         <button

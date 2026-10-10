@@ -11,6 +11,8 @@ const DEMO_USERS: Record<string, { name: string; role: string; team: string; des
   'demo-admin@example.com:demo-admin-8f3a':    { name: 'Demo Admin',  role: 'admin', team: 'Admin Team', dest: '/' },
   'demo-kpv@example.com:demo-kpv-2c17':        { name: 'Demo KPV',    role: 'staff', team: 'KPV',        dest: '/calendar' },
   'demo-agency@example.com:demo-agency-5b9d':  { name: 'Demo Agency', role: 'staff', team: 'Agency',     dest: '/calendar' },
+  'demo-atl@example.com:demo-atl-9c21':        { name: 'Demo ATL',    role: 'atl',   team: 'ATL',        dest: '/' },
+  'atl@easygold.la:atl1234':                   { name: 'ATL Area Lead', role: 'atl', team: 'ATL',        dest: '/' },
 };
 
 const hasRealDB = () => {
@@ -73,14 +75,15 @@ export default function Login() {
         } else if (row.is_active === false) {
           setError('This account has been deactivated. Please contact an administrator.');
         } else {
-          const role = row.role === 'admin' || row.role === 'manager' ? 'admin' : 'staff';
+          const rawRole = (row.role || '').toLowerCase();
+          const role = rawRole === 'admin' ? 'admin' : rawRole === 'manager' ? 'manager' : rawRole === 'atl' ? 'atl' : 'staff';
           localStorage.setItem('easygold_user', JSON.stringify({
             username: row.username ?? username,
             name: row.name ?? username,
             role,
             team: role === 'staff' ? (row.team === 'Agency' ? 'Agency' : 'KPV') : (row.team || ''),
           }));
-          navigate(role === 'admin' ? '/' : '/calendar');
+          navigate(role === 'staff' ? '/calendar' : '/');
         }
       } else {
         // ── No real DB configured — use local demo credentials ─────────────
@@ -196,6 +199,10 @@ export default function Login() {
               <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('demo-agency@example.com'); setPassword('demo-agency-5b9d'); setError(''); setIsTimeout(false); }}>
                 <span><i className="fa-solid fa-user" style={{ color: 'var(--green)', marginRight: '8px' }}></i>Staff — Agency</span>
                 <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>field workflow</span>
+              </button>
+              <button type="button" className="btn btn-ghost" style={{ justifyContent: 'space-between', fontSize: '12px', padding: '8px 12px' }} onClick={() => { setUsername('demo-atl@example.com'); setPassword('demo-atl-9c21'); setError(''); setIsTimeout(false); }}>
+                <span><i className="fa-solid fa-user-tie" style={{ color: '#a78bfa', marginRight: '8px' }}></i>ATL</span>
+                <span style={{ fontSize: '10px', color: 'var(--txt-dim)' }}>Calendar (view-only), Dashboard, Events</span>
               </button>
             </div>
           </div>

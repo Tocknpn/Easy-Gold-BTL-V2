@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { totalCostOf } from './submissions';
+import { writeAuditLog } from './workflow';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -969,6 +970,7 @@ export async function createEventType(payload: {
       .select()
       .single();
     if (error) return { data: null, error };
+    void writeAuditLog('event_type.create', { name: data.name, description: data.description, sort_order: data.sort_order }, 'success');
     return {
       data: { id: data.id, created_at: data.created_at, name: data.name, description: data.description || '', sort_order: data.sort_order },
       error: null,
@@ -995,6 +997,7 @@ export async function updateEventType(
       await supabase.from('events').update({ activity_type: newName }).eq('activity_type', oldName);
       await supabase.from('event_targets').update({ activity_type: newName }).eq('activity_type', oldName);
     }
+    void writeAuditLog('event_type.update', { id, oldName, newName }, 'success');
     return { error: null };
   } catch (err) {
     return { error: err };
@@ -1004,6 +1007,7 @@ export async function updateEventType(
 export async function deleteEventType(id: string): Promise<{ error: any }> {
   try {
     const { error } = await supabase.from('event_types').delete().eq('id', id);
+    void writeAuditLog('event_type.delete', { id }, error ? 'error' : 'success');
     return { error };
   } catch (err) {
     return { error: err };
@@ -1119,6 +1123,16 @@ export async function createEvent(
   // 1. Save to local storage first for immediate instant responsiveness
   const currentLocal = getLocalEvents();
   saveLocalEvents([localEvent, ...currentLocal.filter(e => e.id !== newId)]);
+  void writeAuditLog('event.create', {
+    id: localEvent.id,
+    event_name: localEvent.event_name,
+    activity_type: localEvent.activity_type,
+    team: localEvent.team,
+    start_date: localEvent.start_date,
+    end_date: localEvent.end_date,
+    budget_total: localEvent.budget_total,
+    status: localEvent.status,
+  }, 'success', localEvent.team);
 
   // 2. Best-effort DB insert
   try {
@@ -1191,6 +1205,19 @@ export async function updateEvent(
     return ev;
   });
   saveLocalEvents(nextList);
+  const existing = currentLocal.find(e => e.id === id);
+  const targetTeam = payload.team || existing?.team || '';
+  const targetName = payload.event_name || existing?.event_name || '';
+  void writeAuditLog('event.update', {
+    id,
+    event_name: targetName,
+    team: targetTeam,
+    actual_filled: payload.actual_filled ?? existing?.actual_filled,
+    budget_total: payload.budget_total ?? existing?.budget_total,
+    actual_cost: payload.actual_cost ?? existing?.actual_cost,
+    status: payload.status ?? existing?.status,
+    fields: Object.keys(payload),
+  }, 'success', targetTeam);
 
   // 2. Best-effort DB update
   try {
@@ -1232,7 +1259,13 @@ export async function updateEvent(
 export async function deleteEvent(id: string): Promise<{ error: any }> {
   // 1. Remove from local storage
   const currentLocal = getLocalEvents();
+  const toDelete = currentLocal.find(e => e.id === id);
   saveLocalEvents(currentLocal.filter(e => e.id !== id));
+  void writeAuditLog('event.delete', {
+    id,
+    event_name: toDelete?.event_name || '',
+    team: toDelete?.team || '',
+  }, 'success', toDelete?.team || '');
 
   // 2. Best-effort DB delete
   try {

@@ -4,8 +4,8 @@ import { supabase } from './supabase';
 export interface AppUser {
   username: string;
   name: string;
-  role: 'admin' | 'staff' | 'manager';
-  team?: string; // 'KPV' | 'Agency' — meaningful for staff accounts
+  role: 'admin' | 'staff' | 'manager' | 'atl';
+  team?: string; // 'KPV' | 'Agency' | 'ATL' — meaningful for staff/field accounts
 }
 
 export function getCurrentUser(): AppUser | null {
@@ -317,6 +317,9 @@ export async function addUserRecord(u: { username: string; password: string; nam
     const retry = await supabase.from('users').insert(base);
     error = retry.error;
   }
+  if (error && error.message && error.message.includes('users_role_check')) {
+    return { message: "The database constraint users_role_check needs to be updated to allow role 'atl'. Please run supabase_add_atl_role.sql in Supabase SQL editor: ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check; ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'manager', 'team_member', 'atl'));" };
+  }
   return error ? { message: error.message } : null;
 }
 
@@ -345,6 +348,7 @@ export async function deleteUserRecord(id: string): Promise<{ message: string } 
 export function roleLabel(role: string): string {
   if (role === 'admin') return 'Admin';
   if (role === 'manager') return 'Manager';
+  if (role === 'atl') return 'ATL';
   return 'Team Member';
 }
 
@@ -389,11 +393,15 @@ export async function fetchAuditLogs(limit = 1000): Promise<AuditLogRow[]> {
 export async function writeAuditLog(action: string, payload: any = {}, status = 'success', team = ''): Promise<void> {
   try {
     const user = getCurrentUser();
+    const enrichedPayload = {
+      ...(typeof payload === 'object' && payload !== null ? payload : { value: payload }),
+      role: user?.role || 'unknown',
+    };
     const { error } = await supabase.from('audit_log').insert({
       action,
-      user_name: user?.name || user?.username || 'system',
+      user_name: user?.name ? `${user.name} (${user.role ? roleLabel(user.role) : 'User'})` : (user?.username || 'system'),
       team: team || user?.team || '',
-      payload: payload ?? {},
+      payload: enrichedPayload,
       status,
       timestamp: new Date().toISOString(),
     });

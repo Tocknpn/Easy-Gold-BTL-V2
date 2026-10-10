@@ -151,6 +151,7 @@ a:focus-visible {
 .pill-green { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,139,0.3); }
 .pill-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(77,166,255,0.3); }
 .pill-red { background: var(--red-dim); color: var(--red); border: 1px solid rgba(224,82,82,0.3); }
+.pill-purple { background: rgba(124,58,237,0.18); color: #c084fc; border: 1px solid rgba(167,139,250,0.35); }
 
 .alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .alert-info { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(77,158,255,0.2); }

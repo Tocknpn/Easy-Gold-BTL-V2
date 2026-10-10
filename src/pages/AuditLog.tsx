@@ -17,7 +17,9 @@ const statusPill = (s: string) => {
 
 const actionPill = (a: string) => {
   const v = (a || '').toLowerCase();
-  if (v.includes('user') || v.includes('delete')) return 'pill-red';
+  if (v.includes('delete') || v.includes('user.deactivate')) return 'pill-red';
+  if (v.includes('event')) return 'pill-purple';
+  if (v.includes('user')) return 'pill-gold';
   if (v.includes('merch') || v.includes('staff')) return 'pill-gold';
   return 'pill-blue';
 };

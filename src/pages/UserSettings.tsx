@@ -11,11 +11,11 @@ import {
 } from '../lib/workflow';
 import type { AppUserRow } from '../lib/workflow';
 
-const ROLES = ['admin', 'manager', 'team_member'];
-const TEAMS = ['KPV', 'Agency', 'KPV Team', 'Agency Team', 'Admin Team', 'Manager Team'];
+const ROLES = ['admin', 'manager', 'atl', 'team_member'];
+const TEAMS = ['KPV', 'Agency', 'ATL', 'KPV Team', 'Agency Team', 'Admin Team', 'Manager Team'];
 
 const rolePill = (r: string) =>
-  r === 'admin' ? 'pill-red' : r === 'manager' ? 'pill-gold' : 'pill-blue';
+  r === 'admin' ? 'pill-red' : r === 'manager' ? 'pill-gold' : r === 'atl' ? 'pill-purple' : 'pill-blue';
 
 // Some environments expose confirm() as a global; fall back to allowing the action.
 const confirmDialog = (msg: string): boolean => {

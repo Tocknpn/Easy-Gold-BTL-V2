@@ -10,6 +10,7 @@ import {
 } from '../lib/events';
 import { fetchMerchCatalog } from '../lib/submissions';
 import type { MerchItem } from '../lib/submissions';
+import { writeAuditLog } from '../lib/workflow';
 
 const THIS_YEAR = new Date().getFullYear();
 const DRAFT_KEY = 'easygold_event_plan_draft_v2';
@@ -601,6 +602,7 @@ export default function EventManagement() {
     }
     setListOptions(next);
     saveCustomListOptions(next);
+    void writeAuditLog('event_options.update', { tab: listTab, action: 'add', value: val }, 'success');
     setNewOptionVal('');
     setNewOptionDesc('');
   };
@@ -629,6 +631,7 @@ export default function EventManagement() {
     }
     setListOptions(next);
     saveCustomListOptions(next);
+    void writeAuditLog('event_options.update', { tab: listTab, action: 'delete', value: item }, 'success');
   };
 
   const handleResetDefaults = () => {
@@ -640,6 +643,7 @@ export default function EventManagement() {
     if (listTab === 'media') next.mediaSources = [...DEFAULT_LIST_OPTIONS.mediaSources];
     setListOptions(next);
     saveCustomListOptions(next);
+    void writeAuditLog('event_options.reset', { tab: listTab }, 'success');
   };
 
   // ── Export Event Plans & Actuals to CSV (Excel Compatible with UTF-8 BOM) ──
