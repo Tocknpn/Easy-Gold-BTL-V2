@@ -1396,30 +1396,6 @@ export default function MarketingReport({
         </div>
       </div>
 
-      {/* ── Slide Capture Notification ── */}
-      <div style={{
-        marginBottom: '14px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '8px 14px',
-        background: isKPV ? '#FFF1F2' : '#F3F7FD',
-        border: `1px solid ${isKPV ? '#FECDD3' : '#D9E6F7'}`,
-        borderRadius: '8px',
-        fontSize: '11px',
-        color: isKPV ? '#9E1B32' : '#0b53ac',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <i className="fa-solid fa-camera"></i>
-          <span>
-            <strong>Google Slides Ready:</strong> Perfect 16:9 layout in <strong>Montserrat</strong> font. Press <strong>Win + Shift + S</strong> on Windows to snip the frame below and paste directly into your presentation slide.
-          </span>
-        </div>
-        <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.9 }}>
-          {isKPV ? '🌹 KPV Brand Tone Active (Rose Wine)' : '🔷 Executive Palette Active (#0b53ac)'}
-        </span>
-      </div>
-
       {/* ── THE PRESENTATION SLIDE FRAME ── */}
       <div
         id="marketing-report-slide"

@@ -829,13 +829,6 @@ export default function Dashboard() {
             </span>
           </button>
         </div>
-
-        <div style={{ fontSize: '11px', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '6px' }}>
-          <span>Current Tab:</span>
-          <strong style={{ color: 'var(--txt-main)' }}>
-            {activeTab === 'overall' ? 'Operations Overview' : 'Marketing Activation Deck'}
-          </strong>
-        </div>
       </div>
 
       {activeTab === 'marketing' ? (
