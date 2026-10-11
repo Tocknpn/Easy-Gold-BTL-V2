@@ -24,7 +24,7 @@ const EventManagement = lazy(() => import('./pages/EventManagement'));
 const EventReport = lazy(() => import('./pages/EventReport'));
 
 // Dense admin screens and slide decks get extra canvas width (1440px)
-const WIDE_PAGES = ['/', '/cost-manager', '/copy-paste', '/report', '/event-management'];
+const WIDE_PAGES = ['/', '/cost-manager', '/copy-paste', '/report', '/event-management', '/event-report'];
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
@@ -133,8 +133,8 @@ function Layout({ children }: { children: React.ReactNode }) {
               </button>
             )}
             <div>
-              <h1 id="tb-title">{headerInfo.title}</h1>
-              <div className="sub" id="tb-sub">{headerInfo.sub}</div>
+              <h1 id="tb-title" className={['/event-management', '/event-report'].includes(currentPath) ? 'font-montserrat' : ''}>{headerInfo.title}</h1>
+              <div className={`sub ${['/event-management', '/event-report'].includes(currentPath) ? 'font-montserrat' : ''}`} id="tb-sub">{headerInfo.sub}</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -152,7 +152,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <div id="content">
-          <div className={`page active${WIDE_PAGES.includes(location.pathname) ? ' page-wide' : ''}`} style={{ display: 'block' }}>
+          <div className={`page active${WIDE_PAGES.includes(location.pathname) ? ' page-wide' : ''}${['/event-management', '/event-report'].includes(location.pathname) ? ' font-montserrat' : ''}`} style={{ display: 'block' }}>
             {children}
           </div>
         </div>

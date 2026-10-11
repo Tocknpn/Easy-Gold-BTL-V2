@@ -89,7 +89,7 @@ function FormattedNumberInput({
       style={{
         fontSize: '13px',
         padding: '8px 10px',
-        fontFamily: 'var(--font-mono)',
+        fontFamily: 'var(--font-montserrat)',
         width: '100%',
         background: readOnly ? 'var(--ink)' : 'var(--surface)',
         cursor: readOnly ? 'not-allowed' : 'text',
@@ -105,7 +105,7 @@ function KpiChip({ label, value, sub, color }: { label: string; value: string; s
   return (
     <div style={{ background: 'var(--ink)', borderRadius: '10px', padding: '10px 14px', minWidth: 0, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '3px' }}>{label}</div>
-      <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: color || 'var(--txt-main)' }}>{value}</div>
+      <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-montserrat)', color: color || 'var(--txt-main)' }}>{value}</div>
       {sub && <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '2px' }}>{sub}</div>}
     </div>
   );
@@ -722,7 +722,7 @@ export default function EventManagement() {
   const showForm = isCreating || isEditing;
 
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', paddingBottom: '60px' }}>
+    <div className="font-montserrat" style={{ maxWidth: '1440px', margin: '0 auto', paddingBottom: '60px', fontFamily: 'var(--font-montserrat)' }}>
       {/* ── Top Bar / Action Controls ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -1164,7 +1164,7 @@ export default function EventManagement() {
                                 border: '1px solid var(--border)',
                                 borderRadius: '6px',
                                 padding: '5px 8px',
-                                fontFamily: 'var(--font-mono)',
+                                fontFamily: 'var(--font-montserrat)',
                                 fontSize: '12px',
                                 color: 'var(--txt-sub)',
                                 cursor: 'not-allowed',
@@ -1175,7 +1175,7 @@ export default function EventManagement() {
                               </div>
                             </td>
                             <td>
-                              <strong style={{ fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{fmtLAK((item.qty || 0) * (item.cpu || 0))}</strong>
+                              <strong style={{ fontSize: '12px', fontFamily: 'var(--font-montserrat)' }}>{fmtLAK((item.qty || 0) * (item.cpu || 0))}</strong>
                             </td>
                             <td>
                               <button type="button" className="btn btn-ghost" onClick={() => removeMerchRow(idx)} style={{ color: 'var(--red)', padding: '4px 8px', fontSize: '11px' }}>
@@ -1352,7 +1352,7 @@ export default function EventManagement() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px', paddingBottom: '8px', borderBottom: '1px solid var(--border)' }}>
                     <div>
                       <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase' }}>Total Spending Cost</div>
-                      <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--txt-main)' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-montserrat)', color: 'var(--txt-main)' }}>
                         {fmtLAKShort(actual.cost)}
                       </div>
                     </div>

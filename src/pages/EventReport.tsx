@@ -35,7 +35,7 @@ function KpiPill({ label, value, color }: { label: string; value: string; color?
   return (
     <div style={{ textAlign: 'center', padding: '8px 4px' }}>
       <div style={{ fontSize: '8px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' }}>{label}</div>
-      <div style={{ fontSize: '14px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: color || 'var(--txt-main)' }}>{value}</div>
+      <div style={{ fontSize: '14px', fontWeight: 800, fontFamily: 'var(--font-montserrat)', color: color || 'var(--txt-main)' }}>{value}</div>
     </div>
   );
 }
@@ -106,7 +106,7 @@ export default function EventReport() {
   const activeMonthName = filterMonth > 0 ? MONTHS[filterMonth - 1] : 'All Months';
 
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', paddingBottom: '60px' }}>
+    <div className="font-montserrat" style={{ maxWidth: '1440px', margin: '0 auto', paddingBottom: '60px', fontFamily: 'var(--font-montserrat)' }}>
       {/* ── Top Control & Filter Bar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -213,7 +213,7 @@ export default function EventReport() {
               overflow: 'hidden',
               display: 'flex',
               minHeight: '620px',
-              fontFamily: "'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
+              fontFamily: "var(--font-montserrat)",
             }}
           >
             {/* Left Corporate Stripe: "Easy Gold" */}
@@ -325,7 +325,7 @@ export default function EventReport() {
                           {/* 1. Total Spending Cost */}
                           <div>
                             <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Total spending cost</div>
-                            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'var(--font-montserrat)' }}>
                               {fmtLAKShort(actual.cost)}
                             </div>
                           </div>
@@ -355,7 +355,7 @@ export default function EventReport() {
                           {/* 4. CPO (actual/target) */}
                           <div>
                             <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>CPO (actual/target)</div>
-                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-montserrat)' }}>
                               {fmtLAK(actual.cpo)} / {fmtLAK(ev.target_cpo)}
                             </div>
                             <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpoBeat ? '#16a34a' : '#ea580c' }}>
@@ -366,7 +366,7 @@ export default function EventReport() {
                           {/* 5. CPA (actual/target) */}
                           <div>
                             <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>CPA (actual/target)</div>
-                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-montserrat)' }}>
                               {fmtLAK(actual.cpa)} / {fmtLAK(ev.target_cpa)}
                             </div>
                             <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpaBeat ? '#16a34a' : '#ea580c' }}>
