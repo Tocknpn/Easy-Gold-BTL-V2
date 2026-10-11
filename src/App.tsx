@@ -29,8 +29,17 @@ const WIDE_PAGES = ['/', '/cost-manager', '/copy-paste', '/report', '/event-mana
 function Layout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem('eg_sidebar_collapsed') === '1');
+  const [showCommitInfo, setShowCommitInfo] = useState<boolean>(() => localStorage.getItem('eg_show_commit_info') === '1');
   const navigate = useNavigate();
   const location = useLocation();
+
+  const toggleCommitInfo = () => {
+    setShowCommitInfo(prev => {
+      const next = !prev;
+      localStorage.setItem('eg_show_commit_info', next ? '1' : '0');
+      return next;
+    });
+  };
   useEffect(() => {
     const storedUser = localStorage.getItem('easygold_user');
     if (storedUser) {
@@ -137,49 +146,76 @@ function Layout({ children }: { children: React.ReactNode }) {
               <div className={`sub ${['/event-management', '/event-report'].includes(currentPath) ? 'font-montserrat' : ''}`} id="tb-sub">{headerInfo.sub}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {user?.role === 'admin' ? (
-              <div
-                style={{
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  padding: '5px 10px',
-                  fontSize: '10px',
-                  lineHeight: 1.35,
-                  minWidth: '170px',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
-                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>Deploy:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--txt-main)', fontSize: '10px' }}>
-                    {__APP_VERSION__} ({__GIT_COMMIT_HASH__})
-                  </span>
-                </div>
-                <div
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {user?.role === 'admin' && (
+              <>
+                {showCommitInfo && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      lineHeight: 1.3,
+                      animation: 'fadeUp 0.15s ease',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        color: 'var(--accent)',
+                        fontSize: '10px',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      {__APP_VERSION__} ({__GIT_COMMIT_HASH__})
+                    </span>
+                    <span style={{ color: 'var(--border)' }}>|</span>
+                    <span
+                      style={{
+                        color: 'var(--txt-sub)',
+                        maxWidth: '220px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: '10px',
+                      }}
+                      title={__GIT_COMMIT_MSG__}
+                    >
+                      {__GIT_COMMIT_MSG__ || 'N/A'}
+                    </span>
+                    <span style={{ color: 'var(--border)' }}>|</span>
+                    <span style={{ fontSize: '10px', color: 'var(--txt-dim)', whiteSpace: 'nowrap' }}>
+                      {__BUILD_TIME__}
+                    </span>
+                    <span style={{ color: 'var(--green)', fontSize: '9px', fontWeight: 700 }}>
+                      ● live
+                    </span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={toggleCommitInfo}
+                  title={showCommitInfo ? 'Hide commit info' : 'Show commit info'}
+                  aria-label={showCommitInfo ? 'Hide commit info' : 'Show commit info'}
                   style={{
-                    color: 'var(--txt-sub)',
-                    marginBottom: '2px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    maxWidth: '190px',
+                    padding: '6px',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    color: showCommitInfo ? 'var(--accent)' : 'var(--txt-sub)',
+                    transition: 'color 0.2s ease',
                   }}
-                  title={__GIT_COMMIT_MSG__}
                 >
-                  <span style={{ fontWeight: 600, color: 'var(--txt-dim)' }}>Commit: </span>
-                  <span style={{ color: 'var(--txt-main)' }}>{__GIT_COMMIT_MSG__ || 'N/A'}</span>
-                </div>
-                <div style={{ fontSize: '9px', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <span>{__BUILD_TIME__}</span>
-                  <span>·</span>
-                  <span style={{ color: 'var(--green)', fontWeight: 600 }}>live</span>
-                </div>
-              </div>
-            ) : (
-              <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--txt-sub)', lineHeight: 1.2 }}>
-                Last updated<br/>Just now
-              </div>
+                  <i className={`fa-solid ${showCommitInfo ? 'fa-eye' : 'fa-eye-slash'}`}></i>
+                </button>
+              </>
             )}
             <button className="btn btn-ghost" onClick={() => window.location.reload()} style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px' }} title="Refresh Page">
               <i className="fa-solid fa-rotate-right"></i>
