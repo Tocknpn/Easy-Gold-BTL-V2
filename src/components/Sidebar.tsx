@@ -190,6 +190,64 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
         </div>
       </nav>
 
+      {/* Admin Deployment Version Badge */}
+      {user?.role === 'admin' && !collapsed && (
+        <div style={{ padding: '0 12px 10px' }}>
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '8px',
+              padding: '7px 9px',
+              fontSize: '10px',
+              lineHeight: 1.35,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+              <span style={{ fontWeight: 700, color: '#93c5fd' }}>Deploy:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#e2e8f0', fontSize: '10px' }}>
+                {__APP_VERSION__} ({__GIT_COMMIT_HASH__})
+              </span>
+            </div>
+            <div
+              style={{
+                color: '#94a3b8',
+                marginBottom: '2px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={__GIT_COMMIT_MSG__}
+            >
+              <span style={{ fontWeight: 600, color: 'var(--nav-txt)' }}>Commit: </span>
+              <span style={{ color: '#cbd5e1' }}>{__GIT_COMMIT_MSG__ || 'N/A'}</span>
+            </div>
+            <div style={{ fontSize: '9px', color: 'rgba(255, 255, 255, 0.45)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>{__BUILD_TIME__}</span>
+              <span>·</span>
+              <span style={{ color: 'var(--green)', fontWeight: 600 }}>live</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {user?.role === 'admin' && collapsed && (
+        <div
+          title={`Deploy: ${__APP_VERSION__} (${__GIT_COMMIT_HASH__})\nCommit: ${__GIT_COMMIT_MSG__}\n${__BUILD_TIME__} · live`}
+          style={{
+            padding: '2px 0 6px',
+            textAlign: 'center',
+            fontSize: '9px',
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--nav-txt)',
+            cursor: 'help',
+            opacity: 0.8,
+          }}
+        >
+          {__APP_VERSION__}
+        </div>
+      )}
+
       {/* Footer */}
       <div className="sb-footer" style={{ padding: collapsed ? '12px 0' : undefined, justifyContent: collapsed ? 'center' : undefined }}>
         <div className="user-ava" title={collapsed ? `${user.name} · ${user.role}` : undefined} style={{ flexShrink: 0 }}>
