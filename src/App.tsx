@@ -137,10 +137,50 @@ function Layout({ children }: { children: React.ReactNode }) {
               <div className={`sub ${['/event-management', '/event-report'].includes(currentPath) ? 'font-montserrat' : ''}`} id="tb-sub">{headerInfo.sub}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--txt-sub)', lineHeight: 1.2 }}>
-              Last updated<br/>Just now
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {user?.role === 'admin' ? (
+              <div
+                style={{
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  padding: '5px 10px',
+                  fontSize: '10px',
+                  lineHeight: 1.35,
+                  minWidth: '170px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--accent)' }}>Deploy:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--txt-main)', fontSize: '10px' }}>
+                    {__APP_VERSION__} ({__GIT_COMMIT_HASH__})
+                  </span>
+                </div>
+                <div
+                  style={{
+                    color: 'var(--txt-sub)',
+                    marginBottom: '2px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: '190px',
+                  }}
+                  title={__GIT_COMMIT_MSG__}
+                >
+                  <span style={{ fontWeight: 600, color: 'var(--txt-dim)' }}>Commit: </span>
+                  <span style={{ color: 'var(--txt-main)' }}>{__GIT_COMMIT_MSG__ || 'N/A'}</span>
+                </div>
+                <div style={{ fontSize: '9px', color: 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>{__BUILD_TIME__}</span>
+                  <span>·</span>
+                  <span style={{ color: 'var(--green)', fontWeight: 600 }}>live</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--txt-sub)', lineHeight: 1.2 }}>
+                Last updated<br/>Just now
+              </div>
+            )}
             <button className="btn btn-ghost" onClick={() => window.location.reload()} style={{ padding: '6px', borderRadius: '50%', width: '32px', height: '32px' }} title="Refresh Page">
               <i className="fa-solid fa-rotate-right"></i>
             </button>
