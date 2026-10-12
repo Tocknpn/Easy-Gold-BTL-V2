@@ -16,7 +16,7 @@ import type { ModalState, Submission, CostTypeKey } from '../lib/submissions';
 import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, normalizeTeam, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes, locationLabel, compareLocations, inLocationFilter, normalizeLocation } from '../lib/submissions';
 import { supabase } from '../lib/supabase';
 import SubmissionModal from '../components/SubmissionModal';
-import MarketingReport from '../components/MarketingReport';
+import MarketingReport, { getWeekInfoFromDate } from '../components/MarketingReport';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
 const C_NC = '#F59E0B'; // amber  — warm, high contrast
@@ -598,11 +598,8 @@ export default function Dashboard() {
     if (trendMode === 'W') {
       const byWeek: Record<string, { nc: number; ec: number }> = {};
       for (const s of sorted) {
-        const d = new Date(s.date + 'T00:00:00');
-        const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
-        const pastDaysOfYear = (d.getTime() - firstDayOfYear.getTime()) / 86400000;
-        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-        const wk = `${d.getFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
+        const info = getWeekInfoFromDate(s.date);
+        const wk = `${info.year}-W${info.weekNum.toString().padStart(2, '0')}`;
         if (!byWeek[wk]) byWeek[wk] = { nc: 0, ec: 0 };
         byWeek[wk].nc += s.new_register;
         byWeek[wk].ec += s.existing_users;

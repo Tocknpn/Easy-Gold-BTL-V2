@@ -112,19 +112,33 @@ test('Marketing KPI Aggregation: Zero acquisition avoids NaN/Infinity', () => {
   assert(!isNaN(agg.cpo));
 });
 
-// Helper 3: 52 Weeks Generator
+// Helper 3: 52/53 Weeks Generator
+const formatIsoDate = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const generate52Weeks = (year) => {
   const weeks = [];
   const d = new Date(year, 0, 1);
-  while (d.getDay() !== 6) { d.setDate(d.getDate() + 1); }
-  for (let w = 1; w <= 52; w++) {
+  while (d.getDay() !== 6) { d.setDate(d.getDate() - 1); }
+  const yearStartSat = new Date(d);
+
+  const nextYearStart = new Date(year + 1, 0, 1);
+  while (nextYearStart.getDay() !== 6) { nextYearStart.setDate(nextYearStart.getDate() - 1); }
+
+  const totalWeeks = Math.round((nextYearStart.getTime() - yearStartSat.getTime()) / (7 * 86400000));
+
+  for (let w = 1; w <= totalWeeks; w++) {
     const sDate = new Date(d);
     const eDate = new Date(d);
     eDate.setDate(eDate.getDate() + 8);
     weeks.push({
       key: `W${w}`,
-      startDate: sDate.toISOString().slice(0, 10),
-      endDate: eDate.toISOString().slice(0, 10),
+      startDate: formatIsoDate(sDate),
+      endDate: formatIsoDate(eDate),
       weekNum: w,
     });
     d.setDate(d.getDate() + 7);
@@ -132,11 +146,23 @@ const generate52Weeks = (year) => {
   return weeks;
 };
 
-test('Marketing Helper - generate52Weeks: Generates exactly 52 weeks', () => {
+test('Marketing Helper - generate52Weeks: Generates exactly 52 weeks in 2026 & 53 in 2027', () => {
+  const weeks2026 = generate52Weeks(2026);
+  assert.strictEqual(weeks2026.length, 52);
+  assert.strictEqual(weeks2026[0].key, 'W1');
+  assert.strictEqual(weeks2026[51].key, 'W52');
+
+  const weeks2027 = generate52Weeks(2027);
+  assert.strictEqual(weeks2027.length, 53);
+  assert.strictEqual(weeks2027[52].key, 'W53');
+});
+
+test('Marketing Helper - generate52Weeks: W41 starts on 2026-10-03 (Sat)', () => {
   const weeks = generate52Weeks(2026);
-  assert.strictEqual(weeks.length, 52);
-  assert.strictEqual(weeks[0].key, 'W1');
-  assert.strictEqual(weeks[51].key, 'W52');
+  const w41 = weeks.find(w => w.key === 'W41');
+  assert(w41, 'W41 should exist');
+  assert.strictEqual(w41.startDate, '2026-10-03');
+  assert.strictEqual(w41.endDate, '2026-10-11');
 });
 
 test('Marketing Helper - generate52Weeks: Check date span', () => {

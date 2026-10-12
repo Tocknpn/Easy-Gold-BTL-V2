@@ -53,7 +53,14 @@ const pctChange = (curr: number, prev: number): number | null => {
   return ((curr - prev) / prev) * 100;
 };
 
-// ── Year and Week helper (Saturday to Sunday 52 weeks) ──────────────────────
+// ── Date and Week helpers (Saturday to Sunday 52/53 weeks) ───────────────────
+export const formatIsoDate = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export interface WeekOption {
   key: string;
   label: string;
@@ -62,20 +69,71 @@ export interface WeekOption {
   weekNum: number;
 }
 
-export const generate52Weeks = (year: number): WeekOption[] => {
-  const weeks: WeekOption[] = [];
-  const d = new Date(year, 0, 1);
-  while (d.getDay() !== 6) { // 6 = Saturday
-    d.setDate(d.getDate() + 1);
+/**
+ * Calculates the week number (1-52/53) and year for a Saturday-starting week cycle.
+ * Week 1 begins on the Saturday on or before Jan 1 (containing Jan 1).
+ */
+export const getWeekInfoFromDate = (dateInput: Date | string) => {
+  const d = typeof dateInput === 'string' ? new Date(dateInput + 'T00:00:00') : new Date(dateInput);
+  d.setHours(0, 0, 0, 0);
+
+  // Find Saturday starting this week (0 days back if Saturday, 1 if Sunday, ... 6 if Friday)
+  const daysBack = (d.getDay() + 1) % 7;
+  const sat = new Date(d);
+  sat.setDate(sat.getDate() - daysBack);
+
+  let year = sat.getFullYear();
+  const getYearSatStart = (y: number) => {
+    const s = new Date(y, 0, 1);
+    while (s.getDay() !== 6) s.setDate(s.getDate() - 1);
+    return s;
+  };
+
+  let yStart = getYearSatStart(year);
+  let nextYStart = getYearSatStart(year + 1);
+
+  if (sat.getTime() < yStart.getTime()) {
+    year = year - 1;
+    yStart = getYearSatStart(year);
+    nextYStart = getYearSatStart(year + 1);
+  } else if (sat.getTime() >= nextYStart.getTime()) {
+    year = year + 1;
+    yStart = nextYStart;
+    nextYStart = getYearSatStart(year + 1);
   }
 
-  for (let w = 1; w <= 52; w++) {
+  const weekNum = Math.round((sat.getTime() - yStart.getTime()) / (7 * 86400000)) + 1;
+  const totalWeeks = Math.round((nextYStart.getTime() - yStart.getTime()) / (7 * 86400000));
+
+  return { year, weekNum, totalWeeks, satStart: sat };
+};
+
+export const generate52Weeks = (year: number): WeekOption[] => {
+  const weeks: WeekOption[] = [];
+  
+  // Week 1 starts on the Saturday on or before Jan 1 (containing Jan 1)
+  const d = new Date(year, 0, 1);
+  while (d.getDay() !== 6) { // 6 = Saturday
+    d.setDate(d.getDate() - 1);
+  }
+  const yearStartSat = new Date(d);
+
+  // Next year's Week 1 starts on the Saturday on or before Jan 1 of (year + 1)
+  const nextYearStart = new Date(year + 1, 0, 1);
+  while (nextYearStart.getDay() !== 6) {
+    nextYearStart.setDate(nextYearStart.getDate() - 1);
+  }
+
+  // Total weeks in this year (52 or 53 weeks)
+  const totalWeeks = Math.round((nextYearStart.getTime() - yearStartSat.getTime()) / (7 * 86400000));
+
+  for (let w = 1; w <= totalWeeks; w++) {
     const sDate = new Date(d);
     const eDate = new Date(d);
     eDate.setDate(eDate.getDate() + 8); // Sat to next Sun inclusive (9-day roadshow window)
 
-    const sIso = sDate.toISOString().slice(0, 10);
-    const eIso = eDate.toISOString().slice(0, 10);
+    const sIso = formatIsoDate(sDate);
+    const eIso = formatIsoDate(eDate);
     const sFmt = sDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
     const eFmt = eDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 
@@ -622,8 +680,8 @@ export default function MarketingReport({
         pe.setDate(pe.getDate() - 1);
         const ps = new Date(pe.getTime());
         ps.setDate(ps.getDate() - (diffDays - 1));
-        prevStart = ps.toISOString().slice(0, 10);
-        prevEnd = pe.toISOString().slice(0, 10);
+        prevStart = formatIsoDate(ps);
+        prevEnd = formatIsoDate(pe);
       }
     }
 
@@ -959,7 +1017,7 @@ export default function MarketingReport({
         for (let i = 0; i < daysDiff; i++) {
           const curD = new Date(d1);
           curD.setDate(curD.getDate() + i);
-          const iso = curD.toISOString().slice(0, 10);
+          const iso = formatIsoDate(curD);
           const dayLabel = curD.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
           const rows = effectiveRows.filter(s => s.date === iso);
           const agg = aggregate(rows, costTypes);
@@ -1030,7 +1088,7 @@ export default function MarketingReport({
       for (let i = 0; i < numDays; i++) {
         const curD = new Date(sD);
         curD.setDate(curD.getDate() + i);
-        const iso = curD.toISOString().slice(0, 10);
+        const iso = formatIsoDate(curD);
         const dayLabel = curD.toLocaleDateString('en-GB', { weekday: 'short' });
         const rows = filtered.filter(s => s.date === iso);
         const agg = aggregate(rows, costTypes);
@@ -1265,7 +1323,7 @@ export default function MarketingReport({
 
         {dateMode === 'week' && (
           <div className="form-field" style={{ margin: 0 }}>
-            <label style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--txt-dim)' }}>By Week (Sat–Sun 52 W)</label>
+            <label style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em', color: 'var(--txt-dim)' }}>By Week (Sat–Sun {weeks52.length} W)</label>
             <select
               value={selectedWeek}
               onChange={e => setSelectedWeek(e.target.value)}
