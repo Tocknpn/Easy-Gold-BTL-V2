@@ -4,7 +4,7 @@ import {
   fetchEvents, fetchEventTypes,
   computeEventHitSummary,
   EVENT_TEAMS, MONTHS,
-  fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel, scaleColor,
+  fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel, scaleColor, normalizeImageUrl,
 } from '../lib/events';
 
 const THIS_YEAR = new Date().getFullYear();
@@ -576,9 +576,12 @@ export default function EventReport() {
                     'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&fit=crop',
                     'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&fit=crop',
                     'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&fit=crop',
-                  ]).slice(0, 4).map((url, idx) => (
-                    <img key={idx} src={url} alt="event-pic" onClick={() => setLightboxImg(url)} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }} />
-                  ))}
+                  ]).slice(0, 4).map((url, idx) => {
+                    const norm = normalizeImageUrl(url);
+                    return (
+                      <img key={idx} src={norm} alt="event-pic" onClick={() => setLightboxImg(norm)} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }} />
+                    );
+                  })}
                 </div>
               </div>
 

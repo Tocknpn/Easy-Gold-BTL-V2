@@ -6,7 +6,7 @@ import {
   computeEventHitSummary, computeCPMetrics,
   getCustomListOptions, saveCustomListOptions, DEFAULT_LIST_OPTIONS,
   EVENT_STATUSES,
-  fmtLAK, fmtLAKShort, statusColor, statusLabel, scaleColor, blankEvent,
+  fmtLAK, fmtLAKShort, statusColor, statusLabel, scaleColor, blankEvent, normalizeImageUrl,
 } from '../lib/events';
 import { fetchMerchCatalog } from '../lib/submissions';
 import type { MerchItem } from '../lib/submissions';
@@ -714,7 +714,7 @@ export default function EventManagement() {
       actual_cpo: cp.cpo,
       actual_cpm: cp.cpm,
       actual_cpf: cp.cpf,
-      photo_urls: actualData.photo_urls,
+      photo_urls: actualData.photo_urls.map(p => normalizeImageUrl(p)),
       status: actualData.actual_status,
       merch_items_list: updatedMerchList,
     };
@@ -1939,11 +1939,14 @@ export default function EventManagement() {
                     Event Media Photos ({viewingEvent.photo_urls.filter(Boolean).length})
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                    {viewingEvent.photo_urls.filter(Boolean).map((p, i) => (
-                      <a key={i} href={p} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', height: '140px', background: '#000', border: '1px solid var(--border)' }}>
-                        <img src={p} alt={`event-photo-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </a>
-                    ))}
+                    {viewingEvent.photo_urls.filter(Boolean).map((p, i) => {
+                      const norm = normalizeImageUrl(p);
+                      return (
+                        <a key={i} href={norm} target="_blank" rel="noopener noreferrer" style={{ display: 'block', borderRadius: '8px', overflow: 'hidden', height: '140px', background: '#000', border: '1px solid var(--border)' }}>
+                          <img src={norm} alt={`event-photo-${i}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -2335,6 +2338,9 @@ export default function EventManagement() {
 
               {/* Up to 4 Media Photo Links */}
               <SectionTitle icon="fa-images" title="Event Media Photos (Up to 4 Links for Slide Collage)" />
+              <div style={{ fontSize: '11px', color: 'var(--txt-dim)', marginBottom: '10px', marginTop: '-6px' }}>
+                Paste Google Drive links (set to &quot;Anyone with the link can view&quot;) or direct image URLs. They will be auto-formatted for display.
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '12px', marginBottom: '14px' }}>
                 {[0, 1, 2, 3].map(slot => (
                   <div key={slot} style={{ background: 'var(--surface)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border)' }}>
@@ -2349,17 +2355,17 @@ export default function EventManagement() {
                             return { ...d, photo_urls: next };
                           });
                         }}
-                        placeholder="https://... image link"
+                        placeholder="https://drive.google.com/... or image link"
                         style={{ fontSize: '12px', padding: '6px 10px' }}
                       />
                     </FF>
                     {actualData.photo_urls[slot] && (
                       <div style={{ height: '90px', borderRadius: '6px', overflow: 'hidden', background: '#000', marginTop: '6px' }}>
                         <img
-                          src={actualData.photo_urls[slot]}
+                          src={normalizeImageUrl(actualData.photo_urls[slot])}
                           alt={`preview-${slot}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={e => { (e.currentTarget as HTMLImageElement).alt = 'Image failed to load'; }}
+                          onError={e => { (e.currentTarget as HTMLImageElement).alt = 'Image failed to load — ensure Google Drive is shared to "Anyone with the link"'; }}
                         />
                       </div>
                     )}

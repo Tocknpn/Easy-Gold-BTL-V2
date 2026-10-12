@@ -1595,3 +1595,38 @@ export const scaleColor = (s: string) => {
   if (norm.includes('small')) return '#197a48'; // green
   return 'var(--blue)';
 };
+
+/**
+ * Normalizes photo URLs, transforming Google Drive and Dropbox share links
+ * into direct image streams that display properly in <img> tags.
+ */
+export function normalizeImageUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+
+  // If already a Google Drive thumbnail or direct link, ensure high resolution sz param
+  if (trimmed.includes('drive.google.com/thumbnail') && !trimmed.includes('&sz=')) {
+    return `${trimmed}&sz=w1200`;
+  }
+
+  // Google Drive sharing URL formats:
+  // 1. https://drive.google.com/file/d/FILE_ID/view...
+  // 2. https://drive.google.com/file/d/FILE_ID
+  const driveFileMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (driveFileMatch && driveFileMatch[1]) {
+    return `https://drive.google.com/thumbnail?id=${driveFileMatch[1]}&sz=w1200`;
+  }
+
+  // 3. https://drive.google.com/open?id=FILE_ID or https://drive.google.com/uc?id=FILE_ID
+  const driveIdMatch = trimmed.match(/drive\.google\.com\/(?:open|uc)\?(?:[^&]*&)*id=([a-zA-Z0-9_-]+)/);
+  if (driveIdMatch && driveIdMatch[1]) {
+    return `https://drive.google.com/thumbnail?id=${driveIdMatch[1]}&sz=w1200`;
+  }
+
+  // Dropbox share links: dl=0 -> raw=1
+  if (trimmed.includes('dropbox.com') && trimmed.includes('dl=0')) {
+    return trimmed.replace('dl=0', 'raw=1');
+  }
+
+  return trimmed;
+}
