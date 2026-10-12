@@ -1320,7 +1320,7 @@ export default function EventManagement() {
                                 style={{ fontSize: '12px', padding: '5px 8px', width: '100%' }}
                               />
                               <datalist id={`catalog-list-${idx}`}>
-                                {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
+                                {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAK(c.cpu || 0)})</option>)}
                               </datalist>
                             </td>
                             <td>
@@ -1369,7 +1369,7 @@ export default function EventManagement() {
                       defaultValue=""
                     >
                       <option value="" disabled>+ Add from Catalog…</option>
-                      {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAKShort(c.cpu || 0)})</option>)}
+                      {catalog.map(c => <option key={c.name} value={c.name}>{c.name} ({fmtLAK(c.cpu || 0)})</option>)}
                     </select>
                   )}
                   <button type="button" className="btn btn-ghost" onClick={() => addMerchRow()} style={{ fontSize: '12px', padding: '6px 12px', border: '1px solid var(--border)' }}>
@@ -2185,10 +2185,10 @@ export default function EventManagement() {
                               <td style={{ padding: '8px 6px', fontWeight: 700 }}>{row.name}</td>
                               <td style={{ padding: '8px 6px', textAlign: 'right' }}>
                                 <strong>{row.qty.toLocaleString()} pcs</strong>
-                                <div style={{ fontSize: '10px', color: 'var(--txt-sub)' }}>{fmtLAKShort(row.total)}</div>
+                                <div style={{ fontSize: '10px', color: 'var(--txt-sub)' }}>{fmtLAK(row.total)}</div>
                               </td>
                               <td style={{ padding: '8px 6px', textAlign: 'right', color: 'var(--txt-sub)' }}>
-                                {fmtLAKShort(row.cpu)}
+                                {fmtLAK(row.cpu)}
                               </td>
                               <td style={{ padding: '8px 6px', textAlign: 'right' }}>
                                 <FormattedNumberInput
@@ -2220,7 +2220,7 @@ export default function EventManagement() {
                                 {fmtLAK(row.actual_total)}
                               </td>
                               <td style={{ padding: '8px 6px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: varCost >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                {varCost >= 0 ? `Saved ${fmtLAKShort(varCost)}` : `Over ${fmtLAKShort(Math.abs(varCost))}`}
+                                {varCost >= 0 ? `Saved ${fmtLAK(varCost)}` : `Over ${fmtLAK(Math.abs(varCost))}`}
                               </td>
                             </tr>
                           );
@@ -2251,7 +2251,7 @@ export default function EventManagement() {
                               const diff = pTot - actualData.actual_merch_cost;
                               return (
                                 <span style={{ color: diff >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                                  {diff >= 0 ? `Saved ${fmtLAKShort(diff)}` : `Over ${fmtLAKShort(Math.abs(diff))}`}
+                                  {diff >= 0 ? `Saved ${fmtLAK(diff)}` : `Over ${fmtLAK(Math.abs(diff))}`}
                                 </span>
                               );
                             })()}

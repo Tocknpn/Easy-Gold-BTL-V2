@@ -1566,10 +1566,12 @@ export async function deleteEventTarget(id: string): Promise<{ error: any }> {
 
 export const fmtLAK = (n: number) => `₭${Math.round(n).toLocaleString('en-US')}`;
 export const fmtLAKShort = (n: number): string => {
-  if (n >= 1_000_000_000) return `K${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `K${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `K${Math.round(n / 1_000)}K`;
-  return `K${Math.round(n).toLocaleString('en-US')}`;
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return `${sign}₭${(abs / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `${sign}₭${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}₭${Math.round(abs / 1_000)}K`;
+  return `${sign}₭${Math.round(abs).toLocaleString('en-US')}`;
 };
 export const fmtPct = (n: number): string => `${Math.round(n)}%`;
 
