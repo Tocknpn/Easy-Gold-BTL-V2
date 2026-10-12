@@ -801,9 +801,9 @@ export function computeCPMetrics(
  */
 export function getEffectiveActuals(event: Event) {
   if (event.actual_filled) {
-    const cost = event.actual_cost && event.actual_cost > 0
+    const cost = event.actual_cost !== undefined && event.actual_cost >= 0
       ? event.actual_cost
-      : (event.budget_total || event.media_cost || 0);
+      : 0;
 
     const nc = event.actual_nc ?? 0;
     const ec = event.actual_ec ?? 0;
@@ -830,12 +830,12 @@ export function getEffectiveActuals(event: Event) {
       cpo: event.actual_cpo || calc.cpo,
       cpm: event.actual_cpm || calc.cpm,
       cpf: event.actual_cpf || calc.cpf,
-      photos: event.photo_urls.filter(Boolean),
+      photos: (event.photo_urls || []).filter(Boolean),
     };
   }
 
-  // Not filled yet -> 100% Plan Execution default!
-  const cost = event.budget_total > 0 ? event.budget_total : (event.media_cost || 0);
+  // Not filled yet -> Actual spending is 0 (plan only, not auto-filled with budget)
+  const cost = event.actual_cost && event.actual_cost > 0 ? event.actual_cost : 0;
   const nc = event.target_nc || 0;
   const ec = event.target_ec || 0;
   const buyers = (event.target_nc_buyer && event.target_nc_buyer > 0 ? event.target_nc_buyer : nc) + ec;

@@ -326,7 +326,7 @@ export default function EventReport() {
                           <div>
                             <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Total spending cost</div>
                             <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'var(--font-montserrat)' }}>
-                              {fmtLAKShort(actual.cost)}
+                              {ev.actual_filled ? fmtLAKShort(actual.cost) : '—'}
                             </div>
                           </div>
 
@@ -561,7 +561,7 @@ export default function EventReport() {
 
             <div style={{ padding: '20px 24px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '16px' }}>
-                <KpiPill label="Total Spend" value={fmtLAKShort(computeEventHitSummary(modalEvent).actual.cost)} color="var(--orange)" />
+                <KpiPill label="Total Spend" value={modalEvent.actual_filled ? fmtLAKShort(computeEventHitSummary(modalEvent).actual.cost) : '—'} color="var(--orange)" />
                 <KpiPill label="Total NC" value={computeEventHitSummary(modalEvent).actual.nc.toLocaleString()} color="var(--accent)" />
                 <KpiPill label="Actual CPA" value={fmtLAK(computeEventHitSummary(modalEvent).actual.cpa)} color="var(--blue)" />
                 <KpiPill label="Actual CPO" value={fmtLAK(computeEventHitSummary(modalEvent).actual.cpo)} color="var(--green)" />

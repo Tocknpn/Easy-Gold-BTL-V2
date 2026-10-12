@@ -127,7 +127,7 @@ function FF({ label, children, note }: { label: string; children: React.ReactNod
   return (
     <div style={{ marginBottom: '14px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px', minHeight: '18px' }}>
-        <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
+        <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', letterSpacing: '0.02em' }}>{label}</label>
         {note && <span style={{ fontSize: '10px', color: 'var(--txt-sub)' }}>{note}</span>}
       </div>
       {children}
@@ -219,7 +219,7 @@ export default function EventManagement() {
   });
   const [savingActuals, setSavingActuals] = useState(false);
   const [merchRows, setMerchRows] = useState<MerchActualRow[]>([]);
-  const [merchEntryMode, setMerchEntryMode] = useState<'used' | 'returned'>('used');
+  const [merchEntryMode, setMerchEntryMode] = useState<'used' | 'returned'>('returned');
 
   // ── Data Loaders ──
   const loadEvents = useCallback(async () => {
@@ -488,9 +488,9 @@ export default function EventManagement() {
       const planQty = m.qty || 0;
       const cpu = m.cpu || (m.qty > 0 && m.total ? Math.round(m.total / m.qty) : 0);
       const planTotal = m.total || (planQty * cpu);
-      const used = m.actual_used !== undefined ? m.actual_used : (ev.actual_filled ? 0 : planQty);
-      const returned = m.actual_returned !== undefined ? m.actual_returned : Math.max(0, planQty - used);
-      const actual_total = m.actual_total !== undefined ? m.actual_total : (used * cpu);
+      const used = ev.actual_filled ? (m.actual_used ?? 0) : 0;
+      const returned = ev.actual_filled ? (m.actual_returned ?? Math.max(0, planQty - used)) : 0;
+      const actual_total = ev.actual_filled ? (m.actual_total ?? (used * cpu)) : 0;
       return {
         name: m.name,
         qty: planQty,
@@ -503,18 +503,16 @@ export default function EventManagement() {
     });
     setMerchRows(rows);
 
-    const calcMerch = rows.length > 0 ? rows.reduce((s, r) => s + r.actual_total, 0) : (ev.actual_merch_cost ?? ev.budget_merch ?? 0);
+    const calcMerch = rows.length > 0 ? rows.reduce((s, r) => s + r.actual_total, 0) : 0;
 
-    const mediaCost = ev.actual_media_cost ?? (ev.actual_filled ? 0 : (ev.budget_media || 0));
-    const prodCost = ev.actual_production_cost ?? (ev.actual_filled ? 0 : (ev.budget_production || 0));
-    const sponsorCost = ev.actual_sponsor_cost ?? (ev.actual_filled ? 0 : (ev.budget_sponsor || 0));
-    const merchCost = ev.actual_filled ? (ev.actual_merch_cost ?? calcMerch) : calcMerch;
-    const opCost = ev.actual_operation_cost ?? (ev.actual_filled ? 0 : (ev.budget_operation || 0));
-    const otherCost = ev.actual_other_cost ?? (ev.actual_filled ? 0 : (ev.budget_other || 0));
+    const mediaCost = ev.actual_filled ? (ev.actual_media_cost ?? 0) : 0;
+    const prodCost = ev.actual_filled ? (ev.actual_production_cost ?? 0) : 0;
+    const sponsorCost = ev.actual_filled ? (ev.actual_sponsor_cost ?? 0) : 0;
+    const merchCost = ev.actual_filled ? (ev.actual_merch_cost ?? calcMerch) : 0;
+    const opCost = ev.actual_filled ? (ev.actual_operation_cost ?? 0) : 0;
+    const otherCost = ev.actual_filled ? (ev.actual_other_cost ?? 0) : 0;
 
-    const totalCost = ev.actual_filled && ev.actual_cost !== undefined
-      ? ev.actual_cost
-      : (mediaCost + prodCost + sponsorCost + merchCost + opCost + otherCost || ev.budget_total || ev.media_cost || 0);
+    const totalCost = ev.actual_filled ? (ev.actual_cost ?? 0) : 0;
 
     setActualData({
       actual_cost: totalCost,
@@ -524,14 +522,14 @@ export default function EventManagement() {
       actual_merch_cost: merchCost,
       actual_operation_cost: opCost,
       actual_other_cost: otherCost,
-      actual_footfall: ev.actual_filled ? (ev.actual_footfall || 0) : (ev.target_footfall || 0),
-      actual_nc: ev.actual_filled ? (ev.actual_nc || 0) : (ev.target_nc || 0),
-      actual_nc_buyer: ev.actual_filled ? (ev.actual_nc_buyer || 0) : (ev.target_nc_buyer || 0),
-      actual_ec: ev.actual_filled ? (ev.actual_ec || 0) : (ev.target_ec || 0),
-      actual_download: ev.actual_filled ? (ev.actual_download || 0) : (ev.target_download || 0),
-      actual_kyc: ev.actual_filled ? (ev.actual_kyc || 0) : (ev.target_kyc || 0),
-      actual_buy_value: ev.actual_filled ? (ev.actual_buy_value || 0) : (ev.target_buy_value || 0),
-      actual_impressions: ev.actual_filled ? (ev.actual_impressions || 0) : (ev.total_media_impressions || 0),
+      actual_footfall: ev.actual_filled ? (ev.actual_footfall || 0) : 0,
+      actual_nc: ev.actual_filled ? (ev.actual_nc || 0) : 0,
+      actual_nc_buyer: ev.actual_filled ? (ev.actual_nc_buyer || 0) : 0,
+      actual_ec: ev.actual_filled ? (ev.actual_ec || 0) : 0,
+      actual_download: ev.actual_filled ? (ev.actual_download || 0) : 0,
+      actual_kyc: ev.actual_filled ? (ev.actual_kyc || 0) : 0,
+      actual_buy_value: ev.actual_filled ? (ev.actual_buy_value || 0) : 0,
+      actual_impressions: ev.actual_filled ? (ev.actual_impressions || 0) : 0,
       actual_status: (ev.status === 'pending' ? 'completed' : ev.status) as any,
       photo_urls: photos,
     });
@@ -1499,8 +1497,8 @@ export default function EventManagement() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px', paddingBottom: '8px', borderBottom: '1px solid var(--border)' }}>
                     <div>
                       <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase' }}>Total Spending Cost</div>
-                      <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-montserrat)', color: 'var(--txt-main)' }}>
-                        {fmtLAKShort(actual.cost)}
+                      <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-montserrat)', color: ev.actual_filled ? 'var(--txt-main)' : 'var(--txt-dim)' }}>
+                        {ev.actual_filled ? fmtLAKShort(actual.cost) : '—'}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -1710,7 +1708,7 @@ export default function EventManagement() {
                       </span>
                     </td>
                     <td>{fmtLAKShort(ev.budget_total || ev.media_cost || 0)}</td>
-                    <td><strong>{fmtLAKShort(s.actual.cost)}</strong></td>
+                    <td>{ev.actual_filled ? <strong>{fmtLAKShort(s.actual.cost)}</strong> : <span style={{ color: 'var(--txt-dim)' }}>—</span>}</td>
                     <td>
                       <span style={{ color: s.ncColor, fontWeight: 700 }}>
                         {s.actual.nc} / {ev.target_nc || 0}
@@ -1814,9 +1812,9 @@ export default function EventManagement() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px', marginBottom: '22px' }}>
                     <KpiChip
                       label="Total Spend / Budget"
-                      value={fmtLAKShort(actual.cost)}
+                      value={viewingEvent.actual_filled ? fmtLAKShort(actual.cost) : '—'}
                       sub={`Plan: ${fmtLAKShort(viewingEvent.budget_total || viewingEvent.media_cost || 0)}`}
-                      color={actual.cost <= (viewingEvent.budget_total || viewingEvent.media_cost || 0) ? 'var(--green)' : 'var(--red)'}
+                      color={viewingEvent.actual_filled ? (actual.cost <= (viewingEvent.budget_total || viewingEvent.media_cost || 0) ? 'var(--green)' : 'var(--red)') : 'var(--txt-sub)'}
                     />
                     <KpiChip
                       label="New Customers (NC)"
@@ -1990,7 +1988,7 @@ export default function EventManagement() {
                 {/* Total Actual Cost & Sync */}
                 <div style={{ background: 'var(--ink)', padding: '14px 16px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--txt-dim)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--txt-dim)', letterSpacing: '0.04em' }}>
                       Total Actual Spending Cost (₭) *
                     </label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}>
@@ -2022,38 +2020,38 @@ export default function EventManagement() {
 
                 {/* 6 Expense Categories Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                  <FF label="Actual Media Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_media || 0)}`}>
+                  <FF label="Media Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_media || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_media_cost}
                       onChange={v => setActualData(d => ({ ...d, actual_media_cost: v }))}
                     />
                   </FF>
-                  <FF label="Actual Prod. Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_production || 0)}`}>
+                  <FF label="Prod. Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_production || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_production_cost}
                       onChange={v => setActualData(d => ({ ...d, actual_production_cost: v }))}
                     />
                   </FF>
-                  <FF label="Actual Sponsor Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_sponsor || 0)}`}>
+                  <FF label="Sponsor Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_sponsor || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_sponsor_cost}
                       onChange={v => setActualData(d => ({ ...d, actual_sponsor_cost: v }))}
                     />
                   </FF>
 
-                  <FF label="Actual Merch Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_merch || 0)}`}>
+                  <FF label="Merch Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_merch || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_merch_cost}
                       onChange={v => setActualData(d => ({ ...d, actual_merch_cost: v }))}
                     />
                   </FF>
-                  <FF label="Actual Operation Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_operation || 0)}`}>
+                  <FF label="Operation Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_operation || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_operation_cost}
                       onChange={v => setActualData(d => ({ ...d, actual_operation_cost: v }))}
                     />
                   </FF>
-                  <FF label="Actual Other Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_other || 0)}`}>
+                  <FF label="Other Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_other || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_other_cost}
                       onChange={v => setActualData(d => ({ ...d, actual_other_cost: v }))}
@@ -2081,22 +2079,6 @@ export default function EventManagement() {
                     <div style={{ display: 'inline-flex', background: 'var(--surface)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border)' }}>
                       <button
                         type="button"
-                        onClick={() => setMerchEntryMode('used')}
-                        style={{
-                          border: 'none',
-                          background: merchEntryMode === 'used' ? 'var(--accent)' : 'transparent',
-                          color: merchEntryMode === 'used' ? '#fff' : 'var(--txt-sub)',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <i className="fa-solid fa-box-open" style={{ marginRight: '4px' }}></i> Fill Items Used
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setMerchEntryMode('returned')}
                         style={{
                           border: 'none',
@@ -2111,14 +2093,30 @@ export default function EventManagement() {
                       >
                         <i className="fa-solid fa-rotate-left" style={{ marginRight: '4px' }}></i> Fill Items Returned
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setMerchEntryMode('used')}
+                        style={{
+                          border: 'none',
+                          background: merchEntryMode === 'used' ? 'var(--accent)' : 'transparent',
+                          color: merchEntryMode === 'used' ? '#fff' : 'var(--txt-sub)',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '4px 10px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <i className="fa-solid fa-box-open" style={{ marginRight: '4px' }}></i> Fill Items Used
+                      </button>
                     </div>
                   </div>
                 </div>
 
                 <div style={{ fontSize: '11px', color: 'var(--txt-sub)', marginBottom: '12px' }}>
-                  {merchEntryMode === 'used'
-                    ? 'Mode: Entering items used automatically calculates returned stock and derives the exact actual merch cost.'
-                    : 'Mode: Entering items returned automatically calculates items used and derives the exact actual merch cost.'}
+                  {merchEntryMode === 'returned'
+                    ? 'Mode: Entering items returned automatically calculates items used and derives the exact actual merch cost.'
+                    : 'Mode: Entering items used automatically calculates returned stock and derives the exact actual merch cost.'}
                 </div>
 
                 {merchRows.length === 0 ? (
@@ -2134,10 +2132,10 @@ export default function EventManagement() {
                           <th style={{ padding: '8px 6px', textAlign: 'right' }}>Plan Allocation</th>
                           <th style={{ padding: '8px 6px', textAlign: 'right' }}>CPU</th>
                           <th style={{ padding: '8px 6px', textAlign: 'right', width: '130px' }}>
-                            Items Used {merchEntryMode === 'used' && <span style={{ color: 'var(--accent)' }}>★</span>}
+                            Items Returned {merchEntryMode === 'returned' && <span style={{ color: 'var(--accent)' }}>★</span>}
                           </th>
                           <th style={{ padding: '8px 6px', textAlign: 'right', width: '130px' }}>
-                            Items Returned {merchEntryMode === 'returned' && <span style={{ color: 'var(--accent)' }}>★</span>}
+                            Items Used {merchEntryMode === 'used' && <span style={{ color: 'var(--accent)' }}>★</span>}
                           </th>
                           <th style={{ padding: '8px 6px', textAlign: 'right' }}>Actual Spend</th>
                           <th style={{ padding: '8px 6px', textAlign: 'right' }}>Variance</th>
@@ -2158,19 +2156,6 @@ export default function EventManagement() {
                               </td>
                               <td style={{ padding: '8px 6px', textAlign: 'right' }}>
                                 <FormattedNumberInput
-                                  value={row.used}
-                                  onChange={v => updateMerchUsed(idx, v)}
-                                  style={{
-                                    width: '100px',
-                                    textAlign: 'right',
-                                    padding: '5px 8px',
-                                    fontSize: '12px',
-                                    ...(merchEntryMode === 'used' ? { borderColor: 'var(--accent)', background: 'var(--surface)' } : {}),
-                                  }}
-                                />
-                              </td>
-                              <td style={{ padding: '8px 6px', textAlign: 'right' }}>
-                                <FormattedNumberInput
                                   value={row.returned}
                                   onChange={v => updateMerchReturned(idx, v)}
                                   style={{
@@ -2179,6 +2164,19 @@ export default function EventManagement() {
                                     padding: '5px 8px',
                                     fontSize: '12px',
                                     ...(merchEntryMode === 'returned' ? { borderColor: 'var(--accent)', background: 'var(--surface)' } : {}),
+                                  }}
+                                />
+                              </td>
+                              <td style={{ padding: '8px 6px', textAlign: 'right' }}>
+                                <FormattedNumberInput
+                                  value={row.used}
+                                  onChange={v => updateMerchUsed(idx, v)}
+                                  style={{
+                                    width: '100px',
+                                    textAlign: 'right',
+                                    padding: '5px 8px',
+                                    fontSize: '12px',
+                                    ...(merchEntryMode === 'used' ? { borderColor: 'var(--accent)', background: 'var(--surface)' } : {}),
                                   }}
                                 />
                               </td>
@@ -2203,10 +2201,10 @@ export default function EventManagement() {
                           </td>
                           <td></td>
                           <td style={{ padding: '10px 6px', textAlign: 'right' }}>
-                            {merchRows.reduce((s, r) => s + r.used, 0).toLocaleString()} pcs
+                            {merchRows.reduce((s, r) => s + r.returned, 0).toLocaleString()} pcs
                           </td>
                           <td style={{ padding: '10px 6px', textAlign: 'right' }}>
-                            {merchRows.reduce((s, r) => s + r.returned, 0).toLocaleString()} pcs
+                            {merchRows.reduce((s, r) => s + r.used, 0).toLocaleString()} pcs
                           </td>
                           <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--accent)' }}>
                             {fmtLAK(actualData.actual_merch_cost)}
@@ -2233,50 +2231,50 @@ export default function EventManagement() {
               <div style={{ marginBottom: '18px' }}>
                 <SectionTitle icon="fa-chart-pie" title="Actual Customer & Engagement Outcomes" />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '12px' }}>
-                  <FF label="Actual NC (New Cust.)" note={`Target: ${actualEvent.target_nc || 0}`}>
+                  <FF label="NC" note={`Target: ${actualEvent.target_nc || 0}`}>
                     <FormattedNumberInput
                       value={actualData.actual_nc}
                       onChange={v => setActualData(d => ({ ...d, actual_nc: v }))}
                     />
                   </FF>
-                  <FF label="Actual EC (Existing)" note={`Target: ${actualEvent.target_ec || 0}`}>
+                  <FF label="EC" note={`Target: ${actualEvent.target_ec || 0}`}>
                     <FormattedNumberInput
                       value={actualData.actual_ec}
                       onChange={v => setActualData(d => ({ ...d, actual_ec: v }))}
                     />
                   </FF>
-                  <FF label="Actual NC Buyer (Optional)" note={`Target: ${actualEvent.target_nc_buyer || '—'}`}>
+                  <FF label="NC Buyer (Optional)" note={`Target: ${actualEvent.target_nc_buyer || '—'}`}>
                     <FormattedNumberInput
                       value={actualData.actual_nc_buyer}
                       onChange={v => setActualData(d => ({ ...d, actual_nc_buyer: v }))}
                     />
                   </FF>
-                  <FF label="Actual Footfall" note={`Target: ${actualEvent.target_footfall || '—'}`}>
+                  <FF label="Footfall" note={`Target: ${actualEvent.target_footfall || '—'}`}>
                     <FormattedNumberInput
                       value={actualData.actual_footfall}
                       onChange={v => setActualData(d => ({ ...d, actual_footfall: v }))}
                     />
                   </FF>
 
-                  <FF label="Actual Buy Value (₭)" note={`Target: ${fmtLAKShort(actualEvent.target_buy_value || 0)}`}>
+                  <FF label="Buy Value (₭)" note={`Target: ${fmtLAKShort(actualEvent.target_buy_value || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_buy_value}
                       onChange={v => setActualData(d => ({ ...d, actual_buy_value: v }))}
                     />
                   </FF>
-                  <FF label="Actual Impressions" note={`Target: ${fmtLAKShort(actualEvent.total_media_impressions || 0)}`}>
+                  <FF label="Impressions" note={`Target: ${fmtLAKShort(actualEvent.total_media_impressions || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_impressions}
                       onChange={v => setActualData(d => ({ ...d, actual_impressions: v }))}
                     />
                   </FF>
-                  <FF label="Actual Downloads" note={`Target: ${actualEvent.target_download || '—'}`}>
+                  <FF label="Downloads" note={`Target: ${actualEvent.target_download || '—'}`}>
                     <FormattedNumberInput
                       value={actualData.actual_download}
                       onChange={v => setActualData(d => ({ ...d, actual_download: v }))}
                     />
                   </FF>
-                  <FF label="Actual KYC" note={`Target: ${actualEvent.target_kyc || '—'}`}>
+                  <FF label="KYC" note={`Target: ${actualEvent.target_kyc || '—'}`}>
                     <FormattedNumberInput
                       value={actualData.actual_kyc}
                       onChange={v => setActualData(d => ({ ...d, actual_kyc: v }))}
