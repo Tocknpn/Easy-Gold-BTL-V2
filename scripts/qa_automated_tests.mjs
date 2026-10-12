@@ -257,36 +257,109 @@ test('Event Management - Merch Items recalculation: Qty * CPU = Total', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 console.log('\n--- SUITE 3: EVENT REPORT & TARGET HIT SUMMARY ---');
 
+const fmtPct = (n) => `${Math.round(n)}%`;
+
 const computeEventHitSummary = (event) => {
   const targetCustomers = (event.target_nc || 0) + (event.target_ec || 0);
   const actualCustomers = (event.actual_nc || 0) + (event.actual_ec || 0);
-  const custPct = targetCustomers > 0 ? (actualCustomers / targetCustomers) * 100 : 100;
-  const custBeat = custPct >= 100;
+  const hasCustTarget = targetCustomers > 0;
+  let custPct = 0;
+  let custBeat = false;
+  let custStatus = 'no_target';
+  let custLabel = 'No target';
 
-  const ncPct = event.target_nc > 0 ? (event.actual_nc / event.target_nc) * 100 : 100;
-  const ncBeat = ncPct >= 100;
+  if (hasCustTarget) {
+    custPct = (actualCustomers / targetCustomers) * 100;
+    custBeat = actualCustomers >= targetCustomers;
+    custStatus = custBeat ? 'hit' : 'under';
+    custLabel = custBeat ? `${fmtPct(custPct)} — beat target` : (actualCustomers === 0 ? '0% of target' : `${fmtPct(custPct)} of target`);
+  }
 
-  const cpoDiffPct = event.target_cpo > 0
-    ? ((event.actual_cpo - event.target_cpo) / event.target_cpo) * 100
-    : 0;
-  const cpoBeat = cpoDiffPct <= 0; // For costs, lower than target is good!
+  const targetNc = event.target_nc || 0;
+  const actualNc = event.actual_nc || 0;
+  const hasNcTarget = targetNc > 0;
+  let ncPct = 0;
+  let ncBeat = false;
+  let ncStatus = 'no_target';
+  let ncLabel = 'No target';
 
-  const cpaDiffPct = event.target_cpa > 0
-    ? ((event.actual_cpa - event.target_cpa) / event.target_cpa) * 100
-    : 0;
-  const cpaBeat = cpaDiffPct <= 0;
+  if (hasNcTarget) {
+    ncPct = (actualNc / targetNc) * 100;
+    ncBeat = actualNc >= targetNc;
+    ncStatus = ncBeat ? 'hit' : 'under';
+    ncLabel = ncBeat ? `${fmtPct(ncPct)} — beat target` : (actualNc === 0 ? '0% of target' : `${fmtPct(ncPct)} of target`);
+  }
+
+  const targetCpo = event.target_cpo || 0;
+  const actualCpo = event.actual_cpo || 0;
+  const hasCpoTarget = targetCpo > 0;
+  let cpoDiffPct = 0;
+  let cpoBeat = false;
+  let cpoStatus = 'no_target';
+  let cpoLabel = 'No target';
+
+  if (hasCpoTarget) {
+    if (actualCpo > 0) {
+      cpoDiffPct = ((actualCpo - targetCpo) / targetCpo) * 100;
+      cpoBeat = cpoDiffPct <= 0;
+      cpoStatus = cpoBeat ? 'hit' : 'under';
+      cpoLabel = cpoDiffPct === 0 ? '0.0% — hit target' : (cpoDiffPct < 0 ? `${cpoDiffPct.toFixed(1)}% under target` : `+${cpoDiffPct.toFixed(1)}% over target`);
+    } else {
+      cpoBeat = false;
+      cpoStatus = 'under';
+      cpoLabel = 'Under target';
+    }
+  }
+
+  const targetCpa = event.target_cpa || 0;
+  const actualCpa = event.actual_cpa || 0;
+  const hasCpaTarget = targetCpa > 0;
+  let cpaDiffPct = 0;
+  let cpaBeat = false;
+  let cpaStatus = 'no_target';
+  let cpaLabel = 'No target';
+
+  if (hasCpaTarget) {
+    if (actualCpa > 0) {
+      cpaDiffPct = ((actualCpa - targetCpa) / targetCpa) * 100;
+      cpaBeat = cpaDiffPct <= 0;
+      cpaStatus = cpaBeat ? 'hit' : 'under';
+      cpaLabel = cpaDiffPct === 0 ? '0.0% — hit target' : (cpaDiffPct < 0 ? `${cpaDiffPct.toFixed(1)}% under target` : `+${cpaDiffPct.toFixed(1)}% over target`);
+    } else {
+      cpaBeat = false;
+      cpaStatus = 'under';
+      cpaLabel = 'Under target';
+    }
+  }
+
+  let hitCount = 0;
+  let totalTracked = 0;
+  if (hasCustTarget) { totalTracked++; if (custBeat) hitCount++; }
+  if (hasNcTarget) { totalTracked++; if (ncBeat) hitCount++; }
+  if (hasCpoTarget) { totalTracked++; if (cpoBeat) hitCount++; }
+  if (hasCpaTarget) { totalTracked++; if (cpaBeat) hitCount++; }
 
   return {
     targetCustomers,
     actualCustomers,
     custPct,
     custBeat,
+    custStatus,
+    custLabel,
     ncPct,
     ncBeat,
+    ncStatus,
+    ncLabel,
     cpoDiffPct,
     cpoBeat,
+    cpoStatus,
+    cpoLabel,
     cpaDiffPct,
     cpaBeat,
+    cpaStatus,
+    cpaLabel,
+    hitCount,
+    totalTracked,
   };
 };
 
@@ -303,7 +376,9 @@ test('Event Report - Hit Summary: Target Hit Logic (NC higher is good, CPO lower
   };
   const summary = computeEventHitSummary(mockEvent);
   assert.strictEqual(summary.ncBeat, true);
+  assert.strictEqual(summary.ncStatus, 'hit');
   assert.strictEqual(summary.cpoBeat, true);
+  assert.strictEqual(summary.cpoStatus, 'hit');
   assert.strictEqual(summary.cpaBeat, true);
   assert(summary.cpoDiffPct < 0); // negative means cheaper than target
   assert(summary.cpaDiffPct < 0);
@@ -322,10 +397,67 @@ test('Event Report - Hit Summary: Over-budget / High CPA triggers beat=false', (
   };
   const summary = computeEventHitSummary(mockEvent);
   assert.strictEqual(summary.ncBeat, false);
+  assert.strictEqual(summary.ncStatus, 'under');
   assert.strictEqual(summary.cpoBeat, false);
+  assert.strictEqual(summary.cpoStatus, 'under');
   assert.strictEqual(summary.cpaBeat, false);
   assert(summary.cpoDiffPct > 0);
   assert(summary.cpaDiffPct > 0);
+});
+
+test('Event Report - Hit Summary: Unassigned Targets (0/0) -> status "no_target" & label "No target"', () => {
+  const mockEvent = {
+    target_nc: 0,
+    actual_nc: 0,
+    target_ec: 0,
+    actual_ec: 0,
+    target_cpo: 0,
+    actual_cpo: 0,
+    target_cpa: 0,
+    actual_cpa: 0,
+  };
+  const summary = computeEventHitSummary(mockEvent);
+  assert.strictEqual(summary.custStatus, 'no_target');
+  assert.strictEqual(summary.custLabel, 'No target');
+  assert.strictEqual(summary.ncStatus, 'no_target');
+  assert.strictEqual(summary.ncLabel, 'No target');
+  assert.strictEqual(summary.cpoStatus, 'no_target');
+  assert.strictEqual(summary.cpoLabel, 'No target');
+  assert.strictEqual(summary.cpaStatus, 'no_target');
+  assert.strictEqual(summary.cpaLabel, 'No target');
+  assert.strictEqual(summary.totalTracked, 0);
+});
+
+test('Event Report - Hit Summary: Act > 0 but Target = 0 -> status "no_target" & label "No target"', () => {
+  const mockEvent = {
+    target_nc: 0,
+    actual_nc: 50,
+    target_cpo: 0,
+    actual_cpo: 229000,
+    target_cpa: 0,
+    actual_cpa: 150000,
+  };
+  const summary = computeEventHitSummary(mockEvent);
+  assert.strictEqual(summary.ncStatus, 'no_target');
+  assert.strictEqual(summary.ncLabel, 'No target');
+  assert.strictEqual(summary.cpoStatus, 'no_target');
+  assert.strictEqual(summary.cpoLabel, 'No target');
+});
+
+test('Event Report - Hit Summary: Target > 0 but Act = 0 -> calculate normal as under target (0% / Under target)', () => {
+  const mockEvent = {
+    target_nc: 100,
+    actual_nc: 0,
+    target_cpo: 250000,
+    actual_cpo: 0,
+  };
+  const summary = computeEventHitSummary(mockEvent);
+  assert.strictEqual(summary.ncStatus, 'under');
+  assert.strictEqual(summary.ncLabel, '0% of target');
+  assert.strictEqual(summary.ncBeat, false);
+  assert.strictEqual(summary.cpoStatus, 'under');
+  assert.strictEqual(summary.cpoLabel, 'Under target');
+  assert.strictEqual(summary.cpoBeat, false);
 });
 
 console.log('\n================================================================');

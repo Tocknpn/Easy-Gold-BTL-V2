@@ -862,57 +862,191 @@ export function getEffectiveActuals(event: Event) {
   };
 }
 
+export type TargetHitStatus = 'no_target' | 'hit' | 'under';
+
 /**
  * Compare actuals vs targets and return hit status + percentage over/under.
+ * Handles unassigned targets (target=0 -> 'no_target' / 'No target'),
+ * actuals with no target, and zero actuals with positive target.
  */
 export function computeEventHitSummary(event: Event) {
   const actual = getEffectiveActuals(event);
 
+  // 1. Customers (NC + EC)
   const targetCustomers = (event.target_nc || 0) + (event.target_ec || 0);
-  const custPct = targetCustomers > 0 ? (actual.customers / targetCustomers) * 100 : 100;
-  const custBeat = custPct >= 100;
+  const hasCustTarget = targetCustomers > 0;
+  let custPct = 0;
+  let custBeat = false;
+  let custStatus: TargetHitStatus = 'no_target';
+  let custLabel = 'No target';
+  let custColor = 'var(--txt-sub)';
 
-  const ncPct = event.target_nc > 0 ? (actual.nc / event.target_nc) * 100 : 100;
-  const ncBeat = ncPct >= 100;
+  if (hasCustTarget) {
+    custPct = (actual.customers / targetCustomers) * 100;
+    custBeat = actual.customers >= targetCustomers;
+    if (custBeat) {
+      custStatus = 'hit';
+      custColor = 'var(--green)';
+      custLabel = custPct > 100 ? `${fmtPct(custPct)} — beat target` : `${fmtPct(custPct)} — hit target`;
+    } else {
+      custStatus = 'under';
+      custColor = 'var(--orange)';
+      custLabel = actual.customers === 0 ? '0% of target' : `${fmtPct(custPct)} of target`;
+    }
+  }
 
-  // For costs and CP metrics: under target is positive (beat target)
-  const cpoDiffPct = event.target_cpo > 0
-    ? ((actual.cpo - event.target_cpo) / event.target_cpo) * 100
-    : 0;
-  const cpoBeat = cpoDiffPct <= 0;
+  // 2. New Customers (NC)
+  const targetNc = event.target_nc || 0;
+  const hasNcTarget = targetNc > 0;
+  let ncPct = 0;
+  let ncBeat = false;
+  let ncStatus: TargetHitStatus = 'no_target';
+  let ncLabel = 'No target';
+  let ncColor = 'var(--txt-sub)';
 
-  const cpaDiffPct = event.target_cpa > 0
-    ? ((actual.cpa - event.target_cpa) / event.target_cpa) * 100
-    : 0;
-  const cpaBeat = cpaDiffPct <= 0;
+  if (hasNcTarget) {
+    ncPct = (actual.nc / targetNc) * 100;
+    ncBeat = actual.nc >= targetNc;
+    if (ncBeat) {
+      ncStatus = 'hit';
+      ncColor = 'var(--green)';
+      ncLabel = ncPct > 100 ? `${fmtPct(ncPct)} — beat target` : `${fmtPct(ncPct)} — hit target`;
+    } else {
+      ncStatus = 'under';
+      ncColor = 'var(--orange)';
+      ncLabel = actual.nc === 0 ? '0% of target' : `${fmtPct(ncPct)} of target`;
+    }
+  }
 
-  const buyValPct = event.target_buy_value > 0 ? (actual.buy_value / event.target_buy_value) * 100 : 100;
-  const buyValBeat = buyValPct >= 100;
+  // 3. CPO (Cost Per Order / Buyer) - Lower is better
+  const targetCpo = event.target_cpo || 0;
+  const hasCpoTarget = targetCpo > 0;
+  let cpoDiffPct = 0;
+  let cpoBeat = false;
+  let cpoStatus: TargetHitStatus = 'no_target';
+  let cpoLabel = 'No target';
+  let cpoColor = 'var(--txt-sub)';
+
+  if (hasCpoTarget) {
+    if (actual.cpo > 0) {
+      cpoDiffPct = ((actual.cpo - targetCpo) / targetCpo) * 100;
+      cpoBeat = cpoDiffPct <= 0;
+      if (cpoBeat) {
+        cpoStatus = 'hit';
+        cpoColor = 'var(--green)';
+        cpoLabel = cpoDiffPct === 0 ? '0.0% — hit target' : `${cpoDiffPct.toFixed(1)}% under target`;
+      } else {
+        cpoStatus = 'under';
+        cpoColor = 'var(--orange)';
+        cpoLabel = `+${cpoDiffPct.toFixed(1)}% over target`;
+      }
+    } else {
+      cpoBeat = false;
+      cpoStatus = 'under';
+      cpoColor = 'var(--orange)';
+      cpoLabel = 'Under target';
+    }
+  }
+
+  // 4. CPA (Cost Per Acquisition / NC) - Lower is better
+  const targetCpa = event.target_cpa || 0;
+  const hasCpaTarget = targetCpa > 0;
+  let cpaDiffPct = 0;
+  let cpaBeat = false;
+  let cpaStatus: TargetHitStatus = 'no_target';
+  let cpaLabel = 'No target';
+  let cpaColor = 'var(--txt-sub)';
+
+  if (hasCpaTarget) {
+    if (actual.cpa > 0) {
+      cpaDiffPct = ((actual.cpa - targetCpa) / targetCpa) * 100;
+      cpaBeat = cpaDiffPct <= 0;
+      if (cpaBeat) {
+        cpaStatus = 'hit';
+        cpaColor = 'var(--green)';
+        cpaLabel = cpaDiffPct === 0 ? '0.0% — hit target' : `${cpaDiffPct.toFixed(1)}% under target`;
+      } else {
+        cpaStatus = 'under';
+        cpaColor = 'var(--orange)';
+        cpaLabel = `+${cpaDiffPct.toFixed(1)}% over target`;
+      }
+    } else {
+      cpaBeat = false;
+      cpaStatus = 'under';
+      cpaColor = 'var(--orange)';
+      cpaLabel = 'Under target';
+    }
+  }
+
+  // 5. Buy Value (GMV)
+  const targetBuyVal = event.target_buy_value || 0;
+  const hasBuyValTarget = targetBuyVal > 0;
+  let buyValPct = 0;
+  let buyValBeat = false;
+  let buyValStatus: TargetHitStatus = 'no_target';
+  let buyValLabel = 'No target';
+  let buyValColor = 'var(--txt-sub)';
+
+  if (hasBuyValTarget) {
+    buyValPct = (actual.buy_value / targetBuyVal) * 100;
+    buyValBeat = actual.buy_value >= targetBuyVal;
+    buyValStatus = buyValBeat ? 'hit' : 'under';
+    buyValColor = buyValBeat ? 'var(--green)' : 'var(--orange)';
+    buyValLabel = buyValBeat
+      ? (buyValPct > 100 ? `${fmtPct(buyValPct)} — beat target` : `${fmtPct(buyValPct)} — hit target`)
+      : (actual.buy_value === 0 ? '0% of target' : `${fmtPct(buyValPct)} of target`);
+  }
 
   let hitCount = 0;
   let totalTracked = 0;
 
-  if (targetCustomers > 0) { totalTracked++; if (custBeat) hitCount++; }
-  if (event.target_nc > 0) { totalTracked++; if (ncBeat) hitCount++; }
-  if (event.target_cpo > 0) { totalTracked++; if (cpoBeat) hitCount++; }
-  if (event.target_cpa > 0) { totalTracked++; if (cpaBeat) hitCount++; }
-  if (event.target_buy_value > 0) { totalTracked++; if (buyValBeat) hitCount++; }
+  if (hasCustTarget) { totalTracked++; if (custBeat) hitCount++; }
+  if (hasNcTarget) { totalTracked++; if (ncBeat) hitCount++; }
+  if (hasCpoTarget) { totalTracked++; if (cpoBeat) hitCount++; }
+  if (hasCpaTarget) { totalTracked++; if (cpaBeat) hitCount++; }
+  if (hasBuyValTarget) { totalTracked++; if (buyValBeat) hitCount++; }
 
   return {
     actual,
     targetCustomers,
+    hasCustTarget,
     custPct,
     custBeat,
+    custStatus,
+    custLabel,
+    custColor,
+
+    hasNcTarget,
     ncPct,
     ncBeat,
+    ncStatus,
+    ncLabel,
+    ncColor,
+
+    hasCpoTarget,
     cpoDiffPct,
     cpoBeat,
+    cpoStatus,
+    cpoLabel,
+    cpoColor,
+
+    hasCpaTarget,
     cpaDiffPct,
     cpaBeat,
+    cpaStatus,
+    cpaLabel,
+    cpaColor,
+
+    hasBuyValTarget,
     buyValPct,
     buyValBeat,
+    buyValStatus,
+    buyValLabel,
+    buyValColor,
+
     hitCount,
-    totalTracked: totalTracked || 1,
+    totalTracked,
+    hasAnyTarget: totalTracked > 0,
   };
 }
 

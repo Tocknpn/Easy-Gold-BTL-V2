@@ -6,7 +6,7 @@ import {
   computeEventHitSummary, computeCPMetrics,
   getCustomListOptions, saveCustomListOptions, DEFAULT_LIST_OPTIONS,
   EVENT_STATUSES,
-  fmtLAK, fmtLAKShort, fmtPct, statusColor, statusLabel, scaleColor, blankEvent,
+  fmtLAK, fmtLAKShort, statusColor, statusLabel, scaleColor, blankEvent,
 } from '../lib/events';
 import { fetchMerchCatalog } from '../lib/submissions';
 import type { MerchItem } from '../lib/submissions';
@@ -1371,18 +1371,18 @@ export default function EventManagement() {
                       <div style={{ fontSize: '14px', fontWeight: 800 }}>
                         {actual.customers} / {summary.targetCustomers}
                       </div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.custBeat ? 'var(--green)' : 'var(--orange)' }}>
-                        {fmtPct(summary.custPct)} {summary.custBeat ? '— beat target' : 'of target'}
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.custColor }}>
+                        {summary.custLabel}
                       </div>
                     </div>
 
                     <div style={{ background: 'var(--ink)', padding: '8px 10px', borderRadius: '8px' }}>
                       <div style={{ fontSize: '9px', color: 'var(--txt-dim)', fontWeight: 700 }}>NEW CUST. (ACT/TGT)</div>
                       <div style={{ fontSize: '14px', fontWeight: 800 }}>
-                        {actual.nc} / {ev.target_nc}
+                        {actual.nc} / {ev.target_nc || 0}
                       </div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.ncBeat ? 'var(--green)' : 'var(--orange)' }}>
-                        {fmtPct(summary.ncPct)} {summary.ncBeat ? '— beat target' : 'of target'}
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.ncColor }}>
+                        {summary.ncLabel}
                       </div>
                     </div>
 
@@ -1391,8 +1391,8 @@ export default function EventManagement() {
                       <div style={{ fontSize: '12px', fontWeight: 800 }}>
                         {fmtLAKShort(actual.cpo)} / {fmtLAKShort(ev.target_cpo)}
                       </div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.cpoBeat ? 'var(--green)' : 'var(--orange)' }}>
-                        {summary.cpoDiffPct > 0 ? `+${summary.cpoDiffPct.toFixed(1)}% over` : `${summary.cpoDiffPct.toFixed(1)}% under`} target
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.cpoColor }}>
+                        {summary.cpoLabel}
                       </div>
                     </div>
 
@@ -1401,8 +1401,8 @@ export default function EventManagement() {
                       <div style={{ fontSize: '12px', fontWeight: 800 }}>
                         {fmtLAKShort(actual.cpa)} / {fmtLAKShort(ev.target_cpa)}
                       </div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.cpaBeat ? 'var(--green)' : 'var(--orange)' }}>
-                        {summary.cpaDiffPct > 0 ? `+${summary.cpaDiffPct.toFixed(1)}% over` : `${summary.cpaDiffPct.toFixed(1)}% under`} target
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: summary.cpaColor }}>
+                        {summary.cpaLabel}
                       </div>
                     </div>
                   </div>
@@ -1411,13 +1411,25 @@ export default function EventManagement() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--txt-sub)', marginBottom: '8px' }}>
                     <span>
                       {ev.actual_filled ? (
-                        <span style={{ color: 'var(--green)', fontWeight: 700 }}>
-                          <i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i>Actuals Recorded ({summary.hitCount}/{summary.totalTracked} Targets Hit)
-                        </span>
+                        summary.totalTracked > 0 ? (
+                          <span style={{ color: summary.hitCount > 0 ? 'var(--green)' : 'var(--orange)', fontWeight: 700 }}>
+                            <i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i>Actuals Recorded ({summary.hitCount}/{summary.totalTracked} Targets Hit)
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--txt-sub)', fontWeight: 600 }}>
+                            <i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i>Actuals Recorded (No Targets Set)
+                          </span>
+                        )
                       ) : (
-                        <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
-                          <i className="fa-solid fa-clock" style={{ marginRight: '4px' }}></i>100% Plan Execution (Auto-Default)
-                        </span>
+                        summary.totalTracked > 0 ? (
+                          <span style={{ color: 'var(--gold)', fontWeight: 600 }}>
+                            <i className="fa-solid fa-clock" style={{ marginRight: '4px' }}></i>100% Plan Execution (Auto-Default)
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--txt-sub)', fontWeight: 600 }}>
+                            <i className="fa-solid fa-clock" style={{ marginRight: '4px' }}></i>Plan Pending (No Targets Set)
+                          </span>
+                        )
                       )}
                     </span>
                     {(ev.actual_cpm ?? 0) > 0 && <span style={{ fontWeight: 700 }}>CPM: {fmtLAKShort(actual.cpm)}</span>}
@@ -1553,13 +1565,25 @@ export default function EventManagement() {
                     <td>{fmtLAKShort(ev.budget_total || ev.media_cost || 0)}</td>
                     <td><strong>{fmtLAKShort(s.actual.cost)}</strong></td>
                     <td>
-                      <span style={{ color: s.ncBeat ? 'var(--green)' : 'var(--txt-main)', fontWeight: 700 }}>
-                        {s.actual.nc} / {ev.target_nc}
+                      <span style={{ color: s.ncColor, fontWeight: 700 }}>
+                        {s.actual.nc} / {ev.target_nc || 0}
                       </span>
                     </td>
-                    <td>{s.actual.customers} / {s.targetCustomers}</td>
-                    <td>{fmtLAKShort(s.actual.cpa)} / {fmtLAKShort(ev.target_cpa)}</td>
-                    <td>{fmtLAKShort(s.actual.cpo)} / {fmtLAKShort(ev.target_cpo)}</td>
+                    <td>
+                      <span style={{ color: s.custColor, fontWeight: 600 }}>
+                        {s.actual.customers} / {s.targetCustomers}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ color: s.cpaColor }}>
+                        {fmtLAKShort(s.actual.cpa)} / {fmtLAKShort(ev.target_cpa)}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ color: s.cpoColor }}>
+                        {fmtLAKShort(s.actual.cpo)} / {fmtLAKShort(ev.target_cpo)}
+                      </span>
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button className="btn btn-ghost" onClick={() => setViewingEvent(ev)} style={{ padding: '3px 8px', fontSize: '10px' }}>Details</button>
@@ -1636,21 +1660,21 @@ export default function EventManagement() {
                     />
                     <KpiChip
                       label="New Customers (NC)"
-                      value={`${actual.nc} / ${viewingEvent.target_nc}`}
-                      sub={`${fmtPct(s.ncPct)} ${s.ncBeat ? '— beat target' : 'of target'}`}
-                      color={s.ncBeat ? 'var(--green)' : 'var(--orange)'}
+                      value={`${actual.nc} / ${viewingEvent.target_nc || 0}`}
+                      sub={s.ncLabel}
+                      color={s.ncColor}
                     />
                     <KpiChip
                       label="Actual CPA (per NC)"
                       value={fmtLAKShort(actual.cpa)}
-                      sub={`Target: ${fmtLAKShort(viewingEvent.target_cpa)}`}
-                      color={s.cpaBeat ? 'var(--green)' : 'var(--orange)'}
+                      sub={viewingEvent.target_cpa > 0 ? `Target: ${fmtLAKShort(viewingEvent.target_cpa)} (${s.cpaLabel})` : 'Target: None'}
+                      color={s.cpaColor}
                     />
                     <KpiChip
                       label="Actual CPO (per Buyer)"
                       value={fmtLAKShort(actual.cpo)}
-                      sub={`Target: ${fmtLAKShort(viewingEvent.target_cpo)}`}
-                      color={s.cpoBeat ? 'var(--green)' : 'var(--blue)'}
+                      sub={viewingEvent.target_cpo > 0 ? `Target: ${fmtLAKShort(viewingEvent.target_cpo)} (${s.cpoLabel})` : 'Target: None'}
+                      color={s.cpoColor}
                     />
                   </div>
                 );
