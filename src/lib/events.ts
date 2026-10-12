@@ -17,6 +17,9 @@ export interface EventMerchItem {
   qty: number;
   cpu?: number;
   total?: number;
+  actual_used?: number;
+  actual_returned?: number;
+  actual_total?: number;
 }
 
 export interface Event {
