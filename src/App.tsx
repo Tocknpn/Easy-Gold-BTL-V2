@@ -27,7 +27,14 @@ const EventReport = lazy(() => import('./pages/EventReport'));
 const WIDE_PAGES = ['/', '/cost-manager', '/copy-paste', '/report', '/event-management', '/event-report'];
 
 function Layout({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    try {
+      const stored = localStorage.getItem('easygold_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem('eg_sidebar_collapsed') === '1');
   const [showCommitInfo, setShowCommitInfo] = useState<boolean>(() => localStorage.getItem('eg_show_commit_info') === '1');
   const navigate = useNavigate();
@@ -111,7 +118,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const headerInfo = pageTitles[currentPath] || { title: 'Easy Gold BTL', sub: '' };
 
   if (!user) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--ink)', flexDirection: 'column', gap: '16px' }}>
+    <div className="fullscreen-loader" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', flex: 1, background: 'var(--ink)', flexDirection: 'column', gap: '16px' }}>
       <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '28px', color: 'var(--accent)' }}></i>
       <span style={{ color: 'var(--txt-sub)', fontSize: '13px' }}>Loading…</span>
     </div>
@@ -245,7 +252,12 @@ function App() {
 
   return (
     <Router>
-      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--ink)' }}><i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '28px', color: 'var(--accent)' }}></i></div>}>
+      <Suspense fallback={
+        <div className="fullscreen-loader" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', flex: 1, background: 'var(--ink)', flexDirection: 'column', gap: '16px' }}>
+          <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '28px', color: 'var(--accent)' }}></i>
+          <span style={{ color: 'var(--txt-sub)', fontSize: '13px' }}>Loading…</span>
+        </div>
+      }>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Layout><Dashboard /></Layout>} />
