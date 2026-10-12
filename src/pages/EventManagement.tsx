@@ -535,6 +535,22 @@ export default function EventManagement() {
     });
   };
 
+  const updateExpenseCategory = (
+    key: 'actual_media_cost' | 'actual_production_cost' | 'actual_sponsor_cost' | 'actual_merch_cost' | 'actual_operation_cost' | 'actual_other_cost',
+    val: number
+  ) => {
+    setActualData(d => {
+      const next = { ...d, [key]: Math.max(0, val) };
+      const sum = (next.actual_media_cost || 0) +
+        (next.actual_production_cost || 0) +
+        (next.actual_sponsor_cost || 0) +
+        (next.actual_merch_cost || 0) +
+        (next.actual_operation_cost || 0) +
+        (next.actual_other_cost || 0);
+      return { ...next, actual_cost: sum };
+    });
+  };
+
   const updateMerchUsed = (idx: number, usedVal: number) => {
     setMerchRows(prev => {
       const next = prev.map((row, i) => {
@@ -546,12 +562,14 @@ export default function EventManagement() {
       });
       const totalMerch = next.reduce((sum, r) => sum + r.actual_total, 0);
       setActualData(d => {
-        const diff = totalMerch - d.actual_merch_cost;
-        return {
-          ...d,
-          actual_merch_cost: totalMerch,
-          actual_cost: Math.max(0, d.actual_cost + diff),
-        };
+        const nextData = { ...d, actual_merch_cost: totalMerch };
+        const sum = (nextData.actual_media_cost || 0) +
+          (nextData.actual_production_cost || 0) +
+          (nextData.actual_sponsor_cost || 0) +
+          totalMerch +
+          (nextData.actual_operation_cost || 0) +
+          (nextData.actual_other_cost || 0);
+        return { ...nextData, actual_cost: sum };
       });
       return next;
     });
@@ -568,12 +586,14 @@ export default function EventManagement() {
       });
       const totalMerch = next.reduce((sum, r) => sum + r.actual_total, 0);
       setActualData(d => {
-        const diff = totalMerch - d.actual_merch_cost;
-        return {
-          ...d,
-          actual_merch_cost: totalMerch,
-          actual_cost: Math.max(0, d.actual_cost + diff),
-        };
+        const nextData = { ...d, actual_merch_cost: totalMerch };
+        const sum = (nextData.actual_media_cost || 0) +
+          (nextData.actual_production_cost || 0) +
+          (nextData.actual_sponsor_cost || 0) +
+          totalMerch +
+          (nextData.actual_operation_cost || 0) +
+          (nextData.actual_other_cost || 0);
+        return { ...nextData, actual_cost: sum };
       });
       return next;
     });
@@ -598,16 +618,22 @@ export default function EventManagement() {
     setMerchRows(fullMerch);
 
     const merchTotal = fullMerch.length > 0 ? fullMerch.reduce((s, r) => s + r.actual_total, 0) : (actualEvent.budget_merch || 0);
+    const media = actualEvent.budget_media || 0;
+    const prod = actualEvent.budget_production || 0;
+    const sponsor = actualEvent.budget_sponsor || 0;
+    const op = actualEvent.budget_operation || 0;
+    const other = actualEvent.budget_other || 0;
+    const total = media + prod + sponsor + merchTotal + op + other;
 
     setActualData(prev => ({
       ...prev,
-      actual_cost: actualEvent.budget_total || actualEvent.media_cost || 0,
-      actual_media_cost: actualEvent.budget_media || 0,
-      actual_production_cost: actualEvent.budget_production || 0,
-      actual_sponsor_cost: actualEvent.budget_sponsor || 0,
+      actual_cost: total,
+      actual_media_cost: media,
+      actual_production_cost: prod,
+      actual_sponsor_cost: sponsor,
       actual_merch_cost: merchTotal,
-      actual_operation_cost: actualEvent.budget_operation || 0,
-      actual_other_cost: actualEvent.budget_other || 0,
+      actual_operation_cost: op,
+      actual_other_cost: other,
       actual_footfall: actualEvent.target_footfall || 0,
       actual_nc: actualEvent.target_nc || 0,
       actual_nc_buyer: actualEvent.target_nc_buyer || 0,
@@ -620,12 +646,33 @@ export default function EventManagement() {
     }));
   };
 
+  // Live sum of individual cost categories
+  const categoryExpensesSum = useMemo(() => {
+    return (
+      (actualData.actual_media_cost || 0) +
+      (actualData.actual_production_cost || 0) +
+      (actualData.actual_sponsor_cost || 0) +
+      (actualData.actual_merch_cost || 0) +
+      (actualData.actual_operation_cost || 0) +
+      (actualData.actual_other_cost || 0)
+    );
+  }, [
+    actualData.actual_media_cost,
+    actualData.actual_production_cost,
+    actualData.actual_sponsor_cost,
+    actualData.actual_merch_cost,
+    actualData.actual_operation_cost,
+    actualData.actual_other_cost,
+  ]);
+
   const handleSaveActuals = async () => {
     if (!actualEvent) return;
     setSavingActuals(true);
 
+    const totalCost = categoryExpensesSum;
+
     const cp = computeCPMetrics(
-      actualData.actual_cost,
+      totalCost,
       actualData.actual_nc,
       actualData.actual_ec,
       actualData.actual_nc_buyer,
@@ -648,13 +695,13 @@ export default function EventManagement() {
 
     const payload: Partial<Event> = {
       actual_filled: true,
-      actual_cost: actualData.actual_cost,
-      actual_media_cost: actualData.actual_media_cost,
-      actual_production_cost: actualData.actual_production_cost,
-      actual_sponsor_cost: actualData.actual_sponsor_cost,
-      actual_merch_cost: actualData.actual_merch_cost,
-      actual_operation_cost: actualData.actual_operation_cost,
-      actual_other_cost: actualData.actual_other_cost,
+      actual_cost: totalCost,
+      actual_media_cost: actualData.actual_media_cost || 0,
+      actual_production_cost: actualData.actual_production_cost || 0,
+      actual_sponsor_cost: actualData.actual_sponsor_cost || 0,
+      actual_merch_cost: actualData.actual_merch_cost || 0,
+      actual_operation_cost: actualData.actual_operation_cost || 0,
+      actual_other_cost: actualData.actual_other_cost || 0,
       actual_footfall: actualData.actual_footfall,
       actual_nc: actualData.actual_nc,
       actual_nc_buyer: actualData.actual_nc_buyer,
@@ -685,7 +732,7 @@ export default function EventManagement() {
   // Live auto-calculated CP metrics inside Actuals modal
   const liveCP = useMemo(() => {
     return computeCPMetrics(
-      actualData.actual_cost,
+      categoryExpensesSum,
       actualData.actual_nc,
       actualData.actual_ec,
       actualData.actual_nc_buyer,
@@ -693,25 +740,14 @@ export default function EventManagement() {
       actualData.actual_footfall,
       actualEvent?.target_cpm
     );
-  }, [actualData, actualEvent]);
-
-  // Live sum of individual cost categories
-  const categoryExpensesSum = useMemo(() => {
-    return (
-      (actualData.actual_media_cost || 0) +
-      (actualData.actual_production_cost || 0) +
-      (actualData.actual_sponsor_cost || 0) +
-      (actualData.actual_merch_cost || 0) +
-      (actualData.actual_operation_cost || 0) +
-      (actualData.actual_other_cost || 0)
-    );
   }, [
-    actualData.actual_media_cost,
-    actualData.actual_production_cost,
-    actualData.actual_sponsor_cost,
-    actualData.actual_merch_cost,
-    actualData.actual_operation_cost,
-    actualData.actual_other_cost,
+    categoryExpensesSum,
+    actualData.actual_nc,
+    actualData.actual_ec,
+    actualData.actual_nc_buyer,
+    actualData.actual_impressions,
+    actualData.actual_footfall,
+    actualEvent?.target_cpm,
   ]);
 
   // ── Custom Dropdown List Management Handlers ──
@@ -1985,36 +2021,34 @@ export default function EventManagement() {
               <div style={{ marginBottom: '20px' }}>
                 <SectionTitle icon="fa-coins" title="Actual Spending Cost" badge={`Plan Budget: ${fmtLAK(actualEvent.budget_total || actualEvent.media_cost || 0)}`} />
 
-                {/* Total Actual Cost & Sync */}
+                {/* Total Actual Cost (Locked & Auto-Calculated from Breakdown) */}
                 <div style={{ background: 'var(--ink)', padding: '14px 16px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--txt-dim)', letterSpacing: '0.04em' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--txt-dim)', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className="fa-solid fa-lock" style={{ color: 'var(--accent)', fontSize: '11px' }}></i>
                       Total Actual Spending Cost (₭) *
                     </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px' }}>
-                      <span style={{ color: 'var(--txt-sub)' }}>
-                        Breakdown Sum: <strong>{fmtLAK(categoryExpensesSum)}</strong>
-                      </span>
-                      {actualData.actual_cost !== categoryExpensesSum && (
-                        <button
-                          type="button"
-                          onClick={() => setActualData(d => ({ ...d, actual_cost: categoryExpensesSum }))}
-                          className="btn btn-ghost"
-                          style={{ padding: '3px 8px', fontSize: '10px', color: 'var(--accent)', border: '1px solid var(--border)' }}
-                          title="Set Total to match the sum of individual expense categories"
-                        >
-                          <i className="fa-solid fa-arrows-rotate"></i> Sync with Breakdown
-                        </button>
-                      )}
-                    </div>
+                    <span className="pill pill-gold" style={{ fontSize: '10px', padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <i className="fa-solid fa-calculator"></i> Locked · Sum of Breakdown
+                    </span>
                   </div>
                   <FormattedNumberInput
-                    value={actualData.actual_cost}
-                    onChange={v => setActualData(d => ({ ...d, actual_cost: v }))}
-                    style={{ fontSize: '16px', fontWeight: 800, padding: '10px 14px', border: '2px solid var(--accent)', borderRadius: '8px' }}
+                    value={categoryExpensesSum}
+                    readOnly={true}
+                    style={{
+                      fontSize: '18px',
+                      fontWeight: 800,
+                      padding: '10px 14px',
+                      border: '2px solid var(--accent)',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      color: 'var(--accent)',
+                      cursor: 'not-allowed',
+                    }}
                   />
-                  <div style={{ fontSize: '10px', color: 'var(--txt-sub)', marginTop: '4px' }}>
-                    Main financial spending figure reported across executive slides and CP calculations.
+                  <div style={{ fontSize: '11px', color: 'var(--txt-sub)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <i className="fa-solid fa-circle-info" style={{ color: 'var(--accent)' }}></i>
+                    <span>Total spending is locked and automatically calculated from the breakdown categories below.</span>
                   </div>
                 </div>
 
@@ -2023,38 +2057,40 @@ export default function EventManagement() {
                   <FF label="Media Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_media || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_media_cost}
-                      onChange={v => setActualData(d => ({ ...d, actual_media_cost: v }))}
+                      onChange={v => updateExpenseCategory('actual_media_cost', v)}
                     />
                   </FF>
                   <FF label="Prod. Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_production || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_production_cost}
-                      onChange={v => setActualData(d => ({ ...d, actual_production_cost: v }))}
+                      onChange={v => updateExpenseCategory('actual_production_cost', v)}
                     />
                   </FF>
                   <FF label="Sponsor Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_sponsor || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_sponsor_cost}
-                      onChange={v => setActualData(d => ({ ...d, actual_sponsor_cost: v }))}
+                      onChange={v => updateExpenseCategory('actual_sponsor_cost', v)}
                     />
                   </FF>
 
-                  <FF label="Merch Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_merch || 0)}`}>
+                  <FF label="Merch Cost (₭)" note={merchRows.length > 0 ? "Linked to Merch Table below" : `Plan: ${fmtLAKShort(actualEvent.budget_merch || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_merch_cost}
-                      onChange={v => setActualData(d => ({ ...d, actual_merch_cost: v }))}
+                      readOnly={merchRows.length > 0}
+                      onChange={v => updateExpenseCategory('actual_merch_cost', v)}
+                      style={merchRows.length > 0 ? { background: 'rgba(255, 255, 255, 0.04)', cursor: 'not-allowed' } : undefined}
                     />
                   </FF>
                   <FF label="Operation Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_operation || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_operation_cost}
-                      onChange={v => setActualData(d => ({ ...d, actual_operation_cost: v }))}
+                      onChange={v => updateExpenseCategory('actual_operation_cost', v)}
                     />
                   </FF>
                   <FF label="Other Cost (₭)" note={`Plan: ${fmtLAKShort(actualEvent.budget_other || 0)}`}>
                     <FormattedNumberInput
                       value={actualData.actual_other_cost}
-                      onChange={v => setActualData(d => ({ ...d, actual_other_cost: v }))}
+                      onChange={v => updateExpenseCategory('actual_other_cost', v)}
                     />
                   </FF>
                 </div>
