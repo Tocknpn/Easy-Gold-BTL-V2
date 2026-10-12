@@ -382,49 +382,72 @@ export default function EventReport() {
                           </div>
                         </div>
 
-                        {/* 7. 2x2 Photos Collage (Up to 4 Media Links) */}
-                        <div style={{ padding: '8px', background: '#f1f5f9', borderTop: '1px solid #e2e8f0' }}>
-                          <div
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(2, 1fr)',
-                              gap: '4px',
-                            }}
-                          >
-                            {(actual.photos.length > 0 ? actual.photos.slice(0, 4) : [
-                              'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&fit=crop',
-                              'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&fit=crop',
-                              'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&fit=crop',
-                              'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&fit=crop',
-                            ]).map((imgUrl, imgIdx) => (
-                              <div
-                                key={imgIdx}
-                                onClick={() => setLightboxImg(imgUrl)}
-                                style={{
-                                  height: '84px',
-                                  borderRadius: '3px',
-                                  overflow: 'hidden',
-                                  cursor: 'pointer',
-                                  background: '#000',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                }}
-                                title="Click to view full photo"
-                              >
-                                <img
-                                  src={imgUrl}
-                                  alt={`event-pic-${imgIdx}`}
-                                  style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover',
-                                    transition: 'transform 0.2s ease',
-                                  }}
-                                  onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.05)'; }}
-                                  onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
-                                />
-                              </div>
-                            ))}
-                          </div>
+                        {/* 7. Actual Photos Collage or Empty State */}
+                        <div style={{ padding: '8px', background: '#f1f5f9', borderTop: '1px solid #e2e8f0', minHeight: '188px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          {actual.photos.length > 0 ? (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: actual.photos.length === 1 ? '1fr' : 'repeat(2, 1fr)',
+                                gap: '4px',
+                                height: '172px',
+                              }}
+                            >
+                              {actual.photos.slice(0, 4).map((rawUrl, imgIdx) => {
+                                const imgUrl = normalizeImageUrl(rawUrl);
+                                const isFullHeight = actual.photos.length <= 2;
+                                return (
+                                  <div
+                                    key={imgIdx}
+                                    onClick={() => setLightboxImg(imgUrl)}
+                                    style={{
+                                      height: isFullHeight ? '172px' : '84px',
+                                      borderRadius: '3px',
+                                      overflow: 'hidden',
+                                      cursor: 'pointer',
+                                      background: '#000',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                    }}
+                                    title="Click to view full photo"
+                                  >
+                                    <img
+                                      src={imgUrl}
+                                      alt={`event-pic-${imgIdx}`}
+                                      style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        transition: 'transform 0.2s ease',
+                                      }}
+                                      onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1.05)'; }}
+                                      onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = 'scale(1)'; }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                height: '172px',
+                                background: '#f8fafc',
+                                border: '1px dashed #cbd5e1',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#94a3b8',
+                                gap: '6px',
+                                padding: '12px',
+                                textAlign: 'center',
+                              }}
+                            >
+                              <i className="fa-regular fa-image" style={{ fontSize: '26px', opacity: 0.5, color: '#94a3b8' }}></i>
+                              <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>No event photos uploaded</div>
+                              <div style={{ fontSize: '9.5px', color: '#94a3b8' }}>Attach photos in Event Execution</div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -511,9 +534,9 @@ export default function EventReport() {
 
                   {/* 4 photo preview row */}
                   {actual.photos.length > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', padding: '6px 18px', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(actual.photos.length, 4)}, 1fr)`, gap: '4px', padding: '6px 18px', borderTop: '1px solid var(--border)' }}>
                       {actual.photos.slice(0, 4).map((p, idx) => (
-                        <img key={idx} src={p} alt="thumb" style={{ width: '100%', height: '42px', objectFit: 'cover', borderRadius: '4px' }} />
+                        <img key={idx} src={normalizeImageUrl(p)} alt="thumb" style={{ width: '100%', height: '42px', objectFit: 'cover', borderRadius: '4px' }} />
                       ))}
                     </div>
                   )}
@@ -567,22 +590,23 @@ export default function EventReport() {
                 <KpiPill label="Actual CPO" value={fmtLAK(computeEventHitSummary(modalEvent).actual.cpo)} color="var(--green)" />
               </div>
 
-              {/* 4 Photos Grid */}
+              {/* Photos Grid */}
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--txt-dim)', textTransform: 'uppercase', marginBottom: '8px' }}>Event Photos</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px' }}>
-                  {(modalEvent.photo_urls && modalEvent.photo_urls.filter(Boolean).length > 0 ? modalEvent.photo_urls.filter(Boolean) : [
-                    'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&fit=crop',
-                    'https://images.unsplash.com/photo-1511578314322-379afb476865?w=400&fit=crop',
-                    'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=400&fit=crop',
-                    'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&fit=crop',
-                  ]).slice(0, 4).map((url, idx) => {
-                    const norm = normalizeImageUrl(url);
-                    return (
-                      <img key={idx} src={norm} alt="event-pic" onClick={() => setLightboxImg(norm)} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }} />
-                    );
-                  })}
-                </div>
+                {modalEvent.photo_urls && modalEvent.photo_urls.filter(Boolean).length > 0 ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(modalEvent.photo_urls.filter(Boolean).length, 4)}, 1fr)`, gap: '8px' }}>
+                    {modalEvent.photo_urls.filter(Boolean).slice(0, 4).map((url, idx) => {
+                      const norm = normalizeImageUrl(url);
+                      return (
+                        <img key={idx} src={norm} alt="event-pic" onClick={() => setLightboxImg(norm)} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }} />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: '24px', textAlign: 'center', background: 'var(--ink)', borderRadius: '8px', border: '1px dashed var(--border)', color: 'var(--txt-dim)', fontSize: '12px' }}>
+                    <i className="fa-regular fa-image" style={{ marginRight: '6px' }}></i> No event photos uploaded yet
+                  </div>
+                )}
               </div>
 
               {modalEvent.proposal_link && (

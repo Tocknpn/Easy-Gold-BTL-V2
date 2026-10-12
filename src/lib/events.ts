@@ -861,7 +861,7 @@ export function getEffectiveActuals(event: Event) {
     cpo: event.target_cpo || calc.cpo,
     cpm: event.target_cpm || calc.cpm,
     cpf: event.target_cpf || calc.cpf,
-    photos: event.photo_urls.filter(Boolean),
+    photos: (event.photo_urls || []).filter(Boolean),
   };
 }
 
