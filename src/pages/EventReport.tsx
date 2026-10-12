@@ -336,7 +336,7 @@ export default function EventReport() {
                             <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
                               {actual.customers.toLocaleString()} / {s.targetCustomers.toLocaleString()}
                             </div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.custStatus === 'no_target' ? '#64748b' : s.custBeat ? '#16a34a' : '#d97706' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.custStatus === 'no_target' ? '#64748b' : s.custBeat ? '#16a34a' : '#dc2626' }}>
                               {s.custLabel}
                             </div>
                           </div>
@@ -347,7 +347,7 @@ export default function EventReport() {
                             <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>
                               {actual.nc.toLocaleString()} / {(ev.target_nc || 0).toLocaleString()}
                             </div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.ncStatus === 'no_target' ? '#64748b' : s.ncBeat ? '#16a34a' : '#d97706' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.ncStatus === 'no_target' ? '#64748b' : s.ncBeat ? '#16a34a' : '#dc2626' }}>
                               {s.ncLabel}
                             </div>
                           </div>
@@ -358,7 +358,7 @@ export default function EventReport() {
                             <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-montserrat)' }}>
                               {fmtLAK(actual.cpo)} / {fmtLAK(ev.target_cpo)}
                             </div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpoStatus === 'no_target' ? '#64748b' : s.cpoBeat ? '#16a34a' : '#ea580c' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpoStatus === 'no_target' ? '#64748b' : s.cpoBeat ? '#16a34a' : '#dc2626' }}>
                               {s.cpoLabel}
                             </div>
                           </div>
@@ -369,7 +369,7 @@ export default function EventReport() {
                             <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', fontFamily: 'var(--font-montserrat)' }}>
                               {fmtLAK(actual.cpa)} / {fmtLAK(ev.target_cpa)}
                             </div>
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpaStatus === 'no_target' ? '#64748b' : s.cpaBeat ? '#16a34a' : '#ea580c' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: s.cpaStatus === 'no_target' ? '#64748b' : s.cpaBeat ? '#16a34a' : '#dc2626' }}>
                               {s.cpaLabel}
                             </div>
                           </div>
@@ -519,7 +519,7 @@ export default function EventReport() {
                   )}
 
                   <div style={{ padding: '8px 18px', background: 'var(--ink)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--txt-dim)' }}>
-                    <span>{s.totalTracked > 0 ? `Hit: ${s.hitCount} of ${s.totalTracked} Targets` : 'No Targets Set'}</span>
+                    <span>{s.totalTracked > 0 ? `${s.hitCount}/${s.totalTracked} Target Hit` : 'No Targets Set'}</span>
                     <span style={{ color: 'var(--accent)' }}>View details →</span>
                   </div>
                 </div>

@@ -1340,9 +1340,17 @@ export default function EventManagement() {
                   </div>
 
                   <h3 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 800 }}>{ev.event_name}</h3>
-                  <div style={{ fontSize: '12px', color: 'var(--txt-sub)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <span><i className="fa-regular fa-calendar" style={{ marginRight: '4px' }}></i>{labelDate(ev.start_date)} → {labelDate(ev.end_date)}</span>
-                    {ev.location && <span><i className="fa-solid fa-location-dot" style={{ marginRight: '4px' }}></i>{ev.location}</span>}
+                  <div style={{ fontSize: '12px', color: 'var(--txt-sub)', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', lineHeight: 1.2 }}>
+                      <i className="fa-regular fa-calendar"></i>
+                      <span>{labelDate(ev.start_date)} → {labelDate(ev.end_date)}</span>
+                    </span>
+                    {ev.location && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', lineHeight: 1.2 }}>
+                        <i className="fa-solid fa-location-dot"></i>
+                        <span>{ev.location}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1412,8 +1420,8 @@ export default function EventManagement() {
                     <span>
                       {ev.actual_filled ? (
                         summary.totalTracked > 0 ? (
-                          <span style={{ color: summary.hitCount > 0 ? 'var(--green)' : 'var(--orange)', fontWeight: 700 }}>
-                            <i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i>Actuals Recorded ({summary.hitCount}/{summary.totalTracked} Targets Hit)
+                          <span style={{ color: summary.hitCount === summary.totalTracked ? 'var(--green)' : 'var(--red)', fontWeight: 700 }}>
+                            <i className="fa-solid fa-circle-check" style={{ marginRight: '4px' }}></i>Actuals Recorded ({summary.hitCount}/{summary.totalTracked} Target Hit)
                           </span>
                         ) : (
                           <span style={{ color: 'var(--txt-sub)', fontWeight: 600 }}>
@@ -1620,10 +1628,23 @@ export default function EventManagement() {
                   </span>
                 </div>
                 <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 800 }}>{viewingEvent.event_name}</h2>
-                <div style={{ fontSize: '12px', color: 'var(--txt-sub)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                  <span><i className="fa-regular fa-calendar" style={{ marginRight: '5px' }}></i>{labelDate(viewingEvent.start_date)} → {labelDate(viewingEvent.end_date)}</span>
-                  {viewingEvent.location && <span><i className="fa-solid fa-location-dot" style={{ marginRight: '5px' }}></i>{viewingEvent.location}</span>}
-                  {viewingEvent.objective && <span><i className="fa-solid fa-bullseye" style={{ marginRight: '5px' }}></i>{viewingEvent.objective}</span>}
+                <div style={{ fontSize: '12px', color: 'var(--txt-sub)', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', lineHeight: 1.2 }}>
+                    <i className="fa-regular fa-calendar"></i>
+                    <span>{labelDate(viewingEvent.start_date)} → {labelDate(viewingEvent.end_date)}</span>
+                  </span>
+                  {viewingEvent.location && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', lineHeight: 1.2 }}>
+                      <i className="fa-solid fa-location-dot"></i>
+                      <span>{viewingEvent.location}</span>
+                    </span>
+                  )}
+                  {viewingEvent.objective && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', lineHeight: 1.2 }}>
+                      <i className="fa-solid fa-bullseye"></i>
+                      <span>{viewingEvent.objective}</span>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1656,7 +1677,7 @@ export default function EventManagement() {
                       label="Total Spend / Budget"
                       value={fmtLAKShort(actual.cost)}
                       sub={`Plan: ${fmtLAKShort(viewingEvent.budget_total || viewingEvent.media_cost || 0)}`}
-                      color={actual.cost <= (viewingEvent.budget_total || viewingEvent.media_cost || 0) ? 'var(--green)' : 'var(--orange)'}
+                      color={actual.cost <= (viewingEvent.budget_total || viewingEvent.media_cost || 0) ? 'var(--green)' : 'var(--red)'}
                     />
                     <KpiChip
                       label="New Customers (NC)"
@@ -1886,8 +1907,8 @@ export default function EventManagement() {
                   Autocalculated Cost-Per Metrics (Derived Live from Actual Spending)
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
-                  <KpiChip label="Actual CPA (per NC)" value={fmtLAK(liveCP.cpa)} sub={actualEvent.target_cpa ? `Target: ${fmtLAK(actualEvent.target_cpa)}` : undefined} color={liveCP.cpa <= actualEvent.target_cpa ? 'var(--green)' : 'var(--orange)'} />
-                  <KpiChip label="Actual CPO (per Buyer)" value={fmtLAK(liveCP.cpo)} sub={actualEvent.target_cpo ? `Target: ${fmtLAK(actualEvent.target_cpo)}` : undefined} color={liveCP.cpo <= actualEvent.target_cpo ? 'var(--green)' : 'var(--blue)'} />
+                  <KpiChip label="Actual CPA (per NC)" value={fmtLAK(liveCP.cpa)} sub={actualEvent.target_cpa ? `Target: ${fmtLAK(actualEvent.target_cpa)}` : undefined} color={liveCP.cpa <= actualEvent.target_cpa ? 'var(--green)' : 'var(--red)'} />
+                  <KpiChip label="Actual CPO (per Buyer)" value={fmtLAK(liveCP.cpo)} sub={actualEvent.target_cpo ? `Target: ${fmtLAK(actualEvent.target_cpo)}` : undefined} color={liveCP.cpo <= actualEvent.target_cpo ? 'var(--green)' : 'var(--red)'} />
                   <KpiChip label="Actual CPM (per 1K Imp)" value={fmtLAK(liveCP.cpm)} sub={actualEvent.target_cpm ? `Target: ${fmtLAK(actualEvent.target_cpm)}` : undefined} />
                   <KpiChip label="Actual CPF (per Footfall)" value={fmtLAK(liveCP.cpf)} sub={actualEvent.target_cpf ? `Target: ${fmtLAK(actualEvent.target_cpf)}` : undefined} />
                 </div>

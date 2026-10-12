@@ -865,9 +865,9 @@ export function getEffectiveActuals(event: Event) {
 export type TargetHitStatus = 'no_target' | 'hit' | 'under';
 
 /**
- * Compare actuals vs targets and return hit status + percentage over/under.
- * Handles unassigned targets (target=0 -> 'no_target' / 'No target'),
- * actuals with no target, and zero actuals with positive target.
+ * Compare actuals vs targets and return hit status + percentage.
+ * Uses consistent "xy% target hit" wording, green for hit/beat (>=100%),
+ * red for under target (<100%), and 'No target' if unassigned.
  */
 export function computeEventHitSummary(event: Event) {
   const actual = getEffectiveActuals(event);
@@ -884,15 +884,9 @@ export function computeEventHitSummary(event: Event) {
   if (hasCustTarget) {
     custPct = (actual.customers / targetCustomers) * 100;
     custBeat = actual.customers >= targetCustomers;
-    if (custBeat) {
-      custStatus = 'hit';
-      custColor = 'var(--green)';
-      custLabel = custPct > 100 ? `${fmtPct(custPct)} — beat target` : `${fmtPct(custPct)} — hit target`;
-    } else {
-      custStatus = 'under';
-      custColor = 'var(--orange)';
-      custLabel = actual.customers === 0 ? '0% of target' : `${fmtPct(custPct)} of target`;
-    }
+    custStatus = custBeat ? 'hit' : 'under';
+    custColor = custBeat ? 'var(--green)' : 'var(--red)';
+    custLabel = `${Math.round(custPct)}% target hit`;
   }
 
   // 2. New Customers (NC)
@@ -907,21 +901,16 @@ export function computeEventHitSummary(event: Event) {
   if (hasNcTarget) {
     ncPct = (actual.nc / targetNc) * 100;
     ncBeat = actual.nc >= targetNc;
-    if (ncBeat) {
-      ncStatus = 'hit';
-      ncColor = 'var(--green)';
-      ncLabel = ncPct > 100 ? `${fmtPct(ncPct)} — beat target` : `${fmtPct(ncPct)} — hit target`;
-    } else {
-      ncStatus = 'under';
-      ncColor = 'var(--orange)';
-      ncLabel = actual.nc === 0 ? '0% of target' : `${fmtPct(ncPct)} of target`;
-    }
+    ncStatus = ncBeat ? 'hit' : 'under';
+    ncColor = ncBeat ? 'var(--green)' : 'var(--red)';
+    ncLabel = `${Math.round(ncPct)}% target hit`;
   }
 
   // 3. CPO (Cost Per Order / Buyer) - Lower is better
   const targetCpo = event.target_cpo || 0;
   const hasCpoTarget = targetCpo > 0;
   let cpoDiffPct = 0;
+  let cpoPct = 0;
   let cpoBeat = false;
   let cpoStatus: TargetHitStatus = 'no_target';
   let cpoLabel = 'No target';
@@ -930,21 +919,17 @@ export function computeEventHitSummary(event: Event) {
   if (hasCpoTarget) {
     if (actual.cpo > 0) {
       cpoDiffPct = ((actual.cpo - targetCpo) / targetCpo) * 100;
-      cpoBeat = cpoDiffPct <= 0;
-      if (cpoBeat) {
-        cpoStatus = 'hit';
-        cpoColor = 'var(--green)';
-        cpoLabel = cpoDiffPct === 0 ? '0.0% — hit target' : `${cpoDiffPct.toFixed(1)}% under target`;
-      } else {
-        cpoStatus = 'under';
-        cpoColor = 'var(--orange)';
-        cpoLabel = `+${cpoDiffPct.toFixed(1)}% over target`;
-      }
+      cpoBeat = actual.cpo <= targetCpo;
+      cpoPct = Math.round((targetCpo / actual.cpo) * 100);
+      cpoStatus = cpoBeat ? 'hit' : 'under';
+      cpoColor = cpoBeat ? 'var(--green)' : 'var(--red)';
+      cpoLabel = `${cpoPct}% target hit`;
     } else {
       cpoBeat = false;
+      cpoPct = 0;
       cpoStatus = 'under';
-      cpoColor = 'var(--orange)';
-      cpoLabel = 'Under target';
+      cpoColor = 'var(--red)';
+      cpoLabel = '0% target hit';
     }
   }
 
@@ -952,6 +937,7 @@ export function computeEventHitSummary(event: Event) {
   const targetCpa = event.target_cpa || 0;
   const hasCpaTarget = targetCpa > 0;
   let cpaDiffPct = 0;
+  let cpaPct = 0;
   let cpaBeat = false;
   let cpaStatus: TargetHitStatus = 'no_target';
   let cpaLabel = 'No target';
@@ -960,21 +946,17 @@ export function computeEventHitSummary(event: Event) {
   if (hasCpaTarget) {
     if (actual.cpa > 0) {
       cpaDiffPct = ((actual.cpa - targetCpa) / targetCpa) * 100;
-      cpaBeat = cpaDiffPct <= 0;
-      if (cpaBeat) {
-        cpaStatus = 'hit';
-        cpaColor = 'var(--green)';
-        cpaLabel = cpaDiffPct === 0 ? '0.0% — hit target' : `${cpaDiffPct.toFixed(1)}% under target`;
-      } else {
-        cpaStatus = 'under';
-        cpaColor = 'var(--orange)';
-        cpaLabel = `+${cpaDiffPct.toFixed(1)}% over target`;
-      }
+      cpaBeat = actual.cpa <= targetCpa;
+      cpaPct = Math.round((targetCpa / actual.cpa) * 100);
+      cpaStatus = cpaBeat ? 'hit' : 'under';
+      cpaColor = cpaBeat ? 'var(--green)' : 'var(--red)';
+      cpaLabel = `${cpaPct}% target hit`;
     } else {
       cpaBeat = false;
+      cpaPct = 0;
       cpaStatus = 'under';
-      cpaColor = 'var(--orange)';
-      cpaLabel = 'Under target';
+      cpaColor = 'var(--red)';
+      cpaLabel = '0% target hit';
     }
   }
 
@@ -991,12 +973,11 @@ export function computeEventHitSummary(event: Event) {
     buyValPct = (actual.buy_value / targetBuyVal) * 100;
     buyValBeat = actual.buy_value >= targetBuyVal;
     buyValStatus = buyValBeat ? 'hit' : 'under';
-    buyValColor = buyValBeat ? 'var(--green)' : 'var(--orange)';
-    buyValLabel = buyValBeat
-      ? (buyValPct > 100 ? `${fmtPct(buyValPct)} — beat target` : `${fmtPct(buyValPct)} — hit target`)
-      : (actual.buy_value === 0 ? '0% of target' : `${fmtPct(buyValPct)} of target`);
+    buyValColor = buyValBeat ? 'var(--green)' : 'var(--red)';
+    buyValLabel = `${Math.round(buyValPct)}% target hit`;
   }
 
+  // The 4 visible targets shown on the Event Card
   let hitCount = 0;
   let totalTracked = 0;
 
@@ -1004,7 +985,11 @@ export function computeEventHitSummary(event: Event) {
   if (hasNcTarget) { totalTracked++; if (ncBeat) hitCount++; }
   if (hasCpoTarget) { totalTracked++; if (cpoBeat) hitCount++; }
   if (hasCpaTarget) { totalTracked++; if (cpaBeat) hitCount++; }
-  if (hasBuyValTarget) { totalTracked++; if (buyValBeat) hitCount++; }
+
+  // Overall targets across all dimensions (including Buy Value)
+  let allTotalTracked = totalTracked;
+  let allHitCount = hitCount;
+  if (hasBuyValTarget) { allTotalTracked++; if (buyValBeat) allHitCount++; }
 
   return {
     actual,
@@ -1025,6 +1010,7 @@ export function computeEventHitSummary(event: Event) {
 
     hasCpoTarget,
     cpoDiffPct,
+    cpoPct,
     cpoBeat,
     cpoStatus,
     cpoLabel,
@@ -1032,6 +1018,7 @@ export function computeEventHitSummary(event: Event) {
 
     hasCpaTarget,
     cpaDiffPct,
+    cpaPct,
     cpaBeat,
     cpaStatus,
     cpaLabel,
@@ -1046,6 +1033,8 @@ export function computeEventHitSummary(event: Event) {
 
     hitCount,
     totalTracked,
+    allHitCount,
+    allTotalTracked,
     hasAnyTarget: totalTracked > 0,
   };
 }
