@@ -20,18 +20,11 @@ import {
   compareLocations,
   inLocationFilter,
   normalizeLocation,
+  computePeriodTargets,
 } from '../lib/submissions';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 ChartJS.defaults.font.family = "'Montserrat', sans-serif";
-
-// ── Fallback KPI targets ──────────────────────────────────────────────────
-const FALLBACK_TARGETS = {
-  acq: 2500,
-  cpa: 100_000,
-  cpo: 60_000,
-  cpao: 130_000,
-};
 
 // ── Formatters for Deck Presentation ──────────────────────────────────────
 const fmtDeckLAK = (n: number) => {
@@ -778,34 +771,11 @@ export default function MarketingReport({
   const curr = useMemo(() => aggregate(filtered, costTypes), [filtered, costTypes]);
   const prev = useMemo(() => aggregate(prevFiltered, costTypes), [prevFiltered, costTypes]);
 
-  // Targets calculation for this window
-  const targets = useMemo(() => {
-    let acq = 0;
-    let cpaSum = 0, cpoSum = 0;
-    let cpaCount = 0, cpoCount = 0;
-
-    if (targetsData.length > 0 && startDate && endDate) {
-      const startYM = startDate.substring(0, 7);
-      const endYM = endDate.substring(0, 7);
-
-      for (const t of targetsData) {
-        if (!t.month) continue;
-        const tYM = t.month.substring(0, 7);
-        if (tYM >= startYM && tYM <= endYM) {
-          if (teamFilter === 'All' || t.team === teamFilter || t.team === `${teamFilter} Team`) {
-            acq += (t.new_reg_target || 0);
-            if (t.cpa_target > 0) { cpaSum += t.cpa_target; cpaCount++; }
-            if (t.cpo_target > 0) { cpoSum += t.cpo_target; cpoCount++; }
-          }
-        }
-      }
-    }
-    return {
-      acq: acq > 0 ? acq : FALLBACK_TARGETS.acq,
-      cpa: cpaCount > 0 ? cpaSum / cpaCount : FALLBACK_TARGETS.cpa,
-      cpo: cpoCount > 0 ? cpoSum / cpoCount : FALLBACK_TARGETS.cpo,
-    };
-  }, [targetsData, startDate, endDate, teamFilter]);
+  // Targets calculation strictly based on the period of data selected (no fake fallbacks)
+  const targets = useMemo(
+    () => computePeriodTargets(targetsData, startDate, endDate, teamFilter),
+    [targetsData, startDate, endDate, teamFilter]
+  );
 
   // ── Requirement 2: Color Mood & Tone Theme ──────────────────────────────
   // Overall and Agency mood and tone: #0b53acff (#0b53ac), especially top right card (Avg. CPA CPO)
@@ -873,12 +843,27 @@ export default function MarketingReport({
   // ── Delta Badge Helpers (Top KPI Metrics) ────────────────────────────────
   const renderDelta = (
     currentVal: number,
-    compareVal: number,
+    compareVal: number | null | undefined,
     label: string,
     isCostMetric = false,
     isCurrency = false,
     isHeroCard = false
   ) => {
+    if (compareVal == null || compareVal <= 0) {
+      const isTarget = label.toLowerCase().includes('target');
+      return (
+        <div style={{
+          fontSize: isHeroCard ? '11px' : '12px',
+          color: isHeroCard ? 'rgba(255,255,255,0.65)' : '#94A3B8',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          fontWeight: 600,
+        }}>
+          <span>—</span> {label} {isTarget && <span style={{ fontSize: isHeroCard ? '10px' : '11px', opacity: 0.85 }}>(No target set)</span>}
+        </div>
+      );
+    }
     const chg = pctChange(currentVal, compareVal);
     if (chg === null) {
       return (

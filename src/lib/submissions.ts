@@ -713,3 +713,141 @@ export async function fetchSubmissionById(id: string): Promise<Submission | null
     return null;
   }
 }
+
+export interface PeriodTargets {
+  hasTarget: boolean;
+  hasAcqTarget: boolean;
+  hasCpaTarget: boolean;
+  hasCpoTarget: boolean;
+  hasCpaoTarget: boolean;
+  acq: number | null;
+  cpa: number | null;
+  cpo: number | null;
+  cpao: number | null;
+}
+
+/**
+ * Computes target values based strictly on the period of data selected (startDate to endDate)
+ * and the team filter.
+ *
+ * Scans each unique calendar month covered by [startDate, endDate].
+ * If a covered month has target rows in targetsData matching the selected team,
+ * its monthly targets are summed (for volume metric: acq) and averaged (for rate metrics: cpa, cpo, cpao).
+ * If no targets exist for the period, returns null values and hasTarget: false,
+ * ensuring no fake fallback targets are displayed.
+ */
+export function computePeriodTargets(
+  targetsData: any[] | undefined | null,
+  startDate: string | undefined | null,
+  endDate: string | undefined | null,
+  teamFilter: string | undefined | null
+): PeriodTargets {
+  if (!targetsData || targetsData.length === 0 || !startDate || !endDate) {
+    return {
+      hasTarget: false,
+      hasAcqTarget: false,
+      hasCpaTarget: false,
+      hasCpoTarget: false,
+      hasCpaoTarget: false,
+      acq: null,
+      cpa: null,
+      cpo: null,
+      cpao: null,
+    };
+  }
+
+  const startYM = startDate.substring(0, 7);
+  const endYM = endDate.substring(0, 7);
+  const filterTeam = normalizeTeam(teamFilter || '');
+  const isAllTeams = filterTeam === 'All' || filterTeam === 'All Teams' || !filterTeam;
+
+  const coveredMonths = new Set<string>();
+  const [sY, sM] = startYM.split('-').map(Number);
+  const [eY, eM] = endYM.split('-').map(Number);
+
+  if (!sY || !sM || !eY || !eM) {
+    return {
+      hasTarget: false,
+      hasAcqTarget: false,
+      hasCpaTarget: false,
+      hasCpoTarget: false,
+      hasCpaoTarget: false,
+      acq: null,
+      cpa: null,
+      cpo: null,
+      cpao: null,
+    };
+  }
+
+  let curY = sY;
+  let curM = sM;
+  while (curY < eY || (curY === eY && curM <= eM)) {
+    coveredMonths.add(`${curY}-${String(curM).padStart(2, '0')}`);
+    curM++;
+    if (curM > 12) {
+      curM = 1;
+      curY++;
+    }
+  }
+
+  let totalAcq = 0;
+  let cpaSum = 0;
+  let cpaCount = 0;
+  let cpoSum = 0;
+  let cpoCount = 0;
+  let cpaoSum = 0;
+  let cpaoCount = 0;
+  let hasAcq = false;
+  let hasCpa = false;
+  let hasCpo = false;
+  let hasCpao = false;
+
+  for (const mKey of coveredMonths) {
+    const monthRows = targetsData.filter(t => {
+      if (!t.month) return false;
+      const tYM = String(t.month).substring(0, 7);
+      if (tYM !== mKey) return false;
+      const tTeam = normalizeTeam(t.team);
+      if (isAllTeams) return true;
+      return tTeam === filterTeam;
+    });
+
+    if (monthRows.length === 0) continue;
+
+    for (const t of monthRows) {
+      if (t.new_reg_target !== undefined && t.new_reg_target !== null && Number(t.new_reg_target) > 0) {
+        totalAcq += Number(t.new_reg_target);
+        hasAcq = true;
+      }
+      if (t.cpa_target !== undefined && t.cpa_target !== null && Number(t.cpa_target) > 0) {
+        cpaSum += Number(t.cpa_target);
+        cpaCount++;
+        hasCpa = true;
+      }
+      if (t.cpo_target !== undefined && t.cpo_target !== null && Number(t.cpo_target) > 0) {
+        cpoSum += Number(t.cpo_target);
+        cpoCount++;
+        hasCpo = true;
+      }
+      if (t.cpao_target !== undefined && t.cpao_target !== null && Number(t.cpao_target) > 0) {
+        cpaoSum += Number(t.cpao_target);
+        cpaoCount++;
+        hasCpao = true;
+      }
+    }
+  }
+
+  const hasAnyTarget = hasAcq || hasCpa || hasCpo || hasCpao;
+
+  return {
+    hasTarget: hasAnyTarget,
+    hasAcqTarget: hasAcq,
+    hasCpaTarget: hasCpa,
+    hasCpoTarget: hasCpo,
+    hasCpaoTarget: hasCpao,
+    acq: hasAcq ? totalAcq : null,
+    cpa: hasCpa && cpaCount > 0 ? cpaSum / cpaCount : null,
+    cpo: hasCpo && cpoCount > 0 ? cpoSum / cpoCount : null,
+    cpao: hasCpao && cpaoCount > 0 ? cpaoSum / cpaoCount : null,
+  };
+}

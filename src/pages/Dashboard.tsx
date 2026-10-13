@@ -13,7 +13,7 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Link, useSearchParams } from 'react-router-dom';
 import type { ModalState, Submission, CostTypeKey } from '../lib/submissions';
-import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, normalizeTeam, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes, locationLabel, compareLocations, inLocationFilter, normalizeLocation } from '../lib/submissions';
+import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLAK, fmtLAKShort, labelDate, getCurrentDateHelpers, normalizeActivityType, activityLabel, normalizeTeam, COST_TYPES, ALL_COST_TYPES, costForTypes, costOfType, normalizeCostTypes, locationLabel, compareLocations, inLocationFilter, normalizeLocation, computePeriodTargets } from '../lib/submissions';
 import { supabase } from '../lib/supabase';
 import SubmissionModal from '../components/SubmissionModal';
 import MarketingReport, { getWeekInfoFromDate } from '../components/MarketingReport';
@@ -23,14 +23,6 @@ const C_NC = '#F59E0B'; // amber  — warm, high contrast
 const C_EC = '#10B981'; // emerald — cool, very distinct from amber
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Tooltip, Legend, Filler);
-
-// ── KPI targets (absolute values) ─────────────────────────────────────────
-const FALLBACK_TARGETS = {
-  acq: 2500,          // Total Acquisition target
-  cpa: 100_000,       // Cost per NC target (lower is better)
-  cpo: 60_000,        // Cost per Buyer target
-  cpao: 130_000,      // Cost per Acq. Order target
-};
 
 // ── Utility: % change helper ───────────────────────────────────────────────
 const pctChange = (curr: number, prev: number): number | null => {
@@ -58,7 +50,14 @@ function DeltaBadge({ curr, prev, invertGood = false, compact = false }: { curr:
 }
 
 // ── Utility: vs-target badge ───────────────────────────────────────────────
-function TargetBadge({ curr, target, invertGood = false }: { curr: number; target: number; invertGood?: boolean }) {
+function TargetBadge({ curr, target, invertGood = false }: { curr: number; target: number | null | undefined; invertGood?: boolean }) {
+  if (target == null || target <= 0) {
+    return (
+      <span style={{ fontSize: '10px', fontWeight: 600, color: 'var(--txt-dim)' }}>
+        — vs target <span style={{ opacity: 0.8 }}>(No target set)</span>
+      </span>
+    );
+  }
   const diff = curr - target;
   const pct = target > 0 ? (diff / target) * 100 : 0;
   const isOver = diff > 0;
@@ -540,40 +539,16 @@ export default function Dashboard() {
   const spendKPV = pctOf(kpi.kpv.cost, totalTeamCost, 55);
   const spendAgency = pctOf(kpi.agency.cost, totalTeamCost, 45);
 
-  // Dynamic Targets calculation
-  const dynamicTargets = useMemo(() => {
-    let acq = 0;
-    let cpaSum = 0, cpoSum = 0, cpaoSum = 0;
-    let cpaCount = 0, cpoCount = 0, cpaoCount = 0;
-
-    if (targetsData.length > 0 && startDate && endDate) {
-      const startYM = startDate.substring(0, 7);
-      const endYM = endDate.substring(0, 7);
-
-      for (const t of targetsData) {
-        if (!t.month) continue;
-        const tYM = t.month.substring(0, 7);
-        if (tYM >= startYM && tYM <= endYM) {
-          if (teamFilter === 'All Teams' || t.team === teamFilter) {
-            acq += (t.new_reg_target || 0);
-            if (t.cpa_target > 0) { cpaSum += t.cpa_target; cpaCount++; }
-            if (t.cpo_target > 0) { cpoSum += t.cpo_target; cpoCount++; }
-            if (t.cpao_target > 0) { cpaoSum += t.cpao_target; cpaoCount++; }
-          }
-        }
-      }
-    }
-
-    return {
-      acq: acq > 0 ? acq : FALLBACK_TARGETS.acq,
-      cpa: cpaCount > 0 ? cpaSum / cpaCount : FALLBACK_TARGETS.cpa,
-      cpo: cpoCount > 0 ? cpoSum / cpoCount : FALLBACK_TARGETS.cpo,
-      cpao: cpaoCount > 0 ? cpaoSum / cpaoCount : FALLBACK_TARGETS.cpao,
-    };
-  }, [targetsData, startDate, endDate, teamFilter]);
+  // Dynamic Targets calculation strictly based on the period of data selected (no fake fallbacks)
+  const dynamicTargets = useMemo(
+    () => computePeriodTargets(targetsData, startDate, endDate, teamFilter),
+    [targetsData, startDate, endDate, teamFilter]
+  );
 
   // Target % hit
-  const acqPctTarget = Math.round((kpi.totalAcq / dynamicTargets.acq) * 100);
+  const acqPctTarget = dynamicTargets.acq && dynamicTargets.acq > 0
+    ? Math.round((kpi.totalAcq / dynamicTargets.acq) * 100)
+    : 0;
 
   // ── Trend chart data ─────────────────────────────────────────────────────
   const trendData = useMemo(() => {
@@ -880,14 +855,23 @@ export default function Dashboard() {
         <div className="card" style={{ ...cardAccent('var(--accent)'), position: 'relative' }}>
           {/* Target % hit badge */}
           <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
-            <span style={{
-              fontSize: '9px', fontWeight: 800, padding: '3px 8px', borderRadius: '20px',
-              background: acqPctTarget >= 100 ? 'rgba(34,197,139,0.15)' : 'rgba(27,86,200,0.13)',
-              color: acqPctTarget >= 100 ? 'var(--green)' : 'var(--accent)',
-              border: `1px solid ${acqPctTarget >= 100 ? 'rgba(34,197,139,0.35)' : 'rgba(27,86,200,0.3)'}`,
-            }}>
-              🎯 {acqPctTarget}% target
-            </span>
+            {dynamicTargets.acq && dynamicTargets.acq > 0 ? (
+              <span style={{
+                fontSize: '9px', fontWeight: 800, padding: '3px 8px', borderRadius: '20px',
+                background: acqPctTarget >= 100 ? 'rgba(34,197,139,0.15)' : 'rgba(27,86,200,0.13)',
+                color: acqPctTarget >= 100 ? 'var(--green)' : 'var(--accent)',
+                border: `1px solid ${acqPctTarget >= 100 ? 'rgba(34,197,139,0.35)' : 'rgba(27,86,200,0.3)'}`,
+              }}>
+                🎯 {acqPctTarget}% target
+              </span>
+            ) : (
+              <span style={{
+                fontSize: '9px', fontWeight: 700, padding: '3px 8px', borderRadius: '20px',
+                background: 'rgba(148,163,184,0.12)', color: 'var(--txt-dim)', border: '1px solid var(--border)',
+              }}>
+                🎯 No target
+              </span>
+            )}
           </div>
           <div className="kpi-icon"><i className="fa-solid fa-users"></i></div>
           <div className="kpi-label">Acquisition (NC + EC)</div>
