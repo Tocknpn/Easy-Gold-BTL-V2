@@ -115,7 +115,10 @@ function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const currentPath = location.pathname;
-  const headerInfo = pageTitles[currentPath] || { title: 'Easy Gold BTL', sub: '' };
+  let headerInfo = pageTitles[currentPath] || { title: 'Easy Gold BTL', sub: '' };
+  if (currentPath === '/' && (location.search.includes('tab=qr-performance') || location.search.includes('tab=qr'))) {
+    headerInfo = { title: 'QR Download Performance', sub: 'Device Scan & App Download Analytics' };
+  }
 
   if (!user) return (
     <div className="fullscreen-loader" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', flex: 1, background: 'var(--ink)', flexDirection: 'column', gap: '16px' }}>
@@ -262,6 +265,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Layout><Dashboard /></Layout>} />
           <Route path="/forecast" element={<Navigate to="/?tab=forecast" replace />} />
+          <Route path="/qr-performance" element={<Navigate to="/?tab=qr-performance" replace />} />
+          <Route path="/qr-download" element={<Navigate to="/?tab=qr-performance" replace />} />
           <Route path="/submit" element={<Layout><SubmitResults /></Layout>} />
           <Route path="/checkin" element={<Layout><CheckIn /></Layout>} />
           <Route path="/calendar" element={<Layout><CalendarRoute /></Layout>} />

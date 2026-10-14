@@ -25,8 +25,16 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
   const getInitials = (name: string) =>
     name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
-  const navItemClass = (path: string) =>
-    `nav-item ${currentPath === path ? 'active' : ''}`;
+  const navItemClass = (path: string) => {
+    if (path.includes('?')) {
+      const currentFull = window.location.pathname + window.location.search;
+      return `nav-item ${currentFull === path ? 'active' : ''}`;
+    }
+    if (path === '/') {
+      return `nav-item ${currentPath === '/' && !window.location.search ? 'active' : ''}`;
+    }
+    return `nav-item ${currentPath === path ? 'active' : ''}`;
+  };
 
   /* ── Tooltip wrapper — shows label beside icon when sidebar is collapsed ── */
   const NavLink = ({ to, icon, label, badge }: { to: string; icon: string; label: string; badge?: React.ReactNode }) => (
@@ -139,6 +147,12 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             {user.role !== 'atl' && <NavLink to="/route-map" icon="fa-solid fa-map-location-dot" label="Route Map" />}
             <NavLink to="/event-management" icon="fa-solid fa-calendar-check" label="Event Management" />
             <NavLink to="/event-report" icon="fa-solid fa-chart-pie" label="Event Report" />
+            <NavLink
+              to="/?tab=qr-performance"
+              icon="fa-solid fa-qrcode"
+              label="QR Performance"
+              badge={<div className="pill pill-gold" style={{ fontSize: '8px' }}>Tracking</div>}
+            />
           </div>
         )}
 

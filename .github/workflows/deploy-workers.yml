@@ -60,6 +60,8 @@ jobs:
           # Using the VITE_ prefixed repository secrets specifically created for the build
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_QR_SUPABASE_URL: ${{ secrets.VITE_QR_SUPABASE_URL }}
+          VITE_QR_SUPABASE_KEY: ${{ secrets.VITE_QR_SUPABASE_KEY }}
 
       - name: Drop Pages-only redirects file from the Worker bundle
         # public/_redirects is required by the Pages deployment, but Workers ignores

@@ -11,6 +11,9 @@ declare const __BUILD_TIME__: string;
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
+  readonly VITE_QR_SUPABASE_URL?: string;
+  readonly VITE_QR_SUPABASE_KEY?: string;
+  readonly VITE_QR_SUPABASE_SERVICE_KEY?: string;
 }
 
 interface ImportMeta {
