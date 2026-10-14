@@ -261,6 +261,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Layout><Dashboard /></Layout>} />
+          <Route path="/forecast" element={<Navigate to="/?tab=forecast" replace />} />
           <Route path="/submit" element={<Layout><SubmitResults /></Layout>} />
           <Route path="/checkin" element={<Layout><CheckIn /></Layout>} />
           <Route path="/calendar" element={<Layout><CalendarRoute /></Layout>} />

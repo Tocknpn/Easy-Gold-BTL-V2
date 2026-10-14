@@ -17,6 +17,7 @@ import { fetchSubmissionsSummary, fetchSubmissionById, genMockSubmissions, fmtLA
 import { supabase } from '../lib/supabase';
 import SubmissionModal from '../components/SubmissionModal';
 import MarketingReport, { getWeekInfoFromDate } from '../components/MarketingReport';
+import ForecastReport from '../components/ForecastReport';
 
 // ── Brand palette for NC / EC ─────────────────────────────────────────────
 const C_NC = '#F59E0B'; // amber  — warm, high contrast
@@ -349,17 +350,17 @@ export default function Dashboard() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'overall' | 'marketing'>(
-    tabParam === 'marketing' ? 'marketing' : 'overall'
+  const [activeTab, setActiveTab] = useState<'overall' | 'marketing' | 'forecast'>(
+    tabParam === 'forecast' ? 'forecast' : tabParam === 'marketing' ? 'marketing' : 'overall'
   );
 
   useEffect(() => {
-    if (tabParam === 'marketing' || tabParam === 'overall') {
+    if (tabParam === 'marketing' || tabParam === 'overall' || tabParam === 'forecast') {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
 
-  const switchTab = (tab: 'overall' | 'marketing') => {
+  const switchTab = (tab: 'overall' | 'marketing' | 'forecast') => {
     setActiveTab(tab);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -800,10 +801,49 @@ export default function Dashboard() {
               Slide Deck
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => switchTab('forecast')}
+            style={{
+              padding: '8px 18px',
+              fontSize: '13px',
+              fontWeight: 700,
+              borderRadius: '8px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: activeTab === 'forecast' ? 'var(--accent)' : 'transparent',
+              color: activeTab === 'forecast' ? '#FFFFFF' : 'var(--txt-sub)',
+              boxShadow: activeTab === 'forecast' ? '0 2px 6px rgba(27, 86, 200, 0.25)' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <i className="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Forecast</span>
+            <span style={{
+              fontSize: '9px',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: '12px',
+              background: activeTab === 'forecast' ? 'rgba(255,255,255,0.25)' : 'var(--accent-dim)',
+              color: activeTab === 'forecast' ? '#FFFFFF' : 'var(--accent)',
+              letterSpacing: '0.04em',
+            }}>
+              Run Rate
+            </span>
+          </button>
         </div>
       </div>
 
-      {activeTab === 'marketing' ? (
+      {activeTab === 'forecast' ? (
+        <ForecastReport
+          submissions={submissions}
+          targetsData={targetsData}
+        />
+      ) : activeTab === 'marketing' ? (
         <MarketingReport
           submissions={submissions}
           targetsData={targetsData}
