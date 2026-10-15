@@ -26,13 +26,6 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
     name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
   const navItemClass = (path: string) => {
-    if (path.includes('?')) {
-      const currentFull = window.location.pathname + window.location.search;
-      return `nav-item ${currentFull === path ? 'active' : ''}`;
-    }
-    if (path === '/') {
-      return `nav-item ${currentPath === '/' && !window.location.search ? 'active' : ''}`;
-    }
     return `nav-item ${currentPath === path ? 'active' : ''}`;
   };
 
@@ -147,12 +140,6 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
             {user.role !== 'atl' && <NavLink to="/route-map" icon="fa-solid fa-map-location-dot" label="Route Map" />}
             <NavLink to="/event-management" icon="fa-solid fa-calendar-check" label="Event Management" />
             <NavLink to="/event-report" icon="fa-solid fa-chart-pie" label="Event Report" />
-            <NavLink
-              to="/?tab=qr-performance"
-              icon="fa-solid fa-qrcode"
-              label="QR Performance"
-              badge={<div className="pill pill-gold" style={{ fontSize: '8px' }}>Tracking</div>}
-            />
           </div>
         )}
 
@@ -205,14 +192,29 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
       </nav>
 
       {/* Footer */}
-      <div className="sb-footer" style={{ padding: collapsed ? '12px 0' : undefined, justifyContent: collapsed ? 'center' : undefined }}>
-        <div className="user-ava" title={collapsed ? `${user.name} · ${user.role}` : undefined} style={{ flexShrink: 0 }}>
+      <div
+        className="sb-footer"
+        style={{
+          padding: collapsed ? '14px 0' : '16px 20px',
+          flexDirection: collapsed ? 'column' : 'row',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          gap: collapsed ? '10px' : '12px',
+        }}
+      >
+        <div
+          className="user-ava"
+          title={collapsed ? `${user.name} · ${user.role === 'admin' ? 'Administrator' : user.role === 'manager' ? 'Event Manager' : user.role === 'atl' ? 'Area Team Lead (ATL)' : `Staff · ${user.team || 'Field'}`}` : undefined}
+          style={{ flexShrink: 0, width: '34px', height: '34px', fontSize: '12px' }}
+        >
           {getInitials(user.name)}
         </div>
         {!collapsed && (
-          <div className="user-info" style={{ flex: 1 }}>
-            <strong>{user.name}</strong>
-            <span>{user.role === 'admin' ? 'Administrator' : user.role === 'manager' ? 'Event Manager' : user.role === 'atl' ? 'Area Team Lead (ATL)' : `Staff · ${user.team || 'Field'}`}</span>
+          <div className="user-info" style={{ flex: 1, minWidth: 0 }}>
+            <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.name}</strong>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {user.role === 'admin' ? 'Administrator' : user.role === 'manager' ? 'Event Manager' : user.role === 'atl' ? 'Area Team Lead (ATL)' : `Staff · ${user.team || 'Field'}`}
+            </span>
           </div>
         )}
         <button
@@ -220,15 +222,30 @@ export default function Sidebar({ user, onLogout, currentPath, collapsed, onTogg
           title="Logout"
           aria-label="Logout"
           style={{
-            background: 'none',
-            border: 'none',
+            background: collapsed ? 'rgba(255,255,255,0.06)' : 'none',
+            border: collapsed ? '1px solid rgba(255,255,255,0.1)' : 'none',
+            borderRadius: collapsed ? '8px' : '6px',
             color: 'var(--nav-txt)',
             cursor: 'pointer',
             flexShrink: 0,
-            fontSize: '15px',
+            fontSize: '14px',
             padding: '6px',
+            width: collapsed ? '34px' : 'auto',
+            height: collapsed ? '34px' : 'auto',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = '#FF6B6B';
+            e.currentTarget.style.background = 'rgba(255,107,107,0.14)';
+            if (collapsed) e.currentTarget.style.borderColor = 'rgba(255,107,107,0.3)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'var(--nav-txt)';
+            e.currentTarget.style.background = collapsed ? 'rgba(255,255,255,0.06)' : 'none';
+            if (collapsed) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
           }}
         >
           <i className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
